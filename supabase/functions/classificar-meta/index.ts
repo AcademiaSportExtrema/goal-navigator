@@ -1,0 +1,117 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+
+    const { reprocessar_todos, mes_competencia, lancamento_ids } = await req.json();
+
+    // Buscar lançamentos a processar
+    let query = supabase.from('lancamentos').select('*');
+    
+    if (lancamento_ids?.length) {
+      query = query.in('id', lancamento_ids);
+    } else if (mes_competencia) {
+      query = query.eq('mes_competencia', mes_competencia);
+    } else if (reprocessar_todos) {
+      // Processa todos os pendentes
+      query = query.eq('pendente_regra', true);
+    }
+
+    const { data: lancamentos, error: fetchError } = await query;
+    if (fetchError) throw fetchError;
+
+    // Buscar regras ativas
+    const { data: regras } = await supabase
+      .from('regras_meta')
+      .select('*')
+      .eq('ativo', true)
+      .order('prioridade', { ascending: true });
+
+    let processados = 0;
+
+    for (const lancamento of lancamentos || []) {
+      let matched = false;
+
+      if (regras) {
+        for (const regra of regras) {
+          const campoValor = lancamento[regra.campo_alvo];
+          if (!campoValor) continue;
+
+          let match = false;
+          const valorStr = String(campoValor).toLowerCase();
+          const regraValor = regra.valor.toLowerCase();
+
+          switch (regra.operador) {
+            case 'contem': match = valorStr.includes(regraValor); break;
+            case 'igual': match = valorStr === regraValor; break;
+            case 'comeca_com': match = valorStr.startsWith(regraValor); break;
+            case 'termina_com': match = valorStr.endsWith(regraValor); break;
+            case 'regex': match = new RegExp(regra.valor, 'i').test(valorStr); break;
+          }
+
+          if (match) {
+            const consultora_chave = lancamento[regra.responsavel_campo] || null;
+            
+            let dataRef = null;
+            if (regra.regra_mes === 'DATA_LANCAMENTO') {
+              dataRef = lancamento.data_lancamento;
+            } else if (regra.regra_mes === 'DATA_INICIO') {
+              dataRef = lancamento.data_inicio || lancamento.data_lancamento;
+            } else if (regra.regra_mes === 'HIBRIDA') {
+              dataRef = lancamento.plano ? (lancamento.data_inicio || lancamento.data_lancamento) : lancamento.data_lancamento;
+            }
+
+            await supabase.from('lancamentos').update({
+              entra_meta: regra.entra_meta,
+              pendente_regra: false,
+              consultora_chave,
+              mes_competencia: dataRef ? dataRef.substring(0, 7) : null,
+              regra_aplicada_id: regra.id,
+              motivo_classificacao: `Regra #${regra.prioridade}: ${regra.campo_alvo} ${regra.operador} "${regra.valor}"`,
+            }).eq('id', lancamento.id);
+
+            matched = true;
+            processados++;
+            break;
+          }
+        }
+      }
+
+      if (!matched && !lancamento.pendente_regra) {
+        // Se não bateu com nenhuma regra e não estava pendente, marca como pendente
+        await supabase.from('lancamentos').update({
+          entra_meta: false,
+          pendente_regra: true,
+          regra_aplicada_id: null,
+          motivo_classificacao: 'Sem regra correspondente',
+        }).eq('id', lancamento.id);
+        processados++;
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, processados }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error: any) {
+    console.error('Erro na classificação:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});
