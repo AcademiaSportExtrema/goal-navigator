@@ -1,58 +1,78 @@
 
-# Criar Usuário Admin no Sistema
+# Adicionar Funcionalidade "Esqueci Minha Senha"
 
 ## Objetivo
-Configurar o primeiro usuário administrador para ter acesso completo a todas as funcionalidades do sistema de metas.
+Implementar fluxo completo de recuperacao de senha para usuarios que esqueceram suas credenciais de acesso.
 
 ---
 
-## Abordagem
+## O que sera implementado
 
-Vou criar um processo em **2 etapas**:
+### 1. Link na tela de Login
+Adicionar link "Esqueci minha senha" abaixo do campo de senha, levando para uma nova pagina de recuperacao.
 
-1. **Habilitar confirmação automática de email** (temporariamente) - para que você consiga acessar imediatamente após o cadastro
+### 2. Nova pagina: EsqueciSenha.tsx
+- Campo para digitar email
+- Botao "Enviar link de recuperacao"
+- Feedback de sucesso apos envio
+- Link para voltar ao login
 
-2. **Criar trigger automático** - quando você se cadastrar com um email específico, o sistema automaticamente atribuirá a role de admin
+### 3. Nova pagina: RedefinirSenha.tsx
+- Campos para nova senha e confirmacao
+- Validacao de senha minima (6 caracteres)
+- Validacao de senhas coincidentes
+- Feedback de sucesso e redirecionamento para login
+
+### 4. Funcao no useAuth
+Adicionar funcao `resetPasswordForEmail` que chama o Supabase Auth para enviar email de recuperacao.
+
+### 5. Rotas no App.tsx
+Adicionar rotas:
+- `/esqueci-senha` - pagina de solicitacao
+- `/redefinir-senha` - pagina de nova senha (acessada via link do email)
 
 ---
 
-## O que será implementado
+## Fluxo do usuario
 
-### 1. Configuração de Auth
-Habilitar auto-confirm de email para facilitar o primeiro acesso (pode ser desabilitado depois)
-
-### 2. Trigger de Atribuição Automática de Admin
-Criar uma função e trigger no banco que:
-- Monitora novos cadastros no sistema
-- Quando o PRIMEIRO usuário se cadastrar, atribui automaticamente a role `admin`
-- Usuários subsequentes ficam sem role (precisam ser configurados manualmente)
-
-### 3. Alternativa Manual
-Se preferir, posso criar diretamente no banco:
-- Você cadastra um email qualquer pela tela de cadastro
-- Eu insiro a role admin via migration SQL
-
----
-
-## Fluxo após implementação
-
-1. Você acessa `/cadastro`
-2. Cria conta com seu email e senha
-3. O sistema automaticamente atribui role `admin` (primeiro usuário)
-4. Você é redirecionado ao dashboard com acesso total
+1. Usuario clica em "Esqueci minha senha" na tela de login
+2. Digita seu email e clica em "Enviar"
+3. Recebe email com link de recuperacao
+4. Clica no link e e redirecionado para `/redefinir-senha`
+5. Define nova senha e confirma
+6. E redirecionado para login com mensagem de sucesso
 
 ---
 
 ## Arquivos a serem modificados/criados
 
-| Arquivo | Ação |
+| Arquivo | Acao |
 |---------|------|
-| `supabase/migrations/...` | Nova migration com trigger para auto-assign admin |
+| `src/pages/Login.tsx` | Adicionar link "Esqueci minha senha" |
+| `src/pages/EsqueciSenha.tsx` | CRIAR - pagina de solicitacao |
+| `src/pages/RedefinirSenha.tsx` | CRIAR - pagina de nova senha |
+| `src/hooks/useAuth.tsx` | Adicionar funcao resetPasswordForEmail |
+| `src/App.tsx` | Adicionar rotas /esqueci-senha e /redefinir-senha |
 
 ---
 
-## Segurança
+## Detalhes Tecnicos
 
-- O trigger de auto-assign só funciona para o **primeiro** usuário cadastrado
-- Após o primeiro admin, novos usuários precisam ter sua role configurada manualmente por um admin
-- A role é armazenada na tabela separada `user_roles` conforme melhores práticas de segurança
+### Hook useAuth - nova funcao
+```typescript
+const resetPasswordForEmail = async (email: string) => {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/redefinir-senha`
+  });
+  return { error };
+};
+```
+
+### Pagina RedefinirSenha
+- Usa `supabase.auth.updateUser({ password })` para atualizar a senha
+- O Supabase automaticamente autentica o usuario via token no link do email
+
+### Estilos
+- Seguir mesmo padrao visual das telas Login e Cadastro
+- Manter consistencia com cards, icones e cores do tema escuro
+
