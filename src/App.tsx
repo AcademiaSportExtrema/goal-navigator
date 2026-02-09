@@ -18,7 +18,7 @@ import Regras from "./pages/Regras";
 import Pendencias from "./pages/Pendencias";
 import ConfiguracaoMes from "./pages/ConfiguracaoMes";
 import Consultoras from "./pages/Consultoras";
-import Metas from "./pages/Metas";
+// Metas foi unificado no Dashboard
 import MinhaPerformance from "./pages/MinhaPerformance";
 import SolicitarAjuste from "./pages/SolicitarAjuste";
 import Ajustes from "./pages/Ajustes";
@@ -76,11 +76,7 @@ const App = () => (
                 <Consultoras />
               </ProtectedRoute>
             } />
-            <Route path="/metas" element={
-              <ProtectedRoute requiredRole="admin">
-                <Metas />
-              </ProtectedRoute>
-            } />
+            <Route path="/metas" element={<Navigate to="/dashboard" replace />} />
 
             <Route path="/ajustes" element={
               <ProtectedRoute requiredRole="admin">
