@@ -292,12 +292,6 @@ export default function ConfiguracaoMes() {
               </CardTitle>
               <CardDescription>
                 Defina o percentual de cada consultora (soma = 100%)
-                <span className={`ml-2 font-medium ${
-                  Math.abs(somaPercentuais - 100) < 0.01 ? 'text-success' : 
-                  somaPercentuais > 100 ? 'text-destructive' : 'text-warning'
-                }`}>
-                  Total: {somaPercentuais.toFixed(1)}%
-                </span>
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -321,6 +315,14 @@ export default function ConfiguracaoMes() {
                       </div>
                     </div>
                   ))}
+                  {/* Totalizador */}
+                  <div className={`border-t pt-3 mt-3 flex items-center justify-between font-bold ${
+                    Math.abs(somaPercentuais - 100) < 0.01 ? 'text-green-600' : 
+                    somaPercentuais > 100 ? 'text-red-600' : 'text-amber-600'
+                  }`}>
+                    <span>Total</span>
+                    <span>{somaPercentuais.toFixed(1)}%</span>
+                  </div>
                 </div>
               ) : (
                 <p className="text-center py-4 text-muted-foreground">
