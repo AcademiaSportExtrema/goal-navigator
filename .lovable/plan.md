@@ -1,67 +1,92 @@
 
-# Reprocessar Itens ao Criar Regra na Pagina de Pendencias
 
-## Resumo
+# Gestao de Acesso das Consultoras + Visao de Comissao e Falta para Meta
 
-Quando o usuario cria uma nova regra a partir da pagina de Pendencias, o sistema oferecera a opcao de reprocessar automaticamente apenas os lancamentos pendentes que correspondem ao grupo (produto/plano/empresa) de onde a regra foi criada.
+## Problema Atual
 
-## Alteracoes
+Hoje nao existe nenhuma forma de configurar o acesso das consultoras ao sistema. Quando uma consultora cria uma conta, ela fica sem papel (role) atribuido e nao consegue acessar nada. O admin precisa de uma interface para:
 
-### 1. Pagina Pendencias (`src/pages/Pendencias.tsx`)
+1. Vincular um usuario (por email) a uma consultora cadastrada, atribuindo o papel de "consultora"
+2. Ver facilmente quanto cada consultora vendeu, quanto vai receber de comissao, e quanto falta para a meta
 
-- Adicionar um botao "Criar Regra e Reprocessar" em cada grupo de pendencias (ao lado do botao "Criar Regra" existente)
-- Ao clicar, abre um **Dialog inline** com o formulario de criacao de regra (mesmo formato da pagina Regras), sem precisar navegar para outra pagina
-- Apos criar a regra com sucesso:
-  1. Busca os IDs dos lancamentos pendentes que pertencem ao grupo (filtrados por produto/plano/empresa)
-  2. Chama a edge function `classificar-meta` passando `lancamento_ids` com esses IDs
-  3. Exibe toast com resultado do reprocessamento
-  4. Invalida as queries para atualizar a lista
+## Solucao
 
-### 2. Fluxo detalhado
+### 1. Gerenciamento de Acesso na pagina Consultoras
+
+Adicionar na pagina **Consultoras** (`/consultoras`) a funcionalidade de vincular um usuario ao perfil da consultora:
+
+- No dialog de editar/criar consultora, o campo **Email** passa a ser mais importante: ele sera usado para vincular a conta de login da consultora
+- Adicionar um botao **"Vincular Acesso"** em cada consultora que ja tem email preenchido
+- Ao clicar, o sistema:
+  1. Busca o usuario pelo email na tabela `auth.users` (via edge function, pois o client nao tem acesso)
+  2. Cria um registro em `user_roles` com `role = 'consultora'` e `consultora_id` apontando para a consultora
+- Mostrar status de acesso: "Com acesso" / "Sem acesso" / "Email nao cadastrado"
+- Opcao de remover acesso (deletar o `user_role`)
+- Opcao de redefinir senha (ja existe a edge function `admin-reset-password`)
+
+**Nova edge function `manage-consultora-access`:**
+- Recebe email e consultora_id
+- Verifica se o caller e admin
+- Busca user_id pelo email em auth.users
+- Cria/atualiza o registro em user_roles
+
+### 2. Coluna "Falta para Meta" na pagina Metas
+
+Na tabela de detalhamento por consultora na pagina **Metas** (`/metas`), adicionar:
+
+- Coluna **"Falta"**: valor em R$ que falta para atingir 100% da meta individual
+  - Se ja atingiu, mostrar "Meta atingida" em verde
+  - Se nao atingiu, mostrar o valor restante em vermelho
+
+### 3. Melhorar a tabela de Metas com comissao mais visivel
+
+A tabela atual ja mostra vendido, %, nivel e comissao. Vamos reorganizar para ficar mais claro:
+
+- Adicionar coluna **"Meta Individual"** (valor em R$)
+- Adicionar coluna **"Falta"** (quanto falta para bater 100%)
+- Manter comissao estimada
+
+## Fluxo do Admin para dar acesso a uma consultora
 
 ```text
-Pendencias
-  |
-  |-- Grupo: Produto "X" / Plano "Y" / Empresa "Z" (15 itens)
-  |     |
-  |     |-- [Criar Regra] -> navega para /regras (comportamento atual, mantido)
-  |     |-- [Criar Regra e Reprocessar] -> abre Dialog com formulario
-  |           |
-  |           |-- Formulario pre-preenchido:
-  |           |   campo_alvo = "produto", valor = "X" (baseado no grupo)
-  |           |
-  |           |-- Usuario ajusta campos e confirma
-  |           |
-  |           |-- Sistema:
-  |           |   1. Cria a regra no banco
-  |           |   2. Busca IDs dos lancamentos pendentes do grupo
-  |           |   3. Chama classificar-meta com lancamento_ids
-  |           |   4. Exibe resultado
-  |           |
-  |           |-- Lista de pendencias atualiza automaticamente
+1. Admin cadastra consultora com nome e email
+2. Consultora se cadastra no sistema usando o mesmo email
+3. Admin vai em Consultoras, ve que o status e "Sem vinculo"
+4. Admin clica em "Vincular Acesso"
+5. Sistema cria user_role com role=consultora e consultora_id
+6. Consultora faz login e ve a pagina "Minha Performance"
 ```
 
-### 3. Detalhes tecnicos
+## Arquivos que serao alterados
 
-**Novo estado no componente Pendencias:**
-- `dialogOpen`: controla visibilidade do dialog
-- `selectedGroup`: armazena o grupo selecionado para pre-preencher o formulario
-- `form`: estado do formulario de regra (mesma estrutura da pagina Regras)
+| Arquivo | Acao |
+|---------|------|
+| `supabase/functions/manage-consultora-access/index.ts` | CRIAR - edge function para vincular/desvincular acesso |
+| `src/pages/Consultoras.tsx` | EDITAR - adicionar status de acesso e botoes de vincular/desvincular |
+| `src/pages/Metas.tsx` | EDITAR - adicionar colunas "Meta Individual" e "Falta" na tabela |
 
-**Pre-preenchimento inteligente:**
-- Se o grupo tem `produto`, pre-preenche `campo_alvo = 'produto'` e `valor = produto`
-- Se tem apenas `plano`, usa `campo_alvo = 'plano'` e `valor = plano`
-- Se tem apenas `empresa`, usa `campo_alvo = 'empresa'` e `valor = empresa`
-- O usuario pode alterar antes de confirmar
+## Detalhes Tecnicos
 
-**Mutation encadeada:**
-1. Insert na tabela `regras_meta`
-2. Select dos `lancamentos.id` onde `pendente_regra = true` e produto/plano/empresa batem com o grupo
-3. Invoke `classificar-meta` com `{ lancamento_ids: [...] }`
-4. Invalidate queries
+### Edge function `manage-consultora-access`
 
-**Arquivo unico modificado:** `src/pages/Pendencias.tsx`
-- Importar componentes de formulario (Select, Input, Switch, Label, Dialog, etc.)
-- Importar tipos de database.ts
-- Adicionar o Dialog com formulario de regra
-- Adicionar a mutation encadeada (criar regra + reprocessar)
+Acoes suportadas:
+- `link`: recebe email + consultora_id, busca user em auth.users, cria user_role
+- `unlink`: recebe consultora_id, remove user_role correspondente
+- `check`: recebe email, retorna se o usuario existe e se ja tem role
+
+A funcao usa `SUPABASE_SERVICE_ROLE_KEY` para acessar `auth.admin.listUsers()`.
+
+### Alteracoes na pagina Consultoras
+
+- Adicionar query para buscar `user_roles` e cruzar com consultoras (por consultora_id)
+- Mostrar badge: "Com acesso" (verde), "Sem acesso" (amarelo), "Email nao preenchido" (cinza)
+- Botao "Vincular" chama a edge function com acao `link`
+- Botao "Desvincular" chama a edge function com acao `unlink`
+- Botao "Redefinir Senha" usa a edge function `admin-reset-password` ja existente
+
+### Alteracoes na pagina Metas
+
+- No calculo `consultoraDados`, adicionar campo `falta` = `Math.max(0, metaIndividual - vendido)`
+- Adicionar colunas na tabela: "Meta (R$)" e "Falta (R$)"
+- Colorir "Falta": verde se 0 (meta atingida), vermelho se > 0
+
