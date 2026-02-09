@@ -125,13 +125,13 @@ export default function ConfiguracaoMes() {
     }
   }, [metasConsultoras, consultoras]);
 
-  useEffect(() => {
+   useEffect(() => {
     if (niveisComissao && niveisComissao.length > 0) {
       setNiveis(niveisComissao.map(n => ({
         nivel: n.nivel,
-        de_percent: String(Number(n.de_percent) * 100),
-        ate_percent: String(Number(n.ate_percent) * 100),
-        comissao_percent: String(Number(n.comissao_percent) * 100),
+        de_percent: String(parseFloat((Number(n.de_percent) * 100).toFixed(10))),
+        ate_percent: String(parseFloat((Number(n.ate_percent) * 100).toFixed(10))),
+        comissao_percent: String(parseFloat((Number(n.comissao_percent) * 100).toFixed(10))),
       })));
     } else {
       setNiveis(defaultNiveis);
@@ -258,49 +258,46 @@ export default function ConfiguracaoMes() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Meta Total */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Meta Total do Mês
-              </CardTitle>
-              <CardDescription>
-                Defina o valor total da meta para o mês selecionado
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <Label>Valor da Meta</Label>
-                <Input
-                  value={metaTotal ? formatCurrency(metaTotal) : ''}
-                  onChange={(e) => setMetaTotal(e.target.value.replace(/\D/g, ''))}
-                  placeholder="R$ 0,00"
-                  className="text-lg font-medium"
-                />
-              </div>
-            </CardContent>
-          </Card>
+        {/* Meta e Distribuição unificados */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              Meta e Distribuição
+            </CardTitle>
+            <CardDescription>
+              Defina o valor total da meta e a distribuição por consultora
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label>Valor da Meta do Mês</Label>
+              <Input
+                value={metaTotal ? formatCurrency(metaTotal) : ''}
+                onChange={(e) => setMetaTotal(e.target.value.replace(/\D/g, ''))}
+                placeholder="R$ 0,00"
+                className="text-lg font-medium max-w-xs"
+              />
+            </div>
 
-          {/* Distribuição por consultora */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Distribuição por Consultora
-              </CardTitle>
-              <CardDescription>
-                Defina o percentual de cada consultora (soma = 100%)
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {consultoras && consultoras.length > 0 ? (
-                <div className="space-y-3">
-                  {consultoras.map(c => (
-                    <div key={c.id} className="flex items-center gap-3">
-                      <span className="flex-1 text-sm">{c.nome}</span>
-                      <div className="flex items-center gap-1">
+            {consultoras && consultoras.length > 0 ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-[1fr_auto_auto] gap-3 text-sm font-medium text-muted-foreground">
+                  <span>Consultora</span>
+                  <span className="w-32 text-right">Valor (R$)</span>
+                  <span className="w-24 text-right">%</span>
+                </div>
+                {consultoras.map(c => {
+                  const metaNum = parseFloat(metaTotal.replace(/\D/g, '')) / 100 || 0;
+                  const perc = parseFloat(percentuais[c.id]) || 0;
+                  const valorConsultora = (perc / 100) * metaNum;
+                  return (
+                    <div key={c.id} className="grid grid-cols-[1fr_auto_auto] gap-3 items-center">
+                      <span className="text-sm">{c.nome}</span>
+                      <span className="w-32 text-right text-sm text-muted-foreground">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorConsultora)}
+                      </span>
+                      <div className="flex items-center gap-1 w-24 justify-end">
                         <Input
                           type="number"
                           min="0"
@@ -314,27 +311,36 @@ export default function ConfiguracaoMes() {
                         <span className="text-muted-foreground">%</span>
                       </div>
                     </div>
-                  ))}
-                  {/* Totalizador */}
-                  <div className={`border-t pt-3 mt-3 flex items-center justify-between font-bold ${
-                    Math.abs(somaPercentuais - 100) < 0.01 ? 'text-green-600' : 
-                    somaPercentuais > 100 ? 'text-red-600' : 'text-amber-600'
-                  }`}>
-                    <span>Total</span>
-                    <span>{somaPercentuais.toFixed(1)}%</span>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-center py-4 text-muted-foreground">
-                  Nenhuma consultora cadastrada.{' '}
-                  <a href="/consultoras" className="text-primary hover:underline">
-                    Cadastrar →
-                  </a>
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                  );
+                })}
+                {/* Totalizador */}
+                {(() => {
+                  const metaNum = parseFloat(metaTotal.replace(/\D/g, '')) / 100 || 0;
+                  const valorTotal = (somaPercentuais / 100) * metaNum;
+                  return (
+                    <div className={`border-t pt-3 mt-3 grid grid-cols-[1fr_auto_auto] gap-3 font-bold ${
+                      Math.abs(somaPercentuais - 100) < 0.01 ? 'text-green-600' : 
+                      somaPercentuais > 100 ? 'text-red-600' : 'text-amber-600'
+                    }`}>
+                      <span>Total</span>
+                      <span className="w-32 text-right">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorTotal)}
+                      </span>
+                      <span className="w-24 text-right">{somaPercentuais.toFixed(1)}%</span>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <p className="text-center py-4 text-muted-foreground">
+                Nenhuma consultora cadastrada.{' '}
+                <a href="/consultoras" className="text-primary hover:underline">
+                  Cadastrar →
+                </a>
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Níveis de Comissão */}
         <Card>
