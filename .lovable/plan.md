@@ -1,46 +1,36 @@
 
+# Correcao do Bug de Formatacao de Valores Monetarios
 
-# Melhorias na Tela de Configuracao do Mes
+## Problema
 
-## O que muda
+O sistema armazena o valor da meta no banco em **reais** (ex: `200000`), mas o codigo trata o valor interno como **centavos** (divide por 100 ao exibir e ao salvar). Isso causa um ciclo destrutivo:
 
-### 1. Unificar Meta e Distribuicao em um unico card
-O card "Meta Total do Mes" e o card "Distribuicao por Consultora" serao combinados em um unico card. O campo de valor da meta fica no topo, seguido da lista de consultoras com percentuais.
+1. Banco retorna `200000` (duzentos mil reais)
+2. Estado recebe `"200000"`
+3. `formatCurrency` faz `200000 / 100 = 2000` e exibe `R$ 2.000,00`
+4. Ao salvar, faz `200000 / 100 = 2000` e grava `2000` no banco
+5. No proximo carregamento, exibe `R$ 20,00`
 
-### 2. Coluna de valor calculado por consultora
-Adicionar uma coluna mostrando o valor em R$ que cada consultora deve atingir, calculado automaticamente: `(percentual / 100) * metaTotal`. O totalizador tambem mostrara o valor total em R$.
+## Solucao
 
-Layout de cada linha:
-```text
-NOME DA CONSULTORA          R$ 40.000,00    [20] %
-```
+Padronizar o estado interno para sempre armazenar o valor em **centavos** (inteiro). Assim o fluxo fica consistente:
 
-Totalizador:
-```text
-Total                       R$ 200.000,00   100.0%
-```
+- **Ao carregar do banco**: multiplicar por 100 para converter reais em centavos
+  - `setMetaTotal(String(Math.round(metaMensal.meta_total * 100)))`
+- **Ao exibir**: `formatCurrency` ja divide por 100 corretamente (centavos -> reais)
+- **Ao salvar**: dividir por 100 para converter centavos em reais (ja esta assim)
+- **Ao calcular valor por consultora**: manter a divisao por 100
 
-### 3. Corrigir bug de ponto flutuante nos niveis de comissao
-O problema ocorre na linha 134 ao converter `Number(n.comissao_percent) * 100`. A multiplicacao por 100 gera imprecisao de ponto flutuante (ex: 0.007 * 100 = 0.7000000000000001). Correcao: usar `parseFloat((Number(n.comissao_percent) * 100).toFixed(10))` para eliminar casas extras.
-
-O mesmo fix sera aplicado nas linhas 132 e 133 (de_percent e ate_percent) preventivamente.
-
-## Detalhes tecnicos
+## Alteracao tecnica
 
 ### Arquivo: `src/pages/ConfiguracaoMes.tsx`
 
-**Card unificado (linhas 261-337):**
-- Remover o grid de 2 colunas
-- Um unico card com titulo "Meta e Distribuicao"
-- Campo de valor da meta no topo
-- Abaixo, a lista de consultoras com 3 colunas: nome, valor R$, percentual
-- Totalizador com valor total e percentual total
+**Linha 110** - Corrigir carregamento do valor do banco:
+```
+// De:
+setMetaTotal(String(metaMensal.meta_total));
+// Para:
+setMetaTotal(String(Math.round(Number(metaMensal.meta_total) * 100)));
+```
 
-**Calculo do valor por consultora:**
-- `metaNum = parseFloat(metaTotal.replace(/\D/g, '')) / 100`
-- Para cada consultora: `valor = (parseFloat(percentuais[c.id]) / 100) * metaNum`
-- Formatado com `Intl.NumberFormat` em BRL
-
-**Fix ponto flutuante (linhas 130-135):**
-- Trocar `String(Number(n.xxx) * 100)` por `String(parseFloat((Number(n.xxx) * 100).toFixed(10)))` nos 3 campos (de_percent, ate_percent, comissao_percent)
-
+Essa unica mudanca resolve o problema pois todo o resto do codigo ja assume que o estado esta em centavos (divide por 100 ao exibir e ao salvar).
