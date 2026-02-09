@@ -1,28 +1,46 @@
 
 
-# Totalizador de Percentuais na Distribuicao por Consultora
+# Melhorias na Tela de Configuracao do Mes
 
 ## O que muda
 
-Adicionar uma linha totalizadora fixa abaixo da lista de consultoras, com visual destacado, mostrando a soma dos percentuais e indicando se esta correto (100%), abaixo ou acima.
+### 1. Unificar Meta e Distribuicao em um unico card
+O card "Meta Total do Mes" e o card "Distribuicao por Consultora" serao combinados em um unico card. O campo de valor da meta fica no topo, seguido da lista de consultoras com percentuais.
 
-## Alteracoes
+### 2. Coluna de valor calculado por consultora
+Adicionar uma coluna mostrando o valor em R$ que cada consultora deve atingir, calculado automaticamente: `(percentual / 100) * metaTotal`. O totalizador tambem mostrara o valor total em R$.
 
-### Arquivo: `src/pages/ConfiguracaoMes.tsx`
+Layout de cada linha:
+```text
+NOME DA CONSULTORA          R$ 40.000,00    [20] %
+```
 
-Apos a lista de consultoras (linha 323, apos o map), adicionar uma linha separadora com o total:
+Totalizador:
+```text
+Total                       R$ 200.000,00   100.0%
+```
 
-- Separador visual (borda superior)
-- Texto "Total" alinhado a esquerda
-- Valor da soma alinhado a direita no mesmo formato dos inputs
-- Cores: verde se = 100%, vermelho se > 100%, amarelo/laranja se < 100%
-- Texto em negrito para destaque
+### 3. Corrigir bug de ponto flutuante nos niveis de comissao
+O problema ocorre na linha 134 ao converter `Number(n.comissao_percent) * 100`. A multiplicacao por 100 gera imprecisao de ponto flutuante (ex: 0.007 * 100 = 0.7000000000000001). Correcao: usar `parseFloat((Number(n.comissao_percent) * 100).toFixed(10))` para eliminar casas extras.
 
-O totalizador existente na descricao do card (linha 295-300) sera removido para evitar duplicidade, ja que o novo totalizador na parte inferior da lista e mais visivel e util.
+O mesmo fix sera aplicado nas linhas 132 e 133 (de_percent e ate_percent) preventivamente.
 
 ## Detalhes tecnicos
 
-- Reutiliza a variavel `somaPercentuais` ja calculada na linha 224
-- Adiciona um `div` com `border-t`, `pt-3`, `mt-3` para separacao visual
-- Aplica cores condicionais: `text-green-600` (100%), `text-red-600` (>100%), `text-amber-600` (<100%)
-- Remove o `span` de total da `CardDescription` para nao duplicar informacao
+### Arquivo: `src/pages/ConfiguracaoMes.tsx`
+
+**Card unificado (linhas 261-337):**
+- Remover o grid de 2 colunas
+- Um unico card com titulo "Meta e Distribuicao"
+- Campo de valor da meta no topo
+- Abaixo, a lista de consultoras com 3 colunas: nome, valor R$, percentual
+- Totalizador com valor total e percentual total
+
+**Calculo do valor por consultora:**
+- `metaNum = parseFloat(metaTotal.replace(/\D/g, '')) / 100`
+- Para cada consultora: `valor = (parseFloat(percentuais[c.id]) / 100) * metaNum`
+- Formatado com `Intl.NumberFormat` em BRL
+
+**Fix ponto flutuante (linhas 130-135):**
+- Trocar `String(Number(n.xxx) * 100)` por `String(parseFloat((Number(n.xxx) * 100).toFixed(10)))` nos 3 campos (de_percent, ate_percent, comissao_percent)
+
