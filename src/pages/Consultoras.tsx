@@ -18,7 +18,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Plus, Edit, Trash2, Mail, User, Link, Unlink, KeyRound } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, Mail, User, UserPlus, Unlink, KeyRound } from 'lucide-react';
 import type { Consultora } from '@/types/database';
 
 interface ConsultoraForm {
@@ -44,6 +44,9 @@ export default function Consultoras() {
   const [form, setForm] = useState<ConsultoraForm>(defaultForm);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetForm, setResetForm] = useState<ResetPasswordForm>({ email: '', password: '' });
+  const [createAccessDialogOpen, setCreateAccessDialogOpen] = useState(false);
+  const [createAccessConsultora, setCreateAccessConsultora] = useState<Consultora | null>(null);
+  const [createAccessPassword, setCreateAccessPassword] = useState('');
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -81,40 +84,24 @@ export default function Consultoras() {
     return hasRole ? 'linked' : 'not_linked';
   };
 
-  const linkAccess = useMutation({
-    mutationFn: async ({ email, consultora_id }: { email: string; consultora_id: string }) => {
+  const createAndLink = useMutation({
+    mutationFn: async ({ email, password, consultora_id }: { email: string; password: string; consultora_id: string }) => {
       const { data, error } = await supabase.functions.invoke('manage-consultora-access', {
-        body: { action: 'link', email, consultora_id },
+        body: { action: 'create_and_link', email, password, consultora_id },
       });
-      // Handle both invoke errors and application-level errors
-      if (error) {
-        // Try to parse the error body for a friendly message
-        const errorBody = typeof error === 'object' && 'context' in error 
-          ? error.message : String(error);
-        if (errorBody.includes('Nenhum usuário cadastrado')) {
-          throw new Error('Esta consultora ainda não criou uma conta no sistema. Ela precisa se cadastrar primeiro usando este email.');
-        }
-        throw error;
-      }
-      if (data?.error) {
-        if (data.error.includes('Nenhum usuário cadastrado')) {
-          throw new Error('Esta consultora ainda não criou uma conta no sistema. Ela precisa se cadastrar primeiro usando este email.');
-        }
-        throw new Error(data.error);
-      }
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-roles-consultoras'] });
-      toast({ title: 'Acesso vinculado com sucesso!' });
+      toast({ title: 'Conta criada e acesso vinculado com sucesso!' });
+      setCreateAccessDialogOpen(false);
+      setCreateAccessConsultora(null);
+      setCreateAccessPassword('');
     },
     onError: (error: any) => {
-      const msg = error?.message || '';
-      if (msg.includes('ainda não criou uma conta')) {
-        toast({ title: 'Conta não encontrada', description: msg });
-      } else {
-        toast({ title: 'Erro ao vincular acesso', description: msg, variant: 'destructive' });
-      }
+      toast({ title: 'Erro ao criar acesso', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -437,11 +424,14 @@ export default function Consultoras() {
                             variant="ghost"
                             size="sm"
                             className="text-xs gap-1"
-                            disabled={linkAccess.isPending}
-                            onClick={() => linkAccess.mutate({ email: consultora.email!, consultora_id: consultora.id })}
+                            onClick={() => {
+                              setCreateAccessConsultora(consultora);
+                              setCreateAccessPassword('');
+                              setCreateAccessDialogOpen(true);
+                            }}
                           >
-                            <Link className="h-3 w-3" />
-                            Vincular
+                            <UserPlus className="h-3 w-3" />
+                            Criar Acesso
                           </Button>
                         )}
                         {accessStatus === 'linked' && (
@@ -545,6 +535,54 @@ export default function Consultoras() {
               disabled={resetPassword.isPending || resetForm.password.length < 6}
             >
               Redefinir Senha
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de criar acesso */}
+      <Dialog open={createAccessDialogOpen} onOpenChange={setCreateAccessDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Criar Acesso</DialogTitle>
+            <DialogDescription>
+              Crie uma conta de login para {createAccessConsultora?.nome}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={createAccessConsultora?.email || ''}
+                disabled
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Senha</Label>
+              <Input
+                type="password"
+                value={createAccessPassword}
+                onChange={(e) => setCreateAccessPassword(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateAccessDialogOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={() => {
+                if (createAccessConsultora?.email) {
+                  createAndLink.mutate({
+                    email: createAccessConsultora.email,
+                    password: createAccessPassword,
+                    consultora_id: createAccessConsultora.id,
+                  });
+                }
+              }}
+              disabled={createAndLink.isPending || createAccessPassword.length < 6}
+            >
+              Criar Acesso
             </Button>
           </DialogFooter>
         </DialogContent>
