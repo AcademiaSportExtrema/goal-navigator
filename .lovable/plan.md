@@ -85,20 +85,19 @@ ALL: has_role(auth.uid(), 'admin')
 
 ---
 
-## 4. Integracao Stripe para Mensalidades
+## 4. Integracao AbacatePay para Mensalidades
 
-### Ativar Stripe via ferramenta do Lovable
-Necessario habilitar a integracao Stripe para ter acesso as ferramentas de criacao de produtos/precos/assinaturas.
+### Configuracao via painel
+Chave da API armazenada como secret via edge function, configuravel na aba "Integracoes" em Configuracao.
 
-### Edge Function `stripe-webhook`
-Recebe eventos do Stripe e atualiza o status da assinatura na tabela `empresas`:
-- `customer.subscription.created` -> status = active
-- `customer.subscription.updated` -> atualiza status
-- `customer.subscription.deleted` -> status = canceled
-- `invoice.payment_failed` -> status = past_due
+### Edge Function `abacatepay-webhook`
+Recebe eventos do AbacatePay e atualiza o status da assinatura na tabela `empresas`:
+- Pagamento confirmado -> status = active
+- Pagamento falhou -> status = past_due
+- Assinatura cancelada -> status = canceled
 
-### Edge Function `create-checkout-session`
-Cria sessao de checkout do Stripe para novas empresas ou reativacao.
+### Edge Function `create-billing`
+Cria cobranca/assinatura no AbacatePay para novas empresas ou reativacao.
 
 ---
 
