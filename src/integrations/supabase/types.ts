@@ -256,6 +256,33 @@ export type Database = {
         }
         Relationships: []
       }
+      permissoes_perfil: {
+        Row: {
+          created_at: string
+          id: string
+          permitido: boolean
+          role: Database["public"]["Enums"]["app_role"]
+          rota: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          permitido?: boolean
+          role: Database["public"]["Enums"]["app_role"]
+          rota: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          permitido?: boolean
+          role?: Database["public"]["Enums"]["app_role"]
+          rota?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       regras_meta: {
         Row: {
           ativo: boolean | null
