@@ -1,1 +1,4 @@
 project_id = "guiifplvaecwbtqtyltk"
+
+[functions.manage-consultora-access]
+verify_jwt = false
