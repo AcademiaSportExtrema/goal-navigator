@@ -1,36 +1,77 @@
 
+# Melhorias na Pagina Gerencial - Filtros, Ordenacao e Totais
 
-# Redefinir Senha de Usuário via Função Backend
+## Resumo das Alteracoes
 
-## Objetivo
-Criar uma função backend (edge function) que permite ao admin redefinir a senha de um usuário diretamente, sem depender do fluxo de email.
+Arquivo unico a ser modificado: `src/pages/Gerencial.tsx`
 
-## O que será feito
+## 1. Filtros Avancados Sempre Visiveis (Acima da Pesquisa)
 
-### 1. Criar Edge Function `admin-reset-password`
-- Recebe email e nova senha via POST
-- Valida que o chamador é admin
-- Usa a API administrativa do Supabase para atualizar a senha do usuário
-- Retorna confirmação de sucesso
+- Remover o botao toggle de filtros
+- Mover a area de filtros avancados para **acima** do campo de pesquisa, sempre visivel
+- Adicionar filtro de **periodo** com datas pre-configuradas:
+  - Hoje
+  - Ultimos 7 dias
+  - Ultimos 30 dias
+  - Este mes
+  - Mes passado
+  - Personalizado (com date pickers de/ate)
+- O campo de pesquisa fica abaixo dos filtros
 
-### 2. Usar a função para redefinir a senha
-Após criada e deployada, chamarei a função para definir a senha do usuário `hermesoliveira@gmail.com`.
+## 2. Ordenacao nas Colunas da Tabela
 
-## Arquivos
+- Adicionar icones de seta (ArrowUpDown) em cada cabecalho de coluna
+- Ao clicar no cabecalho, alterna entre:
+  - Crescente (seta para cima)
+  - Decrescente (seta para baixo)
+  - Sem ordenacao (icone neutro)
+- Estado controlado por `sortColumn` e `sortDirection`
 
-| Arquivo | Ação |
-|---------|------|
-| `supabase/functions/admin-reset-password/index.ts` | CRIAR - edge function para reset de senha |
+## 3. Linha de Totais na Tabela
 
-## Detalhes Técnicos
+- Adicionar um `TableFooter` com totalizadores para:
+  - **Valor**: soma formatada em R$ de todos os registros filtrados
+  - **Duracao**: contagem total de itens
+- As demais colunas exibem "-" no rodape
+- A linha de totais reflete sempre os dados filtrados (nao paginados)
 
-A edge function usará `supabase.auth.admin.updateUserById()` com a service role key para alterar a senha. Apenas usuários com role `admin` poderão chamar esta função (validação via token JWT do chamador).
+## Detalhes Tecnicos
 
+### Novos estados:
 ```typescript
-// Fluxo:
-// 1. Verificar que o chamador é admin
-// 2. Buscar usuário pelo email via admin API
-// 3. Atualizar senha via admin API
+const [sortColumn, setSortColumn] = useState<string | null>(null);
+const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+const [dateRange, setDateRange] = useState<string>('all'); // periodo pre-configurado
+const [dateFrom, setDateFrom] = useState<Date | undefined>();
+const [dateTo, setDateTo] = useState<Date | undefined>();
 ```
 
-Após implementar, executarei a função para definir a senha do usuário solicitado e informarei aqui.
+### Filtro de periodo:
+- Select com opcoes pre-definidas (hoje, 7 dias, 30 dias, este mes, mes passado, personalizado)
+- Quando "personalizado", exibir dois date pickers (de/ate) usando o componente Calendar/Popover
+- Filtra pelo campo `data_lancamento`
+
+### Ordenacao:
+- `useMemo` para ordenar `filteredData` antes de paginar
+- Cabecalhos clicaveis com cursor pointer e icones indicativos
+
+### Totais:
+- `useMemo` para calcular soma de `valor` e contagem de registros filtrados
+- Exibido em `TableFooter` com formatacao monetaria
+
+### Layout reorganizado:
+```
++------------------------------------------+
+| Filtros Avancados (sempre visivel)       |
+| [Empresa] [Produto] [Plano] [Resp.Venda]|
+| [Situacao] [Forma Pgto] [Periodo: v]    |
+| [Data De] [Data Ate] (se personalizado)  |
+|          [X Limpar filtros]              |
++------------------------------------------+
+| [🔍 Buscar...]        [Exportar CSV]    |
++------------------------------------------+
+| Tabela com cabecalhos ordenáveis         |
+| ...                                      |
+| TOTAIS | - | - | ... | R$ X.XXX | ...   |
++------------------------------------------+
+```
