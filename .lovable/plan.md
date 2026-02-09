@@ -1,69 +1,54 @@
 
-# Admin Criar Conta da Consultora Diretamente
 
-## Resumo
+# Reorganizacao do Menu Lateral
 
-Adicionar uma acao `create_user` na edge function `manage-consultora-access` que permite ao admin criar a conta de login da consultora diretamente, sem precisar que ela se cadastre sozinha. O admin define email e senha, o sistema cria o usuario e ja vincula automaticamente ao perfil da consultora.
+## Analise atual
 
-## Alteracoes
+O menu tem 9 itens soltos sem agrupamento logico, e duas paginas com sobreposicao de conteudo:
 
-### 1. Edge Function `manage-consultora-access/index.ts`
+- **Dashboard**: mostra resumo geral (total vendido, meta, lancamentos, pendentes, ultimos uploads, equipe)
+- **Metas**: mostra dashboard detalhado de metas (total vendido, % atingimento, nivel, comissao, grafico por consultora, tabela detalhada)
 
-Adicionar nova acao `create_and_link`:
-- Recebe `email`, `password` e `consultora_id`
-- Usa `supabaseAdmin.auth.admin.createUser()` para criar o usuario com email confirmado
-- Cria o registro em `user_roles` com `role = 'consultora'` e `consultora_id`
-- Retorna sucesso ou erro
+Ambas mostram "total vendido" e "% da meta" -- sao redundantes. Faz sentido **unificar** em uma unica pagina, mantendo o Dashboard como pagina principal e incorporando nele os graficos e tabela detalhada que hoje ficam em Metas.
 
-### 2. Pagina Consultoras (`src/pages/Consultoras.tsx`)
-
-Substituir o botao "Vincular" (que so funciona se a consultora ja criou conta) por um fluxo mais completo:
-
-- Quando a consultora tem email mas nao tem acesso, mostrar botao **"Criar Acesso"**
-- Ao clicar, abre um Dialog pedindo a **senha** para a conta (o email ja vem preenchido da consultora)
-- Ao confirmar:
-  1. Chama a edge function com acao `create_and_link`
-  2. Se o usuario ja existe, faz o `link` automaticamente
-  3. Atualiza a lista
-
-- Manter os botoes existentes: "Desvincular", "Senha" (redefinir), "Editar", "Excluir"
-
-### 3. Fluxo completo
+## Proposta de menu reorganizado
 
 ```text
-Admin na pagina Consultoras:
-  |
-  |-- Consultora "Maria" (email: maria@empresa.com) - Status: "Sem vinculo"
-  |     |
-  |     |-- Clica em "Criar Acesso"
-  |     |-- Dialog pede senha
-  |     |-- Admin digita "Senha123!"
-  |     |-- Sistema:
-  |     |   1. Cria usuario maria@empresa.com com senha definida
-  |     |   2. Vincula user_role (consultora) ao perfil
-  |     |-- Status muda para "Com acesso"
-  |     |
-  |     |-- Maria faz login com email + senha definida pelo admin
+--- Visao Geral ---
+  Dashboard          (unificado: resumo + metas + grafico + tabela por consultora)
+
+--- Operacional ---
+  Upload Diario
+  Gerencial
+  Pendencias
+  Ajustes
+
+--- Configuracoes ---
+  Regras da Meta
+  Config. do Mes
+  Consultoras
 ```
+
+**Mudancas:**
+- **Metas** deixa de existir como pagina separada. Todo o conteudo (cards de atingimento, grafico de barras, tabela por consultora com falta/comissao) e incorporado no Dashboard
+- Menu agrupado em 3 secoes logicas com labels
+- A rota `/metas` redireciona para `/dashboard` para nao quebrar links
 
 ## Detalhes tecnicos
 
-**Nova acao na edge function:**
+### Arquivo `src/pages/Dashboard.tsx`
+- Incorporar o seletor de mes, os cards de atingimento (% meta, nivel, comissao), o grafico de barras por consultora e a tabela detalhada com colunas Meta/Falta/Comissao que hoje estao em `src/pages/Metas.tsx`
+- Manter os cards existentes (total lancamentos, pendentes, ultimos uploads, equipe)
+- Reorganizar layout: cards de resumo no topo, grafico + tabela no meio, ultimos uploads e acoes rapidas embaixo
 
-```text
-action: 'create_and_link'
-body: { email, password, consultora_id }
+### Arquivo `src/components/layout/AppSidebar.tsx`
+- Dividir o menu em 3 grupos: "Visao Geral", "Operacional", "Configuracoes"
+- Remover item "Metas" do menu
 
-1. auth.admin.createUser({ email, password, email_confirm: true })
-2. Se erro "User already registered" -> tenta fazer link normal
-3. insert user_roles { user_id, role: 'consultora', consultora_id }
-```
+### Arquivo `src/App.tsx`
+- Adicionar redirect de `/metas` para `/dashboard`
+- Remover a rota protegida de Metas
 
-**Novo Dialog na pagina Consultoras:**
-- Estado: `createAccessDialogOpen`, `createAccessConsultora`, `createAccessPassword`
-- Mutation `createAndLink` que chama a edge function
-- Pre-preenche email da consultora selecionada
+### Arquivo `src/pages/Metas.tsx`
+- Manter o arquivo mas pode ser removido futuramente (a rota ja redireciona)
 
-**Arquivos modificados:**
-- `supabase/functions/manage-consultora-access/index.ts` - adicionar acao `create_and_link`
-- `src/pages/Consultoras.tsx` - substituir botao "Vincular" por "Criar Acesso" com dialog de senha
