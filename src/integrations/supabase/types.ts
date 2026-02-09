@@ -307,6 +307,63 @@ export type Database = {
         }
         Relationships: []
       }
+      solicitacoes_ajuste: {
+        Row: {
+          admin_comentario: string | null
+          admin_user_id: string | null
+          consultora_id: string
+          created_at: string
+          id: string
+          justificativa: string
+          lancamento_id: string
+          resp_recebimento_atual: string | null
+          resp_recebimento_novo: string
+          status: Database["public"]["Enums"]["ajuste_status"]
+          updated_at: string
+        }
+        Insert: {
+          admin_comentario?: string | null
+          admin_user_id?: string | null
+          consultora_id: string
+          created_at?: string
+          id?: string
+          justificativa: string
+          lancamento_id: string
+          resp_recebimento_atual?: string | null
+          resp_recebimento_novo: string
+          status?: Database["public"]["Enums"]["ajuste_status"]
+          updated_at?: string
+        }
+        Update: {
+          admin_comentario?: string | null
+          admin_user_id?: string | null
+          consultora_id?: string
+          created_at?: string
+          id?: string
+          justificativa?: string
+          lancamento_id?: string
+          resp_recebimento_atual?: string | null
+          resp_recebimento_novo?: string
+          status?: Database["public"]["Enums"]["ajuste_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "solicitacoes_ajuste_consultora_id_fkey"
+            columns: ["consultora_id"]
+            isOneToOne: false
+            referencedRelation: "consultoras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_ajuste_lancamento_id_fkey"
+            columns: ["lancamento_id"]
+            isOneToOne: false
+            referencedRelation: "lancamentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       uploads: {
         Row: {
           arquivo_nome: string
@@ -385,8 +442,24 @@ export type Database = {
         }
         Returns: boolean
       }
+      search_lancamentos_for_ajuste: {
+        Args: { _limit?: number; _search?: string }
+        Returns: {
+          data_lancamento: string
+          empresa: string
+          id: string
+          nome_cliente: string
+          numero_contrato: string
+          plano: string
+          produto: string
+          resp_recebimento: string
+          resp_venda: string
+          valor: number
+        }[]
+      }
     }
     Enums: {
+      ajuste_status: "pendente" | "aprovado" | "rejeitado"
       app_role: "admin" | "consultora"
       campo_alvo:
         | "produto"
@@ -534,6 +607,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      ajuste_status: ["pendente", "aprovado", "rejeitado"],
       app_role: ["admin", "consultora"],
       campo_alvo: [
         "produto",

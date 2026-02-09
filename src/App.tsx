@@ -20,6 +20,8 @@ import ConfiguracaoMes from "./pages/ConfiguracaoMes";
 import Consultoras from "./pages/Consultoras";
 import Metas from "./pages/Metas";
 import MinhaPerformance from "./pages/MinhaPerformance";
+import SolicitarAjuste from "./pages/SolicitarAjuste";
+import Ajustes from "./pages/Ajustes";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -80,10 +82,21 @@ const App = () => (
               </ProtectedRoute>
             } />
 
-            {/* Consultora route */}
+            <Route path="/ajustes" element={
+              <ProtectedRoute requiredRole="admin">
+                <Ajustes />
+              </ProtectedRoute>
+            } />
+
+            {/* Consultora routes */}
             <Route path="/minha-performance" element={
               <ProtectedRoute requiredRole="consultora">
                 <MinhaPerformance />
+              </ProtectedRoute>
+            } />
+            <Route path="/solicitar-ajuste" element={
+              <ProtectedRoute requiredRole="consultora">
+                <SolicitarAjuste />
               </ProtectedRoute>
             } />
 
