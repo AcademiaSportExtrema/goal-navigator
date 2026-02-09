@@ -396,13 +396,16 @@ export default function Gerencial() {
                     <div className="space-y-1">
                       <p className="text-sm font-medium mb-2">Colunas visíveis</p>
                       {columns.map(col => (
-                        <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:bg-muted/50 rounded px-1">
+                        <div
+                          key={col.key}
+                          className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:bg-muted/50 rounded px-1"
+                          onClick={(e) => { e.preventDefault(); toggleColumn(col.key); }}
+                        >
                           <Checkbox
                             checked={!hiddenColumns.has(col.key)}
-                            onCheckedChange={() => toggleColumn(col.key)}
                           />
-                          {col.label}
-                        </label>
+                          <span>{col.label}</span>
+                        </div>
                       ))}
                     </div>
                   </PopoverContent>
