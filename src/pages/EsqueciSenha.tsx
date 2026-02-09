@@ -7,11 +7,14 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Target, Mail, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
 
+// Module-level flag to survive component remounts from AuthProvider re-renders
+let resetEmailSent = false;
+
 export default function EsqueciSenha() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState(resetEmailSent);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,15 +22,16 @@ export default function EsqueciSenha() {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/redefinir-senha`
       });
 
-      if (error) {
+      if (resetError) {
         setError('Erro ao enviar email de recuperação. Verifique o endereço.');
         return;
       }
 
+      resetEmailSent = true;
       setSuccess(true);
     } catch (err) {
       setError('Erro ao processar solicitação. Tente novamente.');
