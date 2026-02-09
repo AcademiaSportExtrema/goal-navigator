@@ -2,7 +2,6 @@ import { useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   Upload,
-  Table,
   Settings,
   AlertCircle,
   Calendar,
@@ -15,6 +14,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Button } from '@/components/ui/button';
 import {
   Sidebar,
@@ -51,7 +51,7 @@ const adminMenuGroups = [
     items: [
       { title: 'Regras da Meta', icon: Settings, href: '/regras' },
       { title: 'Config. do Mês', icon: Calendar, href: '/configuracao-mes' },
-      { title: 'Consultoras', icon: Users, href: '/consultoras' },
+      { title: 'Configuração', icon: Users, href: '/configuracao' },
     ],
   },
 ];
@@ -59,12 +59,14 @@ const adminMenuGroups = [
 const consultoraMenuItems = [
   { title: 'Minha Performance', icon: TrendingUp, href: '/minha-performance' },
   { title: 'Solicitar Ajuste', icon: ArrowRightLeft, href: '/solicitar-ajuste' },
+  { title: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
   const { user, signOut, isAdmin } = useAuth();
   const { state } = useSidebar();
+  const { hasPermission } = usePermissions();
 
   return (
     <Sidebar collapsible="icon">
@@ -88,14 +90,45 @@ export function AppSidebar() {
 
       <SidebarContent>
         {isAdmin ? (
-          adminMenuGroups.map((group) => (
-            <SidebarGroup key={group.label}>
-              <SidebarGroupLabel className="text-sidebar-foreground/60">
-                {group.label}
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {group.items.map((item) => (
+          adminMenuGroups.map((group) => {
+            const visibleItems = group.items.filter(item => hasPermission(item.href));
+            if (visibleItems.length === 0) return null;
+            return (
+              <SidebarGroup key={group.label}>
+                <SidebarGroupLabel className="text-sidebar-foreground/60">
+                  {group.label}
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {visibleItems.map((item) => (
+                      <SidebarMenuItem key={item.href}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={location.pathname === item.href}
+                          tooltip={item.title}
+                        >
+                          <Link to={item.href}>
+                            <item.icon className="h-4 w-4" />
+                            <span>{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            );
+          })
+        ) : (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-sidebar-foreground/60">
+              Menu
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {consultoraMenuItems
+                  .filter(item => hasPermission(item.href))
+                  .map((item) => (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton
                         asChild
@@ -109,31 +142,6 @@ export function AppSidebar() {
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ))
-        ) : (
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-sidebar-foreground/60">
-              Menu
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {consultoraMenuItems.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={location.pathname === item.href}
-                      tooltip={item.title}
-                    >
-                      <Link to={item.href}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
