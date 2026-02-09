@@ -1,78 +1,52 @@
 
-# Adicionar Funcionalidade "Esqueci Minha Senha"
 
-## Objetivo
-Implementar fluxo completo de recuperacao de senha para usuarios que esqueceram suas credenciais de acesso.
+# Corrigir Tela "Esqueci Minha Senha" Reaparecendo
 
----
+## Problema Identificado
 
-## O que sera implementado
+Quando o usuario clica em "Enviar link de recuperacao", a tela recarrega e volta ao estado inicial ao inves de mostrar a mensagem de sucesso. Isso acontece por dois motivos:
 
-### 1. Link na tela de Login
-Adicionar link "Esqueci minha senha" abaixo do campo de senha, levando para uma nova pagina de recuperacao.
+1. **Conflito de nomes de variaveis**: A variavel `error` retornada pela API do Supabase na linha 22 faz "shadow" (sobreposicao) da variavel de estado `error` definida na linha 13, podendo causar comportamento inesperado.
 
-### 2. Nova pagina: EsqueciSenha.tsx
-- Campo para digitar email
-- Botao "Enviar link de recuperacao"
-- Feedback de sucesso apos envio
-- Link para voltar ao login
-
-### 3. Nova pagina: RedefinirSenha.tsx
-- Campos para nova senha e confirmacao
-- Validacao de senha minima (6 caracteres)
-- Validacao de senhas coincidentes
-- Feedback de sucesso e redirecionamento para login
-
-### 4. Funcao no useAuth
-Adicionar funcao `resetPasswordForEmail` que chama o Supabase Auth para enviar email de recuperacao.
-
-### 5. Rotas no App.tsx
-Adicionar rotas:
-- `/esqueci-senha` - pagina de solicitacao
-- `/redefinir-senha` - pagina de nova senha (acessada via link do email)
+2. **Re-render do AuthProvider**: Quando `resetPasswordForEmail` e chamado, o listener `onAuthStateChange` pode disparar eventos que atualizam o estado do `AuthProvider`, causando remontagem do componente `EsqueciSenha` e resetando o estado `success` para `false`.
 
 ---
 
-## Fluxo do usuario
+## Solucao
 
-1. Usuario clica em "Esqueci minha senha" na tela de login
-2. Digita seu email e clica em "Enviar"
-3. Recebe email com link de recuperacao
-4. Clica no link e e redirecionado para `/redefinir-senha`
-5. Define nova senha e confirma
-6. E redirecionado para login com mensagem de sucesso
+### 1. Corrigir conflito de variavel em EsqueciSenha.tsx
+Renomear a variavel destructurada da API para evitar conflito com o estado `error`:
+
+```typescript
+const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {...});
+if (resetError) {
+  setError('Erro ao enviar email...');
+  return;
+}
+```
+
+### 2. Usar useRef para manter estado de sucesso
+Adicionar um `useRef` para preservar o estado de sucesso mesmo que o componente seja remontado pelo AuthProvider:
+
+```typescript
+const [success, setSuccess] = useState(false);
+const successRef = useRef(false);
+```
+
+### 3. Alternativa mais robusta - mover chamada para fora do AuthProvider
+Como a pagina EsqueciSenha nao precisa de autenticacao, a chamada `resetPasswordForEmail` pode ser feita diretamente sem depender do contexto de auth, o que ja e o caso. O problema principal e o shadow da variavel.
 
 ---
 
-## Arquivos a serem modificados/criados
+## Arquivos a modificar
 
-| Arquivo | Acao |
-|---------|------|
-| `src/pages/Login.tsx` | Adicionar link "Esqueci minha senha" |
-| `src/pages/EsqueciSenha.tsx` | CRIAR - pagina de solicitacao |
-| `src/pages/RedefinirSenha.tsx` | CRIAR - pagina de nova senha |
-| `src/hooks/useAuth.tsx` | Adicionar funcao resetPasswordForEmail |
-| `src/App.tsx` | Adicionar rotas /esqueci-senha e /redefinir-senha |
+| Arquivo | Alteracao |
+|---------|-----------|
+| `src/pages/EsqueciSenha.tsx` | Renomear variavel `error` destructurada para `resetError` e adicionar tratamento robusto de erro |
 
 ---
 
 ## Detalhes Tecnicos
 
-### Hook useAuth - nova funcao
-```typescript
-const resetPasswordForEmail = async (email: string) => {
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/redefinir-senha`
-  });
-  return { error };
-};
-```
-
-### Pagina RedefinirSenha
-- Usa `supabase.auth.updateUser({ password })` para atualizar a senha
-- O Supabase automaticamente autentica o usuario via token no link do email
-
-### Estilos
-- Seguir mesmo padrao visual das telas Login e Cadastro
-- Manter consistencia com cards, icones e cores do tema escuro
+A correcao principal e simples - renomear a variavel para evitar o shadow. Tambem vou adicionar um bloco `try/catch` mais robusto conforme as melhores praticas para operacoes assincronas de autenticacao.
 
