@@ -23,7 +23,8 @@ import {
 } from '@/components/ui/table';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Search, Download, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Search, Download, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon, Columns3 } from 'lucide-react';
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -53,6 +54,12 @@ const columns = [
   { key: 'valor', label: 'Valor' },
   { key: 'empresa', label: 'Empresa' },
 ];
+
+const defaultHiddenColumns = new Set([
+  'resp_venda', 'data_cadastro', 'numero_contrato', 'data_termino',
+  'duracao', 'modalidades', 'turmas', 'categoria',
+  'situacao_contrato', 'forma_pagamento', 'empresa',
+]);
 
 const dateRangeOptions = [
   { value: 'all', label: 'Todos os períodos' },
@@ -93,6 +100,17 @@ export default function Gerencial() {
   const [dateRange, setDateRange] = useState('all');
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set(defaultHiddenColumns));
+
+  const visibleColumns = useMemo(() => columns.filter(c => !hiddenColumns.has(c.key)), [hiddenColumns]);
+
+  const toggleColumn = (key: string) => {
+    setHiddenColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   const { data: lancamentos, isLoading } = useQuery({
     queryKey: ['lancamentos-gerencial'],
@@ -367,6 +385,28 @@ export default function Gerencial() {
                 {filteredData.length.toLocaleString('pt-BR')} registros
               </CardTitle>
               <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Columns3 className="h-4 w-4 mr-1" />
+                      Colunas
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-56 max-h-80 overflow-y-auto" align="end">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium mb-2">Colunas visíveis</p>
+                      {columns.map(col => (
+                        <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:bg-muted/50 rounded px-1">
+                          <Checkbox
+                            checked={!hiddenColumns.has(col.key)}
+                            onCheckedChange={() => toggleColumn(col.key)}
+                          />
+                          {col.label}
+                        </label>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
                 <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -382,7 +422,7 @@ export default function Gerencial() {
               <Table className="table-dense">
                 <TableHeader>
                   <TableRow>
-                    {columns.map(col => (
+                    {visibleColumns.map(col => (
                       <TableHead
                         key={col.key}
                         className="whitespace-nowrap cursor-pointer select-none hover:bg-muted/50"
@@ -400,7 +440,7 @@ export default function Gerencial() {
                   {isLoading ? (
                     Array.from({ length: 10 }).map((_, i) => (
                       <TableRow key={i}>
-                        {columns.map(col => (
+                        {visibleColumns.map(col => (
                           <TableCell key={col.key}>
                             <div className="h-4 bg-muted rounded animate-pulse" />
                           </TableCell>
@@ -410,7 +450,7 @@ export default function Gerencial() {
                   ) : paginatedData.length > 0 ? (
                     paginatedData.map((item) => (
                       <TableRow key={item.id}>
-                        {columns.map(col => (
+                        {visibleColumns.map(col => (
                           <TableCell key={col.key} className="whitespace-nowrap">
                             {formatValue(col.key, item[col.key as keyof Lancamento])}
                           </TableCell>
@@ -419,7 +459,7 @@ export default function Gerencial() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={visibleColumns.length} className="text-center py-8 text-muted-foreground">
                         Nenhum registro encontrado
                       </TableCell>
                     </TableRow>
@@ -428,7 +468,7 @@ export default function Gerencial() {
                 {filteredData.length > 0 && (
                   <TableFooter>
                     <TableRow className="font-semibold bg-muted/30">
-                      {columns.map(col => (
+                      {visibleColumns.map(col => (
                         <TableCell key={col.key} className="whitespace-nowrap">
                           {col.key === 'produto' ? `TOTAIS (${totals.count})` :
                            col.key === 'valor' ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.valor) :
