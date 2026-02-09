@@ -33,8 +33,8 @@ Deno.serve(async (req) => {
 
     if (downloadError) throw downloadError;
 
-    // Processar Excel usando SheetJS via CDN
-    const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs');
+    // Processar Excel usando SheetJS via npm
+    const XLSX = await import('npm:xlsx@0.18.5');
     
     const arrayBuffer = await fileData.arrayBuffer();
     const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
