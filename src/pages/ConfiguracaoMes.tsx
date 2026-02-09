@@ -107,7 +107,7 @@ export default function ConfiguracaoMes() {
   // Preencher dados quando carregar
   useEffect(() => {
     if (metaMensal) {
-      setMetaTotal(String(metaMensal.meta_total));
+      setMetaTotal(String(Math.round(Number(metaMensal.meta_total) * 100)));
     } else {
       setMetaTotal('');
     }
