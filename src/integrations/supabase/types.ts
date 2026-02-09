@@ -20,6 +20,7 @@ export type Database = {
           comissao_percent: number
           created_at: string | null
           de_percent: number
+          empresa_id: string
           id: string
           meta_mensal_id: string
           nivel: number
@@ -29,6 +30,7 @@ export type Database = {
           comissao_percent: number
           created_at?: string | null
           de_percent: number
+          empresa_id: string
           id?: string
           meta_mensal_id: string
           nivel: number
@@ -38,11 +40,19 @@ export type Database = {
           comissao_percent?: number
           created_at?: string | null
           de_percent?: number
+          empresa_id?: string
           id?: string
           meta_mensal_id?: string
           nivel?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "comissao_niveis_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "comissao_niveis_meta_mensal_id_fkey"
             columns: ["meta_mensal_id"]
@@ -57,6 +67,7 @@ export type Database = {
           ativo: boolean | null
           created_at: string | null
           email: string | null
+          empresa_id: string
           id: string
           nome: string
           updated_at: string | null
@@ -65,6 +76,7 @@ export type Database = {
           ativo?: boolean | null
           created_at?: string | null
           email?: string | null
+          empresa_id: string
           id?: string
           nome: string
           updated_at?: string | null
@@ -73,9 +85,51 @@ export type Database = {
           ativo?: boolean | null
           created_at?: string | null
           email?: string | null
+          empresa_id?: string
           id?: string
           nome?: string
           updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultoras_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      empresas: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          id: string
+          nome: string
+          slug: string
+          subscription_status: string
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          nome: string
+          slug: string
+          subscription_status?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          nome?: string
+          slug?: string
+          subscription_status?: string
+          trial_ends_at?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -91,6 +145,7 @@ export type Database = {
           data_termino: string | null
           duracao: string | null
           empresa: string | null
+          empresa_id: string
           entra_meta: boolean | null
           forma_pagamento: string | null
           hash_linha: string | null
@@ -123,6 +178,7 @@ export type Database = {
           data_termino?: string | null
           duracao?: string | null
           empresa?: string | null
+          empresa_id: string
           entra_meta?: boolean | null
           forma_pagamento?: string | null
           hash_linha?: string | null
@@ -155,6 +211,7 @@ export type Database = {
           data_termino?: string | null
           duracao?: string | null
           empresa?: string | null
+          empresa_id?: string
           entra_meta?: boolean | null
           forma_pagamento?: string | null
           hash_linha?: string | null
@@ -185,6 +242,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "lancamentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "lancamentos_upload_id_fkey"
             columns: ["upload_id"]
             isOneToOne: false
@@ -197,6 +261,7 @@ export type Database = {
         Row: {
           consultora_id: string
           created_at: string | null
+          empresa_id: string
           id: string
           meta_mensal_id: string
           percentual: number
@@ -204,6 +269,7 @@ export type Database = {
         Insert: {
           consultora_id: string
           created_at?: string | null
+          empresa_id: string
           id?: string
           meta_mensal_id: string
           percentual: number
@@ -211,6 +277,7 @@ export type Database = {
         Update: {
           consultora_id?: string
           created_at?: string | null
+          empresa_id?: string
           id?: string
           meta_mensal_id?: string
           percentual?: number
@@ -221,6 +288,13 @@ export type Database = {
             columns: ["consultora_id"]
             isOneToOne: false
             referencedRelation: "consultoras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metas_consultoras_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
             referencedColumns: ["id"]
           },
           {
@@ -235,6 +309,7 @@ export type Database = {
       metas_mensais: {
         Row: {
           created_at: string | null
+          empresa_id: string
           id: string
           mes_referencia: string
           meta_total: number
@@ -242,6 +317,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          empresa_id: string
           id?: string
           mes_referencia: string
           meta_total: number
@@ -249,16 +325,26 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          empresa_id?: string
           id?: string
           mes_referencia?: string
           meta_total?: number
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "metas_mensais_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       permissoes_perfil: {
         Row: {
           created_at: string
+          empresa_id: string
           id: string
           permitido: boolean
           role: Database["public"]["Enums"]["app_role"]
@@ -267,6 +353,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          empresa_id: string
           id?: string
           permitido?: boolean
           role: Database["public"]["Enums"]["app_role"]
@@ -275,19 +362,29 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          empresa_id?: string
           id?: string
           permitido?: boolean
           role?: Database["public"]["Enums"]["app_role"]
           rota?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "permissoes_perfil_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       regras_meta: {
         Row: {
           ativo: boolean | null
           campo_alvo: Database["public"]["Enums"]["campo_alvo"]
           created_at: string | null
+          empresa_id: string
           entra_meta: boolean
           id: string
           observacao: string | null
@@ -304,6 +401,7 @@ export type Database = {
           ativo?: boolean | null
           campo_alvo: Database["public"]["Enums"]["campo_alvo"]
           created_at?: string | null
+          empresa_id: string
           entra_meta: boolean
           id?: string
           observacao?: string | null
@@ -320,6 +418,7 @@ export type Database = {
           ativo?: boolean | null
           campo_alvo?: Database["public"]["Enums"]["campo_alvo"]
           created_at?: string | null
+          empresa_id?: string
           entra_meta?: boolean
           id?: string
           observacao?: string | null
@@ -332,7 +431,15 @@ export type Database = {
           updated_at?: string | null
           valor?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "regras_meta_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       solicitacoes_ajuste: {
         Row: {
@@ -340,6 +447,7 @@ export type Database = {
           admin_user_id: string | null
           consultora_id: string
           created_at: string
+          empresa_id: string
           id: string
           justificativa: string
           lancamento_id: string
@@ -353,6 +461,7 @@ export type Database = {
           admin_user_id?: string | null
           consultora_id: string
           created_at?: string
+          empresa_id: string
           id?: string
           justificativa: string
           lancamento_id: string
@@ -366,6 +475,7 @@ export type Database = {
           admin_user_id?: string | null
           consultora_id?: string
           created_at?: string
+          empresa_id?: string
           id?: string
           justificativa?: string
           lancamento_id?: string
@@ -383,6 +493,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "solicitacoes_ajuste_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "solicitacoes_ajuste_lancamento_id_fkey"
             columns: ["lancamento_id"]
             isOneToOne: false
@@ -396,6 +513,7 @@ export type Database = {
           arquivo_nome: string
           arquivo_path: string
           criado_em: string | null
+          empresa_id: string
           erros: Json | null
           id: string
           resumo: Json | null
@@ -406,6 +524,7 @@ export type Database = {
           arquivo_nome: string
           arquivo_path: string
           criado_em?: string | null
+          empresa_id: string
           erros?: Json | null
           id?: string
           resumo?: Json | null
@@ -416,18 +535,28 @@ export type Database = {
           arquivo_nome?: string
           arquivo_path?: string
           criado_em?: string | null
+          empresa_id?: string
           erros?: Json | null
           id?: string
           resumo?: Json | null
           status?: Database["public"]["Enums"]["upload_status"] | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "uploads_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
           consultora_id: string | null
           created_at: string | null
+          empresa_id: string
           id: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
@@ -435,6 +564,7 @@ export type Database = {
         Insert: {
           consultora_id?: string | null
           created_at?: string | null
+          empresa_id: string
           id?: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
@@ -442,6 +572,7 @@ export type Database = {
         Update: {
           consultora_id?: string | null
           created_at?: string | null
+          empresa_id?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
@@ -454,6 +585,13 @@ export type Database = {
             referencedRelation: "consultoras"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "user_roles_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
@@ -462,6 +600,7 @@ export type Database = {
     }
     Functions: {
       get_user_consultora_id: { Args: { _user_id: string }; Returns: string }
+      get_user_empresa_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -469,6 +608,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_empresa_active: { Args: { _empresa_id: string }; Returns: boolean }
       search_lancamentos_for_ajuste: {
         Args: { _limit?: number; _search?: string }
         Returns: {
@@ -487,7 +627,7 @@ export type Database = {
     }
     Enums: {
       ajuste_status: "pendente" | "aprovado" | "rejeitado"
-      app_role: "admin" | "consultora"
+      app_role: "admin" | "consultora" | "super_admin"
       campo_alvo:
         | "produto"
         | "plano"
@@ -635,7 +775,7 @@ export const Constants = {
   public: {
     Enums: {
       ajuste_status: ["pendente", "aprovado", "rejeitado"],
-      app_role: ["admin", "consultora"],
+      app_role: ["admin", "consultora", "super_admin"],
       campo_alvo: [
         "produto",
         "plano",
