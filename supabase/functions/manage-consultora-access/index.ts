@@ -39,10 +39,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { action, email, consultora_id } = await req.json();
+    const { action, email, consultora_id, password } = await req.json();
 
     if (action === 'check') {
-      // Check if a user exists by email and if they already have a role
       if (!email) {
         return new Response(JSON.stringify({ error: 'Email é obrigatório' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -76,6 +75,72 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === 'create_and_link') {
+      if (!email || !consultora_id || !password) {
+        return new Response(JSON.stringify({ error: 'Email, password e consultora_id são obrigatórios' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (password.length < 6) {
+        return new Response(JSON.stringify({ error: 'A senha deve ter no mínimo 6 caracteres' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Try to create the user
+      const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
+
+      let userId: string;
+
+      if (createError) {
+        // If user already exists, try to find and link
+        if (createError.message?.includes('already been registered') || createError.message?.includes('already exists')) {
+          const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+          if (listError) throw listError;
+          const existingUser = users.find(u => u.email === email);
+          if (!existingUser) {
+            return new Response(JSON.stringify({ error: 'Erro ao localizar usuário existente' }), {
+              status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+          }
+          userId = existingUser.id;
+        } else {
+          throw createError;
+        }
+      } else {
+        userId = createData.user.id;
+      }
+
+      // Check if already has a role
+      const { data: existingRole } = await supabaseAdmin
+        .from('user_roles')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (existingRole) {
+        const { error: updateError } = await supabaseAdmin
+          .from('user_roles')
+          .update({ role: 'consultora', consultora_id })
+          .eq('id', existingRole.id);
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabaseAdmin
+          .from('user_roles')
+          .insert({ user_id: userId, role: 'consultora', consultora_id });
+        if (insertError) throw insertError;
+      }
+
+      return new Response(JSON.stringify({ success: true, message: 'Conta criada e acesso vinculado com sucesso' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     if (action === 'link') {
       if (!email || !consultora_id) {
         return new Response(JSON.stringify({ error: 'Email e consultora_id são obrigatórios' }), {
@@ -83,7 +148,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Find user by email
       const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
       if (listError) throw listError;
 
@@ -94,7 +158,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Check if already has a role
       const { data: existingRole } = await supabaseAdmin
         .from('user_roles')
         .select('id')
@@ -102,14 +165,12 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (existingRole) {
-        // Update existing role
         const { error: updateError } = await supabaseAdmin
           .from('user_roles')
           .update({ role: 'consultora', consultora_id })
           .eq('id', existingRole.id);
         if (updateError) throw updateError;
       } else {
-        // Create new role
         const { error: insertError } = await supabaseAdmin
           .from('user_roles')
           .insert({ user_id: targetUser.id, role: 'consultora', consultora_id });
@@ -141,7 +202,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: 'Ação inválida. Use: link, unlink, check' }), {
+    return new Response(JSON.stringify({ error: 'Ação inválida. Use: create_and_link, link, unlink, check' }), {
       status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
