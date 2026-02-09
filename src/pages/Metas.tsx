@@ -160,6 +160,8 @@ export default function Metas() {
         }
       }
 
+      const falta = Math.max(0, metaIndividual - c.valor);
+
       return {
         nome: c.nome,
         vendido: c.valor,
@@ -167,6 +169,7 @@ export default function Metas() {
         percentual,
         nivel: nivelConsultora,
         comissao: c.valor * comissaoPercentConsultora,
+        falta,
       };
     }).sort((a, b) => b.vendido - a.vendido);
 
@@ -352,8 +355,10 @@ export default function Metas() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Consultora</TableHead>
+                        <TableHead className="text-right">Meta</TableHead>
                         <TableHead className="text-right">Vendido</TableHead>
                         <TableHead className="text-right">%</TableHead>
+                        <TableHead className="text-right">Falta</TableHead>
                         <TableHead className="text-right">Nível</TableHead>
                         <TableHead className="text-right">Comissão</TableHead>
                       </TableRow>
@@ -362,6 +367,13 @@ export default function Metas() {
                       {dashboardData?.consultoras.map((c, i) => (
                         <TableRow key={i}>
                           <TableCell className="font-medium">{c.nome}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {c.meta > 0 ? new Intl.NumberFormat('pt-BR', { 
+                              style: 'currency', 
+                              currency: 'BRL',
+                              notation: 'compact'
+                            }).format(c.meta) : '-'}
+                          </TableCell>
                           <TableCell className="text-right">
                             {new Intl.NumberFormat('pt-BR', { 
                               style: 'currency', 
@@ -374,6 +386,15 @@ export default function Metas() {
                             c.percentual >= 80 ? 'text-warning' : ''
                           }`}>
                             {c.percentual.toFixed(0)}%
+                          </TableCell>
+                          <TableCell className={`text-right font-medium ${
+                            c.falta === 0 ? 'text-success' : 'text-destructive'
+                          }`}>
+                            {c.falta === 0 ? 'Atingida ✓' : new Intl.NumberFormat('pt-BR', { 
+                              style: 'currency', 
+                              currency: 'BRL',
+                              notation: 'compact'
+                            }).format(c.falta)}
                           </TableCell>
                           <TableCell className="text-right">{c.nivel}</TableCell>
                           <TableCell className="text-right text-success">

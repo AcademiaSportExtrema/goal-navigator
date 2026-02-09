@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Plus, Edit, Trash2, Mail, User } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, Mail, User, Link, Unlink, KeyRound } from 'lucide-react';
 import type { Consultora } from '@/types/database';
 
 interface ConsultoraForm {
@@ -32,10 +33,17 @@ const defaultForm: ConsultoraForm = {
   ativo: true,
 };
 
+interface ResetPasswordForm {
+  email: string;
+  password: string;
+}
+
 export default function Consultoras() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingConsultora, setEditingConsultora] = useState<Consultora | null>(null);
   const [form, setForm] = useState<ConsultoraForm>(defaultForm);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetForm, setResetForm] = useState<ResetPasswordForm>({ email: '', password: '' });
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -50,6 +58,81 @@ export default function Consultoras() {
       
       if (error) throw error;
       return data as Consultora[];
+    },
+  });
+
+  // Fetch user_roles to know which consultoras have access
+  const { data: userRoles } = useQuery({
+    queryKey: ['user-roles-consultoras'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('*')
+        .eq('role', 'consultora');
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const getAccessStatus = (consultora: Consultora) => {
+    if (!consultora.email) return 'no_email';
+    const hasRole = userRoles?.some(r => r.consultora_id === consultora.id);
+    return hasRole ? 'linked' : 'not_linked';
+  };
+
+  const linkAccess = useMutation({
+    mutationFn: async ({ email, consultora_id }: { email: string; consultora_id: string }) => {
+      const { data, error } = await supabase.functions.invoke('manage-consultora-access', {
+        body: { action: 'link', email, consultora_id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-roles-consultoras'] });
+      toast({ title: 'Acesso vinculado com sucesso!' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro ao vincular acesso', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const unlinkAccess = useMutation({
+    mutationFn: async (consultora_id: string) => {
+      const { data, error } = await supabase.functions.invoke('manage-consultora-access', {
+        body: { action: 'unlink', consultora_id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-roles-consultoras'] });
+      toast({ title: 'Acesso removido!' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro ao remover acesso', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const resetPassword = useMutation({
+    mutationFn: async ({ email, password }: ResetPasswordForm) => {
+      const { data, error } = await supabase.functions.invoke('admin-reset-password', {
+        body: { email, password },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: 'Senha redefinida com sucesso!' });
+      setResetDialogOpen(false);
+      setResetForm({ email: '', password: '' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro ao redefinir senha', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -161,12 +244,13 @@ export default function Consultoras() {
 
   const ativas = consultoras?.filter(c => c.ativo).length || 0;
   const inativas = consultoras?.filter(c => !c.ativo).length || 0;
+  const comAcesso = consultoras?.filter(c => getAccessStatus(c) === 'linked').length || 0;
 
   return (
     <AppLayout title="Consultoras">
       <div className="space-y-4">
         {/* Resumo */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardContent className="pt-6">
               <div className="text-center">
@@ -191,6 +275,14 @@ export default function Consultoras() {
               </div>
             </CardContent>
           </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <p className="text-4xl font-bold text-primary">{comAcesso}</p>
+                <p className="text-sm text-muted-foreground">Com Acesso</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Lista */}
@@ -203,7 +295,7 @@ export default function Consultoras() {
                   Equipe de Vendas
                 </CardTitle>
                 <CardDescription>
-                  Cadastre as consultoras que aparecem nos arquivos Excel
+                  Cadastre as consultoras e gerencie o acesso ao sistema
                 </CardDescription>
               </div>
               
@@ -237,7 +329,7 @@ export default function Consultoras() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Email (opcional)</Label>
+                      <Label>Email (usado para vincular acesso ao sistema)</Label>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
@@ -248,6 +340,9 @@ export default function Consultoras() {
                           className="pl-10"
                         />
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        A consultora deve se cadastrar no sistema com este mesmo email
+                      </p>
                     </div>
 
                     <div className="flex items-center justify-between p-3 rounded-lg bg-muted">
@@ -278,56 +373,120 @@ export default function Consultoras() {
               </div>
             ) : consultoras && consultoras.length > 0 ? (
               <div className="space-y-2">
-                {consultoras.map((consultora) => (
-                  <div
-                    key={consultora.id}
-                    className={`flex items-center justify-between p-4 rounded-lg border ${
-                      consultora.ativo ? 'bg-card' : 'bg-muted/50 opacity-60'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                        {consultora.nome.charAt(0).toUpperCase()}
+                {consultoras.map((consultora) => {
+                  const accessStatus = getAccessStatus(consultora);
+                  return (
+                    <div
+                      key={consultora.id}
+                      className={`flex items-center justify-between p-4 rounded-lg border ${
+                        consultora.ativo ? 'bg-card' : 'bg-muted/50 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                          {consultora.nome.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{consultora.nome}</p>
+                            {accessStatus === 'linked' && (
+                              <Badge variant="default" className="bg-success text-success-foreground text-[10px] px-1.5 py-0">
+                                Com acesso
+                              </Badge>
+                            )}
+                            {accessStatus === 'not_linked' && (
+                              <Badge variant="secondary" className="bg-warning/20 text-warning text-[10px] px-1.5 py-0">
+                                Sem vínculo
+                              </Badge>
+                            )}
+                            {accessStatus === 'no_email' && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                Sem email
+                              </Badge>
+                            )}
+                          </div>
+                          {consultora.email && (
+                            <p className="text-sm text-muted-foreground">{consultora.email}</p>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium">{consultora.nome}</p>
-                        {consultora.email && (
-                          <p className="text-sm text-muted-foreground">{consultora.email}</p>
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        consultora.ativo ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'
-                      }`}>
-                        {consultora.ativo ? 'Ativa' : 'Inativa'}
-                      </span>
-                      <Switch
-                        checked={consultora.ativo}
-                        onCheckedChange={(checked) => toggleAtivo.mutate({ id: consultora.id, ativo: checked })}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(consultora)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          if (confirm('Tem certeza que deseja excluir esta consultora?')) {
-                            deleteConsultora.mutate(consultora.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        {/* Access management buttons */}
+                        {accessStatus === 'not_linked' && consultora.email && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs gap-1"
+                            disabled={linkAccess.isPending}
+                            onClick={() => linkAccess.mutate({ email: consultora.email!, consultora_id: consultora.id })}
+                          >
+                            <Link className="h-3 w-3" />
+                            Vincular
+                          </Button>
+                        )}
+                        {accessStatus === 'linked' && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs gap-1 text-destructive"
+                              disabled={unlinkAccess.isPending}
+                              onClick={() => {
+                                if (confirm('Remover acesso desta consultora?')) {
+                                  unlinkAccess.mutate(consultora.id);
+                                }
+                              }}
+                            >
+                              <Unlink className="h-3 w-3" />
+                              Desvincular
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs gap-1"
+                              onClick={() => {
+                                setResetForm({ email: consultora.email!, password: '' });
+                                setResetDialogOpen(true);
+                              }}
+                            >
+                              <KeyRound className="h-3 w-3" />
+                              Senha
+                            </Button>
+                          </>
+                        )}
+
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          consultora.ativo ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'
+                        }`}>
+                          {consultora.ativo ? 'Ativa' : 'Inativa'}
+                        </span>
+                        <Switch
+                          checked={consultora.ativo}
+                          onCheckedChange={(checked) => toggleAtivo.mutate({ id: consultora.id, ativo: checked })}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(consultora)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (confirm('Tem certeza que deseja excluir esta consultora?')) {
+                              deleteConsultora.mutate(consultora.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="text-center py-12 text-muted-foreground">
@@ -339,6 +498,38 @@ export default function Consultoras() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Dialog de redefinir senha */}
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Redefinir Senha</DialogTitle>
+            <DialogDescription>
+              Defina uma nova senha para {resetForm.email}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nova Senha</Label>
+              <Input
+                type="password"
+                value={resetForm.password}
+                onChange={(e) => setResetForm(f => ({ ...f, password: e.target.value }))}
+                placeholder="Mínimo 6 caracteres"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetDialogOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={() => resetPassword.mutate(resetForm)}
+              disabled={resetPassword.isPending || resetForm.password.length < 6}
+            >
+              Redefinir Senha
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
