@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -14,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Calendar, DollarSign, Users, TrendingUp, Save, Plus, Trash2 } from 'lucide-react';
+import { DollarSign, TrendingUp, Save } from 'lucide-react';
 import { format, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { MetaMensal, Consultora, MetaConsultora, ComissaoNivel } from '@/types/database';
@@ -33,6 +34,14 @@ const defaultNiveis: NivelConfig[] = [
   { nivel: 4, de_percent: '120', ate_percent: '149', comissao_percent: '5' },
   { nivel: 5, de_percent: '150', ate_percent: '999', comissao_percent: '6' },
 ];
+
+const nivelColors: Record<number, string> = {
+  1: 'bg-slate-100 text-slate-700 border-slate-200',
+  2: 'bg-blue-100 text-blue-700 border-blue-200',
+  3: 'bg-amber-100 text-amber-700 border-amber-200',
+  4: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  5: 'bg-purple-100 text-purple-700 border-purple-200',
+};
 
 export default function ConfiguracaoMes() {
   const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
@@ -141,19 +150,16 @@ export default function ConfiguracaoMes() {
   // Salvar configurações
   const salvarConfig = useMutation({
     mutationFn: async () => {
-      // Validações
       const metaNum = parseFloat(metaTotal.replace(/\D/g, '')) / 100;
       if (!metaNum || metaNum <= 0) {
         throw new Error('Meta total deve ser maior que zero');
       }
 
-      // Verificar soma dos percentuais
       const somaPercentuais = Object.values(percentuais).reduce((acc, p) => acc + (parseFloat(p) || 0), 0);
       if (somaPercentuais > 0 && Math.abs(somaPercentuais - 100) > 0.01) {
         throw new Error(`A soma dos percentuais deve ser 100% (atual: ${somaPercentuais.toFixed(1)}%)`);
       }
 
-      // Criar ou atualizar meta mensal
       let metaId = metaMensal?.id;
 
       if (metaId) {
@@ -172,7 +178,6 @@ export default function ConfiguracaoMes() {
         metaId = data.id;
       }
 
-      // Atualizar metas por consultora
       await supabase.from('metas_consultoras').delete().eq('meta_mensal_id', metaId);
       
       const metasConsultorasInsert = Object.entries(percentuais)
@@ -188,7 +193,6 @@ export default function ConfiguracaoMes() {
         if (error) throw error;
       }
 
-      // Atualizar níveis de comissão
       await supabase.from('comissao_niveis').delete().eq('meta_mensal_id', metaId);
       
       const niveisInsert = niveis.map(n => ({
@@ -231,20 +235,16 @@ export default function ConfiguracaoMes() {
     };
   });
 
+  const metaNum = parseFloat(metaTotal.replace(/\D/g, '')) / 100 || 0;
+
   return (
     <AppLayout title="Configuração do Mês">
       <div className="space-y-6">
-        {/* Seletor de mês */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Período
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        {/* Header com seletor de mês + botão salvar */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-lg border bg-card p-4">
+          <div className="flex items-center gap-3">
             <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
-              <SelectTrigger className="w-64">
+              <SelectTrigger className="w-52">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -255,162 +255,167 @@ export default function ConfiguracaoMes() {
                 ))}
               </SelectContent>
             </Select>
-          </CardContent>
-        </Card>
-
-        {/* Meta e Distribuição unificados */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
-              Meta e Distribuição
-            </CardTitle>
-            <CardDescription>
-              Defina o valor total da meta e a distribuição por consultora
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label>Valor da Meta do Mês</Label>
-              <Input
-                value={metaTotal ? formatCurrency(metaTotal) : ''}
-                onChange={(e) => setMetaTotal(e.target.value.replace(/\D/g, ''))}
-                placeholder="R$ 0,00"
-                className="text-lg font-medium max-w-xs"
-              />
-            </div>
-
-            {consultoras && consultoras.length > 0 ? (
-              <div className="space-y-3">
-                <div className="grid grid-cols-[1fr_auto_auto] gap-3 text-sm font-medium text-muted-foreground">
-                  <span>Consultora</span>
-                  <span className="w-32 text-right">Valor (R$)</span>
-                  <span className="w-24 text-right">%</span>
-                </div>
-                {consultoras.map(c => {
-                  const metaNum = parseFloat(metaTotal.replace(/\D/g, '')) / 100 || 0;
-                  const perc = parseFloat(percentuais[c.id]) || 0;
-                  const valorConsultora = (perc / 100) * metaNum;
-                  return (
-                    <div key={c.id} className="grid grid-cols-[1fr_auto_auto] gap-3 items-center">
-                      <span className="text-sm">{c.nome}</span>
-                      <span className="w-32 text-right text-sm text-muted-foreground">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorConsultora)}
-                      </span>
-                      <div className="flex items-center gap-1 w-24 justify-end">
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.1"
-                          value={percentuais[c.id] || ''}
-                          onChange={(e) => setPercentuais(p => ({ ...p, [c.id]: e.target.value }))}
-                          className="w-20 text-right"
-                          placeholder="0"
-                        />
-                        <span className="text-muted-foreground">%</span>
-                      </div>
-                    </div>
-                  );
-                })}
-                {/* Totalizador */}
-                {(() => {
-                  const metaNum = parseFloat(metaTotal.replace(/\D/g, '')) / 100 || 0;
-                  const valorTotal = (somaPercentuais / 100) * metaNum;
-                  return (
-                    <div className={`border-t pt-3 mt-3 grid grid-cols-[1fr_auto_auto] gap-3 font-bold ${
-                      Math.abs(somaPercentuais - 100) < 0.01 ? 'text-green-600' : 
-                      somaPercentuais > 100 ? 'text-red-600' : 'text-amber-600'
-                    }`}>
-                      <span>Total</span>
-                      <span className="w-32 text-right">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorTotal)}
-                      </span>
-                      <span className="w-24 text-right">{somaPercentuais.toFixed(1)}%</span>
-                    </div>
-                  );
-                })()}
-              </div>
-            ) : (
-              <p className="text-center py-4 text-muted-foreground">
-                Nenhuma consultora cadastrada.{' '}
-                <a href="/consultoras" className="text-primary hover:underline">
-                  Cadastrar →
-                </a>
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Níveis de Comissão */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Níveis de Comissão
-            </CardTitle>
-            <CardDescription>
-              Configure as 5 faixas de atingimento e respectivos percentuais de comissão
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="grid grid-cols-4 gap-3 text-sm font-medium text-muted-foreground">
-                <span>Nível</span>
-                <span>De (%)</span>
-                <span>Até (%)</span>
-                <span>Comissão (%)</span>
-              </div>
-              {niveis.map((nivel, index) => (
-                <div key={nivel.nivel} className="grid grid-cols-4 gap-3 items-center">
-                  <span className="font-medium">Nível {nivel.nivel}</span>
-                  <Input
-                    type="number"
-                    value={nivel.de_percent}
-                    onChange={(e) => {
-                      const newNiveis = [...niveis];
-                      newNiveis[index].de_percent = e.target.value;
-                      setNiveis(newNiveis);
-                    }}
-                    className="text-center"
-                  />
-                  <Input
-                    type="number"
-                    value={nivel.ate_percent}
-                    onChange={(e) => {
-                      const newNiveis = [...niveis];
-                      newNiveis[index].ate_percent = e.target.value;
-                      setNiveis(newNiveis);
-                    }}
-                    className="text-center"
-                  />
-                  <Input
-                    type="number"
-                    step="0.1"
-                    value={nivel.comissao_percent}
-                    onChange={(e) => {
-                      const newNiveis = [...niveis];
-                      newNiveis[index].comissao_percent = e.target.value;
-                      setNiveis(newNiveis);
-                    }}
-                    className="text-center"
-                  />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Botão salvar */}
-        <div className="flex justify-end">
+          </div>
           <Button 
-            size="lg" 
             onClick={() => salvarConfig.mutate()}
             disabled={salvarConfig.isPending}
           >
             <Save className="h-4 w-4 mr-2" />
-            {salvarConfig.isPending ? 'Salvando...' : 'Salvar Configurações'}
+            {salvarConfig.isPending ? 'Salvando...' : 'Salvar'}
           </Button>
+        </div>
+
+        {/* Grid de 2 colunas */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Meta e Distribuição */}
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <DollarSign className="h-5 w-5 text-primary" />
+                Meta e Distribuição
+              </CardTitle>
+              <CardDescription>
+                Valor total da meta e distribuição por consultora
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Meta do Mês</Label>
+                <Input
+                  value={metaTotal ? formatCurrency(metaTotal) : ''}
+                  onChange={(e) => setMetaTotal(e.target.value.replace(/\D/g, ''))}
+                  placeholder="R$ 0,00"
+                  className="text-xl font-semibold h-12"
+                />
+              </div>
+
+              {consultoras && consultoras.length > 0 ? (
+                <div className="space-y-1">
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide pb-2 border-b">
+                    <span>Consultora</span>
+                    <span className="w-28 text-right">Valor</span>
+                    <span className="w-24 text-right">%</span>
+                  </div>
+                  {consultoras.map(c => {
+                    const perc = parseFloat(percentuais[c.id]) || 0;
+                    const valorConsultora = (perc / 100) * metaNum;
+                    return (
+                      <div key={c.id} className="grid grid-cols-[1fr_auto_auto] gap-2 items-center py-1.5 hover:bg-muted/50 rounded px-1 -mx-1 transition-colors">
+                        <span className="text-sm font-medium truncate">{c.nome}</span>
+                        <span className="w-28 text-right text-sm text-muted-foreground tabular-nums">
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorConsultora)}
+                        </span>
+                        <div className="flex items-center gap-1 w-24 justify-end">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={percentuais[c.id] || ''}
+                            onChange={(e) => setPercentuais(p => ({ ...p, [c.id]: e.target.value }))}
+                            className="w-18 text-right h-8 text-sm"
+                            placeholder="0"
+                          />
+                          <span className="text-xs text-muted-foreground">%</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Totalizador */}
+                  {(() => {
+                    const valorTotal = (somaPercentuais / 100) * metaNum;
+                    const isExact = Math.abs(somaPercentuais - 100) < 0.01;
+                    const isOver = somaPercentuais > 100;
+                    return (
+                      <div className={`mt-2 rounded-lg px-3 py-2.5 grid grid-cols-[1fr_auto_auto] gap-2 font-bold text-sm ${
+                        isExact 
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' 
+                          : isOver 
+                            ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400' 
+                            : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+                      }`}>
+                        <span>Total</span>
+                        <span className="w-28 text-right tabular-nums">
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorTotal)}
+                        </span>
+                        <span className="w-24 text-right tabular-nums">{somaPercentuais.toFixed(1)}%</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <p className="text-center py-4 text-muted-foreground text-sm">
+                  Nenhuma consultora cadastrada.{' '}
+                  <a href="/consultoras" className="text-primary hover:underline">
+                    Cadastrar →
+                  </a>
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Níveis de Comissão */}
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Níveis de Comissão
+              </CardTitle>
+              <CardDescription>
+                Faixas de atingimento e percentuais de comissão
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide pb-2 border-b">
+                  <span className="w-16">Nível</span>
+                  <span className="text-center">De %</span>
+                  <span className="text-center">Até %</span>
+                  <span className="text-center">Comissão %</span>
+                </div>
+                {niveis.map((nivel, index) => (
+                  <div key={nivel.nivel} className="grid grid-cols-[auto_1fr_1fr_1fr] gap-2 items-center">
+                    <div className="w-16">
+                      <Badge className={`${nivelColors[nivel.nivel]} border text-xs font-bold justify-center w-10`}>
+                        {nivel.nivel}
+                      </Badge>
+                    </div>
+                    <Input
+                      type="number"
+                      value={nivel.de_percent}
+                      onChange={(e) => {
+                        const newNiveis = [...niveis];
+                        newNiveis[index].de_percent = e.target.value;
+                        setNiveis(newNiveis);
+                      }}
+                      className="text-center h-9 text-sm"
+                    />
+                    <Input
+                      type="number"
+                      value={nivel.ate_percent}
+                      onChange={(e) => {
+                        const newNiveis = [...niveis];
+                        newNiveis[index].ate_percent = e.target.value;
+                        setNiveis(newNiveis);
+                      }}
+                      className="text-center h-9 text-sm"
+                    />
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={nivel.comissao_percent}
+                      onChange={(e) => {
+                        const newNiveis = [...niveis];
+                        newNiveis[index].comissao_percent = e.target.value;
+                        setNiveis(newNiveis);
+                      }}
+                      className="text-center h-9 text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </AppLayout>
