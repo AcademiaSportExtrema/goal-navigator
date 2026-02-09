@@ -10,11 +10,10 @@ import {
   Target,
   TrendingUp,
   LogOut,
-  ChevronLeft,
   GitPullRequest,
   ArrowRightLeft,
+  FileText,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,20 +27,33 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar';
 
-const adminMenuItems = [
-  { title: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
-  { title: 'Upload Diário', icon: Upload, href: '/upload' },
-  { title: 'Gerencial', icon: Table, href: '/gerencial' },
-  { title: 'Regras da Meta', icon: Settings, href: '/regras' },
-  { title: 'Pendências', icon: AlertCircle, href: '/pendencias' },
-  { title: 'Config. do Mês', icon: Calendar, href: '/configuracao-mes' },
-  { title: 'Consultoras', icon: Users, href: '/consultoras' },
-  { title: 'Metas', icon: Target, href: '/metas' },
-  { title: 'Ajustes', icon: GitPullRequest, href: '/ajustes' },
+const adminMenuGroups = [
+  {
+    label: 'Visão Geral',
+    items: [
+      { title: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
+    ],
+  },
+  {
+    label: 'Operacional',
+    items: [
+      { title: 'Upload Diário', icon: Upload, href: '/upload' },
+      { title: 'Gerencial', icon: FileText, href: '/gerencial' },
+      { title: 'Pendências', icon: AlertCircle, href: '/pendencias' },
+      { title: 'Ajustes', icon: GitPullRequest, href: '/ajustes' },
+    ],
+  },
+  {
+    label: 'Configurações',
+    items: [
+      { title: 'Regras da Meta', icon: Settings, href: '/regras' },
+      { title: 'Config. do Mês', icon: Calendar, href: '/configuracao-mes' },
+      { title: 'Consultoras', icon: Users, href: '/consultoras' },
+    ],
+  },
 ];
 
 const consultoraMenuItems = [
@@ -51,10 +63,8 @@ const consultoraMenuItems = [
 
 export function AppSidebar() {
   const location = useLocation();
-  const { user, role, signOut, isAdmin } = useAuth();
+  const { user, signOut, isAdmin } = useAuth();
   const { state } = useSidebar();
-
-  const menuItems = isAdmin ? adminMenuItems : consultoraMenuItems;
 
   return (
     <Sidebar collapsible="icon">
@@ -77,29 +87,57 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/60">
-            Menu
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location.pathname === item.href}
-                    tooltip={item.title}
-                  >
-                    <Link to={item.href}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {isAdmin ? (
+          adminMenuGroups.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel className="text-sidebar-foreground/60">
+                {group.label}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.items.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={location.pathname === item.href}
+                        tooltip={item.title}
+                      >
+                        <Link to={item.href}>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))
+        ) : (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-sidebar-foreground/60">
+              Menu
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {consultoraMenuItems.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location.pathname === item.href}
+                      tooltip={item.title}
+                    >
+                      <Link to={item.href}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
