@@ -1,76 +1,103 @@
 
 
-# Redesign da Tela de Configuracao do Mes
+# Reestruturar Menu e Criar Sistema de Permissoes
 
-## Problemas atuais
+## O que muda
 
-- Layout esticado horizontalmente com muito espaco vazio
-- Cards empilhados verticalmente sem hierarquia visual clara
-- Seletor de periodo ocupa um card inteiro desnecessariamente
-- Niveis de comissao sem feedback visual (cores por nivel)
-- Botao salvar isolado no final da pagina
+### 1. Renomear item de menu "Consultoras" para "Configuração"
+No menu lateral, o item "Consultoras" dentro do grupo "Configurações" sera renomeado para "Configuração" e apontara para a rota `/configuracao` (em vez de `/consultoras`). A rota antiga redirecionara para a nova.
 
-## Solucao
+### 2. Nova pagina de Configuração com abas
+A pagina `/configuracao` tera 3 abas usando o componente Tabs:
 
-Reorganizar a tela com layout em grid de 2 colunas no desktop, seletor de periodo integrado ao header, e visual mais compacto e moderno.
+- **Consultoras** - conteudo atual da pagina Consultoras (gestao de equipe, criacao de acesso, etc.)
+- **Permissoes Admin** - define quais telas o perfil Admin pode acessar (checkboxes)
+- **Permissoes Consultora** - define quais telas o perfil Consultora pode acessar (checkboxes)
 
-### Layout proposto
+### 3. Tabela de permissoes no banco
+Criar uma tabela `permissoes_perfil` para armazenar as permissoes configuradas:
 
 ```text
-+--------------------------------------------------+
-| Config. do Mes         [fevereiro 2026 v] [Salvar]|
-+--------------------------------------------------+
-|                        |                          |
-| META E DISTRIBUICAO    | NIVEIS DE COMISSAO       |
-| +--------------------+ | +----------------------+ |
-| | R$ [200.000,00]    | | | Nv | De%  | Ate% | C%|| |
-| +--------------------+ | | 1  |  0   |  70  | 0 || |
-| | Consultora  R$   % | | | 2  |  71  |  85  |0.5|| |
-| | Giulia   40k  20 % | | | 3  |  86  | 100  |0.7|| |
-| | Ketlyn   40k  20 % | | | 4  | 101  | 120  | 1 || |
-| | ...              % | | | 5  | 121  | 999  |1.5|| |
-| | Total  200k 100.0%| | +----------------------+ |
-| +--------------------+ |                          |
-+--------------------------------------------------+
+permissoes_perfil
+- id (uuid, PK)
+- role (app_role) - admin ou consultora
+- rota (text) - ex: "/dashboard", "/upload"
+- permitido (boolean)
+- created_at, updated_at
 ```
 
-### Mudancas detalhadas
+### 4. Telas disponiveis para cada perfil
 
-**1. Seletor de periodo no header da pagina (nao mais em card separado)**
-- Mover o Select de mes para uma barra horizontal no topo, ao lado do botao Salvar
-- Remover o card "Periodo" inteiro
+**Admin** (todas on por padrao):
+- Dashboard
+- Upload Diario
+- Gerencial
+- Pendencias
+- Ajustes
+- Regras da Meta
+- Config. do Mes
+- Configuracao (sempre visivel, nao desativavel)
 
-**2. Layout em grid de 2 colunas**
-- Coluna esquerda: Card "Meta e Distribuicao" (mantendo a logica atual)
-- Coluna direita: Card "Niveis de Comissao"
-- Em mobile, empilhar verticalmente
+**Consultora** (por padrao):
+- Minha Performance (on)
+- Solicitar Ajuste (on)
+- Dashboard (off - pode ser habilitado para consultoras verem uma versao read-only)
 
-**3. Melhorias visuais no card de Meta e Distribuicao**
-- Campo de meta com label inline e tamanho maior
-- Tabela de consultoras com hover e bordas sutis entre linhas
-- Totalizador com fundo colorido (verde/vermelho/amarelo) em vez de so texto colorido
+### 5. Aplicacao das permissoes
+- O `AppSidebar` passara a filtrar os itens do menu com base nas permissoes salvas no banco
+- O `ProtectedRoute` tambem validara as permissoes alem do role
+- Um hook `usePermissions` centralizara a logica de buscar e verificar permissoes
 
-**4. Melhorias visuais nos Niveis de Comissao**
-- Badges coloridas nos numeros de nivel (1=cinza, 2=azul, 3=amarelo, 4=verde, 5=roxo)
-- Inputs mais compactos
-- Texto de ajuda mais claro
+## Layout da aba de Permissoes
 
-**5. Botao Salvar no header**
-- Mover para a barra superior ao lado do seletor de mes
-- Posicao fixa e sempre visivel
-
-## Sobre a comissao refletir no dashboard
-
-A analise do codigo do Dashboard (linhas 160-168, 191-202) mostra que ele ja busca os niveis de comissao da tabela `comissao_niveis` filtrado pelo `meta_mensal_id` do mes selecionado, e usa esses valores para calcular o nivel atual e a comissao estimada por consultora. Portanto, **as comissoes configuradas nesta tela ja refletem corretamente no dashboard**. Nao e necessaria nenhuma alteracao no Dashboard.
+```text
++------------------------------------------+
+| [Consultoras] [Perm. Admin] [Perm. Cons] |
++------------------------------------------+
+|                                          |
+|  Permissoes do perfil Admin              |
+|                                          |
+|  [x] Dashboard                           |
+|  [x] Upload Diario                       |
+|  [x] Gerencial                           |
+|  [x] Pendencias                          |
+|  [x] Ajustes                             |
+|  [x] Regras da Meta                      |
+|  [x] Config. do Mes                      |
+|  [=] Configuracao (sempre ativo)         |
+|                                          |
+|         [Salvar Permissoes]              |
++------------------------------------------+
+```
 
 ## Detalhes tecnicos
 
-### Arquivo: `src/pages/ConfiguracaoMes.tsx`
+### Novo arquivo: `src/hooks/usePermissions.ts`
+- Hook que busca permissoes da tabela `permissoes_perfil` para o role do usuario atual
+- Retorna `{ hasPermission(rota): boolean, isLoading }`
+- Cache via react-query
 
-- Remover o card de Periodo (linhas 238-259)
-- Adicionar barra de header com seletor de mes + botao salvar antes do grid
-- Envolver os 2 cards restantes em `grid grid-cols-1 lg:grid-cols-2 gap-6`
-- Adicionar `bg-green-50 dark:bg-green-950/20` ao totalizador quando soma = 100%
-- Adicionar badges com cores por nivel nos Niveis de Comissao usando o componente Badge existente
-- Remover o botao salvar isolado do final da pagina
+### Novo arquivo: `src/pages/Configuracao.tsx`
+- Pagina com Tabs: "Consultoras", "Permissoes Admin", "Permissoes Consultora"
+- Aba Consultoras: mover conteudo atual de `Consultoras.tsx` para um componente separado
+- Abas de Permissoes: lista de checkboxes por rota, botao salvar
+
+### Modificar: `src/components/layout/AppSidebar.tsx`
+- Importar `usePermissions`
+- Filtrar items do menu baseado nas permissoes
+- Item "Configuracao" sempre visivel para admin
+
+### Modificar: `src/components/layout/ProtectedRoute.tsx`
+- Verificar permissao da rota alem do role
+- Redirecionar se rota nao permitida
+
+### Modificar: `src/App.tsx`
+- Adicionar rota `/configuracao`
+- Redirect de `/consultoras` para `/configuracao`
+- Remover rota antiga de `/consultoras`
+
+### Migracao SQL
+- Criar tabela `permissoes_perfil` com RLS
+- Inserir permissoes padrao (todas ativas para admin, 2 ativas para consultora)
+- RLS: admins podem gerenciar, todos autenticados podem ler
 
