@@ -86,8 +86,22 @@ export default function Consultoras() {
       const { data, error } = await supabase.functions.invoke('manage-consultora-access', {
         body: { action: 'link', email, consultora_id },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      // Handle both invoke errors and application-level errors
+      if (error) {
+        // Try to parse the error body for a friendly message
+        const errorBody = typeof error === 'object' && 'context' in error 
+          ? error.message : String(error);
+        if (errorBody.includes('Nenhum usuário cadastrado')) {
+          throw new Error('Esta consultora ainda não criou uma conta no sistema. Ela precisa se cadastrar primeiro usando este email.');
+        }
+        throw error;
+      }
+      if (data?.error) {
+        if (data.error.includes('Nenhum usuário cadastrado')) {
+          throw new Error('Esta consultora ainda não criou uma conta no sistema. Ela precisa se cadastrar primeiro usando este email.');
+        }
+        throw new Error(data.error);
+      }
       return data;
     },
     onSuccess: () => {
@@ -95,7 +109,12 @@ export default function Consultoras() {
       toast({ title: 'Acesso vinculado com sucesso!' });
     },
     onError: (error: any) => {
-      toast({ title: 'Erro ao vincular acesso', description: error.message, variant: 'destructive' });
+      const msg = error?.message || '';
+      if (msg.includes('ainda não criou uma conta')) {
+        toast({ title: 'Conta não encontrada', description: msg });
+      } else {
+        toast({ title: 'Erro ao vincular acesso', description: msg, variant: 'destructive' });
+      }
     },
   });
 
