@@ -1,45 +1,36 @@
 
 
-# Melhoria na Tela "Esqueci Minha Senha" - Prevenir Erros de Digitacao
+# Redefinir Senha de Usuário via Função Backend
 
-## Diagnostico
+## Objetivo
+Criar uma função backend (edge function) que permite ao admin redefinir a senha de um usuário diretamente, sem depender do fluxo de email.
 
-O sistema **esta funcionando corretamente**. Os logs do backend confirmam que o email de recuperacao esta sendo enviado com sucesso (status 200). O problema e que os emails foram digitados com erros:
+## O que será feito
 
-- `hermeosliveira@gmail.com` (letras "os" invertidas)
-- `hermesoliveirta@gmail.com` (letra "t" extra)
-- O email correto e `hermesoliveira@gmail.com`
+### 1. Criar Edge Function `admin-reset-password`
+- Recebe email e nova senha via POST
+- Valida que o chamador é admin
+- Usa a API administrativa do Supabase para atualizar a senha do usuário
+- Retorna confirmação de sucesso
 
-Alem disso, verifique a **pasta de spam/lixo eletronico** do email, pois emails de recuperacao frequentemente caem la.
+### 2. Usar a função para redefinir a senha
+Após criada e deployada, chamarei a função para definir a senha do usuário `hermesoliveira@gmail.com`.
 
-## Acoes Imediatas (sem mudanca de codigo)
+## Arquivos
 
-1. Acesse a pagina `/esqueci-senha`
-2. Digite o email **correto**: `hermesoliveira@gmail.com`
-3. Verifique a caixa de entrada **e a pasta de spam**
-4. Nao reutilize links antigos - cada link so funciona uma vez
+| Arquivo | Ação |
+|---------|------|
+| `supabase/functions/admin-reset-password/index.ts` | CRIAR - edge function para reset de senha |
 
-## Melhoria Sugerida no Codigo
+## Detalhes Técnicos
 
-Para evitar erros de digitacao no futuro, podemos adicionar um **campo de confirmacao de email** na pagina `EsqueciSenha.tsx`:
-
-| Arquivo | Alteracao |
-|---------|-----------|
-| `src/pages/EsqueciSenha.tsx` | Adicionar campo "Confirmar email" e validacao de igualdade antes do envio |
-
-### Detalhes Tecnicos
-
-Adicionar um segundo campo de email e validar que ambos sao iguais antes de chamar a API:
+A edge function usará `supabase.auth.admin.updateUserById()` com a service role key para alterar a senha. Apenas usuários com role `admin` poderão chamar esta função (validação via token JWT do chamador).
 
 ```typescript
-const [confirmEmail, setConfirmEmail] = useState('');
-
-// Na validacao do submit:
-if (email !== confirmEmail) {
-  setError('Os emails nao coincidem. Verifique a digitacao.');
-  return;
-}
+// Fluxo:
+// 1. Verificar que o chamador é admin
+// 2. Buscar usuário pelo email via admin API
+// 3. Atualizar senha via admin API
 ```
 
-Isso adiciona uma camada extra de protecao contra erros de digitacao, que foi exatamente o que causou o problema.
-
+Após implementar, executarei a função para definir a senha do usuário solicitado e informarei aqui.
