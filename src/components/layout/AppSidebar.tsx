@@ -11,6 +11,8 @@ import {
   TrendingUp,
   LogOut,
   ChevronLeft,
+  GitPullRequest,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -39,10 +41,12 @@ const adminMenuItems = [
   { title: 'Config. do Mês', icon: Calendar, href: '/configuracao-mes' },
   { title: 'Consultoras', icon: Users, href: '/consultoras' },
   { title: 'Metas', icon: Target, href: '/metas' },
+  { title: 'Ajustes', icon: GitPullRequest, href: '/ajustes' },
 ];
 
 const consultoraMenuItems = [
   { title: 'Minha Performance', icon: TrendingUp, href: '/minha-performance' },
+  { title: 'Solicitar Ajuste', icon: ArrowRightLeft, href: '/solicitar-ajuste' },
 ];
 
 export function AppSidebar() {

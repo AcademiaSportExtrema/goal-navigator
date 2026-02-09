@@ -2,6 +2,8 @@
 
 export type AppRole = 'admin' | 'consultora';
 
+export type AjusteStatus = 'pendente' | 'aprovado' | 'rejeitado';
+
 export type UploadStatus = 'enviado' | 'importando' | 'concluido' | 'erro';
 
 export type CampoAlvo = 
@@ -144,4 +146,18 @@ export interface ResumoConsultora extends ResumoMeta {
   consultora_id: string;
   consultora_nome: string;
   meta_individual: number;
+}
+
+export interface SolicitacaoAjuste {
+  id: string;
+  lancamento_id: string;
+  consultora_id: string;
+  resp_recebimento_atual: string | null;
+  resp_recebimento_novo: string;
+  justificativa: string;
+  status: AjusteStatus;
+  admin_comentario: string | null;
+  admin_user_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
