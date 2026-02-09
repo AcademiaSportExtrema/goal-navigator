@@ -1,108 +1,67 @@
 
-# Solicitacao de Ajuste de Responsavel (Comissao)
+# Reprocessar Itens ao Criar Regra na Pagina de Pendencias
 
-## Conceito
+## Resumo
 
-Criar um fluxo de **solicitacao e aprovacao** para ajustes no campo "responsavel pelo recebimento" dos lancamentos. A consultora identifica um lancamento que deveria ser creditado a ela, solicita o ajuste, e o admin aprova ou rejeita.
+Quando o usuario cria uma nova regra a partir da pagina de Pendencias, o sistema oferecera a opcao de reprocessar automaticamente apenas os lancamentos pendentes que correspondem ao grupo (produto/plano/empresa) de onde a regra foi criada.
 
-## Fluxo do Usuario
+## Alteracoes
+
+### 1. Pagina Pendencias (`src/pages/Pendencias.tsx`)
+
+- Adicionar um botao "Criar Regra e Reprocessar" em cada grupo de pendencias (ao lado do botao "Criar Regra" existente)
+- Ao clicar, abre um **Dialog inline** com o formulario de criacao de regra (mesmo formato da pagina Regras), sem precisar navegar para outra pagina
+- Apos criar a regra com sucesso:
+  1. Busca os IDs dos lancamentos pendentes que pertencem ao grupo (filtrados por produto/plano/empresa)
+  2. Chama a edge function `classificar-meta` passando `lancamento_ids` com esses IDs
+  3. Exibe toast com resultado do reprocessamento
+  4. Invalida as queries para atualizar a lista
+
+### 2. Fluxo detalhado
 
 ```text
-CONSULTORA                          ADMIN
-   |                                  |
-   |-- Ve suas vendas em              |
-   |   "Minha Performance"            |
-   |                                  |
-   |-- Acessa "Solicitar Ajuste"      |
-   |   (nova pagina ou aba)           |
-   |                                  |
-   |-- Busca lancamento por           |
-   |   contrato/cliente/data          |
-   |                                  |
-   |-- Preenche solicitacao:          |
-   |   - Lancamento alvo              |
-   |   - Justificativa                |
-   |                                  |
-   |-- Envia solicitacao -----------> |
-   |                                  |-- Ve em "Ajustes Pendentes"
-   |                                  |   (nova pagina admin)
-   |                                  |
-   |                                  |-- Analisa e Aprova/Rejeita
-   |                                  |   com comentario
-   |                                  |
-   |<-- Resultado visivel ----------- |
-   |   no historico                   |
+Pendencias
+  |
+  |-- Grupo: Produto "X" / Plano "Y" / Empresa "Z" (15 itens)
+  |     |
+  |     |-- [Criar Regra] -> navega para /regras (comportamento atual, mantido)
+  |     |-- [Criar Regra e Reprocessar] -> abre Dialog com formulario
+  |           |
+  |           |-- Formulario pre-preenchido:
+  |           |   campo_alvo = "produto", valor = "X" (baseado no grupo)
+  |           |
+  |           |-- Usuario ajusta campos e confirma
+  |           |
+  |           |-- Sistema:
+  |           |   1. Cria a regra no banco
+  |           |   2. Busca IDs dos lancamentos pendentes do grupo
+  |           |   3. Chama classificar-meta com lancamento_ids
+  |           |   4. Exibe resultado
+  |           |
+  |           |-- Lista de pendencias atualiza automaticamente
 ```
 
-## O que sera criado
+### 3. Detalhes tecnicos
 
-### 1. Nova tabela `solicitacoes_ajuste`
+**Novo estado no componente Pendencias:**
+- `dialogOpen`: controla visibilidade do dialog
+- `selectedGroup`: armazena o grupo selecionado para pre-preencher o formulario
+- `form`: estado do formulario de regra (mesma estrutura da pagina Regras)
 
-| Coluna | Tipo | Descricao |
-|--------|------|-----------|
-| id | uuid (PK) | Identificador |
-| lancamento_id | uuid (FK) | Lancamento que precisa de ajuste |
-| consultora_id | uuid (FK) | Consultora solicitante |
-| resp_recebimento_atual | text | Valor atual do campo |
-| resp_recebimento_novo | text | Nome da consultora solicitante (novo valor) |
-| justificativa | text | Motivo da solicitacao |
-| status | enum | `pendente`, `aprovado`, `rejeitado` |
-| admin_comentario | text | Comentario do admin ao aprovar/rejeitar |
-| admin_user_id | uuid | Admin que processou |
-| created_at | timestamptz | Data da solicitacao |
-| updated_at | timestamptz | Data do processamento |
+**Pre-preenchimento inteligente:**
+- Se o grupo tem `produto`, pre-preenche `campo_alvo = 'produto'` e `valor = produto`
+- Se tem apenas `plano`, usa `campo_alvo = 'plano'` e `valor = plano`
+- Se tem apenas `empresa`, usa `campo_alvo = 'empresa'` e `valor = empresa`
+- O usuario pode alterar antes de confirmar
 
-**RLS:**
-- Consultoras podem criar solicitacoes e ver apenas as suas
-- Admins podem ver e gerenciar todas
+**Mutation encadeada:**
+1. Insert na tabela `regras_meta`
+2. Select dos `lancamentos.id` onde `pendente_regra = true` e produto/plano/empresa batem com o grupo
+3. Invoke `classificar-meta` com `{ lancamento_ids: [...] }`
+4. Invalidate queries
 
-### 2. Pagina da Consultora: "Solicitar Ajuste"
-
-Nova pagina `/solicitar-ajuste` acessivel pela consultora, com:
-- Campo de busca para encontrar lancamentos (por numero de contrato, nome do cliente ou data)
-- Lista de resultados mostrando lancamentos que NAO estao vinculados a ela
-- Ao selecionar, exibe detalhes do lancamento e campo para justificativa
-- Botao de enviar solicitacao
-- Historico das solicitacoes feitas com status (pendente/aprovado/rejeitado)
-
-### 3. Pagina do Admin: "Ajustes"
-
-Nova pagina `/ajustes` acessivel pelo admin, com:
-- Lista de solicitacoes pendentes com detalhes do lancamento e justificativa
-- Botoes de Aprovar / Rejeitar com campo de comentario
-- Ao aprovar: atualiza o campo `resp_recebimento` e `consultora_chave` do lancamento
-- Historico de solicitacoes ja processadas
-
-### 4. Navegacao
-
-- Adicionar link "Solicitar Ajuste" no menu lateral da consultora
-- Adicionar link "Ajustes" no menu lateral do admin
-- Badge com contagem de pendentes no menu do admin
-
-## Arquivos
-
-| Arquivo | Acao |
-|---------|------|
-| **Migracao SQL** | CRIAR - tabela `solicitacoes_ajuste` com enum e RLS |
-| `src/types/database.ts` | EDITAR - adicionar tipos da nova tabela |
-| `src/pages/SolicitarAjuste.tsx` | CRIAR - pagina da consultora |
-| `src/pages/Ajustes.tsx` | CRIAR - pagina do admin |
-| `src/App.tsx` | EDITAR - adicionar rotas |
-| `src/components/layout/AppSidebar.tsx` | EDITAR - adicionar links no menu |
-
-## Detalhes Tecnicos
-
-### Enum de status:
-```sql
-CREATE TYPE ajuste_status AS ENUM ('pendente', 'aprovado', 'rejeitado');
-```
-
-### Ao aprovar solicitacao (logica no frontend):
-1. Atualizar `solicitacoes_ajuste.status = 'aprovado'`
-2. Atualizar `lancamentos.resp_recebimento` e `lancamentos.consultora_chave` com o nome da consultora
-3. Ambas operacoes na mesma acao para consistencia
-
-### Busca de lancamentos pela consultora:
-- A consultora pesquisa lancamentos por contrato, cliente ou data
-- Precisa de uma policy RLS temporaria ou uma funcao `security definer` para permitir que a consultora veja lancamentos que ainda nao estao vinculados a ela (apenas para fins de busca na solicitacao)
-- Alternativa mais segura: criar uma funcao `search_lancamentos_for_ajuste` que retorna apenas campos limitados (id, produto, cliente, contrato, resp_recebimento_atual, valor, data) sem expor todos os dados
+**Arquivo unico modificado:** `src/pages/Pendencias.tsx`
+- Importar componentes de formulario (Select, Input, Switch, Label, Dialog, etc.)
+- Importar tipos de database.ts
+- Adicionar o Dialog com formulario de regra
+- Adicionar a mutation encadeada (criar regra + reprocessar)
