@@ -12,6 +12,7 @@ let resetEmailSent = false;
 
 export default function EsqueciSenha() {
   const [email, setEmail] = useState('');
+  const [confirmEmail, setConfirmEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(resetEmailSent);
@@ -19,6 +20,10 @@ export default function EsqueciSenha() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (email !== confirmEmail) {
+      setError('Os emails não coincidem. Verifique a digitação.');
+      return;
+    }
     setIsLoading(true);
 
     try {
@@ -94,6 +99,22 @@ export default function EsqueciSenha() {
                       placeholder="seu@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      className="pl-10"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmEmail">Confirmar Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="confirmEmail"
+                      type="email"
+                      placeholder="seu@email.com"
+                      value={confirmEmail}
+                      onChange={(e) => setConfirmEmail(e.target.value)}
                       className="pl-10"
                       required
                     />
