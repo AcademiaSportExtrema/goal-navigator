@@ -1,9 +1,8 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, Shield, ShieldCheck, Plug } from 'lucide-react';
+import { Users, Shield, ShieldCheck } from 'lucide-react';
 import { PermissoesTab } from '@/components/configuracao/PermissoesTab';
 import ConsultorasContent from '@/components/configuracao/ConsultorasContent';
-import { IntegracoesTab } from '@/components/configuracao/IntegracoesTab';
 
 export default function Configuracao() {
   return (
@@ -22,10 +21,6 @@ export default function Configuracao() {
             <ShieldCheck className="h-4 w-4" />
             Perm. Consultora
           </TabsTrigger>
-          <TabsTrigger value="integracoes" className="gap-2">
-            <Plug className="h-4 w-4" />
-            Integrações
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="consultoras">
@@ -40,9 +35,6 @@ export default function Configuracao() {
           <PermissoesTab targetRole="consultora" />
         </TabsContent>
 
-        <TabsContent value="integracoes">
-          <IntegracoesTab />
-        </TabsContent>
       </Tabs>
     </AppLayout>
   );

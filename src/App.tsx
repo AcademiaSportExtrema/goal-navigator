@@ -29,6 +29,7 @@ import NotFound from "./pages/NotFound";
 import Empresas from "./pages/super-admin/Empresas";
 import NovaEmpresa from "./pages/super-admin/NovaEmpresa";
 import Financeiro from "./pages/super-admin/Financeiro";
+import Integracoes from "./pages/super-admin/Integracoes";
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,11 @@ const App = () => (
             <Route path="/super-admin/financeiro" element={
               <ProtectedRoute requiredRole="super_admin">
                 <Financeiro />
+              </ProtectedRoute>
+            } />
+            <Route path="/super-admin/integracoes" element={
+              <ProtectedRoute requiredRole="super_admin">
+                <Integracoes />
               </ProtectedRoute>
             } />
 
