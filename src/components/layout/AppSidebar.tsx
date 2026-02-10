@@ -131,7 +131,7 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
 
-        {isAdmin && !isSuperAdmin && adminMenuGroups.map((group) => {
+        {(isAdmin || isSuperAdmin) && adminMenuGroups.map((group) => {
           const visibleItems = group.items.filter(item => hasPermission(item.href));
           if (visibleItems.length === 0) return null;
           return (
