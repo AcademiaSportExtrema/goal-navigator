@@ -2,3 +2,9 @@ project_id = "guiifplvaecwbtqtyltk"
 
 [functions.manage-consultora-access]
 verify_jwt = false
+
+[functions.create-empresa]
+verify_jwt = false
+
+[functions.save-integration-key]
+verify_jwt = false

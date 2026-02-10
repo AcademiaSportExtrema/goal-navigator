@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,6 +51,7 @@ export default function ConfiguracaoMes() {
   const [niveis, setNiveis] = useState<NivelConfig[]>(defaultNiveis);
   
   const { toast } = useToast();
+  const { empresaId } = useAuth();
   const queryClient = useQueryClient();
 
   // Buscar consultoras
@@ -171,7 +173,7 @@ export default function ConfiguracaoMes() {
       } else {
         const { data, error } = await supabase
           .from('metas_mensais')
-          .insert({ mes_referencia: mesSelecionado, meta_total: metaNum })
+          .insert({ mes_referencia: mesSelecionado, meta_total: metaNum, empresa_id: empresaId! })
           .select()
           .single();
         if (error) throw error;
@@ -186,6 +188,7 @@ export default function ConfiguracaoMes() {
           meta_mensal_id: metaId,
           consultora_id,
           percentual: parseFloat(p) / 100,
+          empresa_id: empresaId!,
         }));
       
       if (metasConsultorasInsert.length > 0) {
@@ -201,6 +204,7 @@ export default function ConfiguracaoMes() {
         de_percent: parseFloat(n.de_percent) / 100,
         ate_percent: parseFloat(n.ate_percent) / 100,
         comissao_percent: parseFloat(n.comissao_percent) / 100,
+        empresa_id: empresaId!,
       }));
       
       const { error: niveisError } = await supabase.from('comissao_niveis').insert(niveisInsert);

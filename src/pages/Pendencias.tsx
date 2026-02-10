@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -89,6 +90,7 @@ const defaultForm: RegraForm = {
 
 export default function Pendencias() {
   const { toast } = useToast();
+  const { empresaId } = useAuth();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<PendenciaGroup | null>(null);
@@ -168,6 +170,7 @@ export default function Pendencias() {
         .insert({
           ...form,
           prioridade: maxPrioridade + 1,
+          empresa_id: empresaId!,
         });
       
       if (insertError) throw insertError;

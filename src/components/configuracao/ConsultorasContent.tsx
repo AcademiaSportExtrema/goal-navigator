@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,6 +49,7 @@ export default function ConsultorasContent() {
   const [createAccessPassword, setCreateAccessPassword] = useState('');
   
   const { toast } = useToast();
+  const { empresaId } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: consultoras, isLoading } = useQuery({
@@ -142,7 +144,7 @@ export default function ConsultorasContent() {
     mutationFn: async (data: ConsultoraForm) => {
       const { error } = await supabase
         .from('consultoras')
-        .insert({ nome: data.nome, email: data.email || null, ativo: data.ativo });
+        .insert({ nome: data.nome, email: data.email || null, ativo: data.ativo, empresa_id: empresaId! });
       if (error) throw error;
     },
     onSuccess: () => {

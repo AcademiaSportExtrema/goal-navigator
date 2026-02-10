@@ -1,6 +1,19 @@
 // Tipos para o sistema de metas
 
-export type AppRole = 'admin' | 'consultora';
+export type AppRole = 'admin' | 'consultora' | 'super_admin';
+
+export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'trialing';
+
+export interface Empresa {
+  id: string;
+  nome: string;
+  slug: string;
+  ativo: boolean;
+  subscription_status: string;
+  trial_ends_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export type AjusteStatus = 'pendente' | 'aprovado' | 'rejeitado';
 

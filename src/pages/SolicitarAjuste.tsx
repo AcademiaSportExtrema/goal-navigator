@@ -27,7 +27,7 @@ interface LancamentoSearch {
 }
 
 export default function SolicitarAjuste() {
-  const { user } = useAuth();
+  const { user, empresaId } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -105,6 +105,7 @@ export default function SolicitarAjuste() {
         resp_recebimento_atual: selectedLancamento.resp_recebimento || '',
         resp_recebimento_novo: consultora.nome,
         justificativa,
+        empresa_id: empresaId!,
       });
       if (error) throw error;
     },

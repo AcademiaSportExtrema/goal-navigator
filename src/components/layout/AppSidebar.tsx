@@ -12,6 +12,9 @@ import {
   GitPullRequest,
   ArrowRightLeft,
   FileText,
+  Building,
+  PlusCircle,
+  DollarSign,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -62,11 +65,24 @@ const consultoraMenuItems = [
   { title: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
 ];
 
+const superAdminMenuGroups = [
+  {
+    label: 'Plataforma',
+    items: [
+      { title: 'Empresas', icon: Building, href: '/super-admin/empresas' },
+      { title: 'Nova Empresa', icon: PlusCircle, href: '/super-admin/empresa/nova' },
+      { title: 'Financeiro', icon: DollarSign, href: '/super-admin/financeiro' },
+    ],
+  },
+];
+
 export function AppSidebar() {
   const location = useLocation();
-  const { user, signOut, isAdmin } = useAuth();
+  const { user, signOut, isAdmin, isSuperAdmin } = useAuth();
   const { state } = useSidebar();
   const { hasPermission } = usePermissions();
+
+  const roleLabel = isSuperAdmin ? 'Super Admin' : isAdmin ? 'Administrador' : 'Consultora';
 
   return (
     <Sidebar collapsible="icon">
@@ -81,7 +97,7 @@ export function AppSidebar() {
                 Sistema de Metas
               </span>
               <span className="text-xs text-sidebar-foreground/60">
-                {isAdmin ? 'Administrador' : 'Consultora'}
+                {roleLabel}
               </span>
             </div>
           )}
@@ -89,37 +105,63 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {isAdmin ? (
-          adminMenuGroups.map((group) => {
-            const visibleItems = group.items.filter(item => hasPermission(item.href));
-            if (visibleItems.length === 0) return null;
-            return (
-              <SidebarGroup key={group.label}>
-                <SidebarGroupLabel className="text-sidebar-foreground/60">
-                  {group.label}
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {visibleItems.map((item) => (
-                      <SidebarMenuItem key={item.href}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={location.pathname === item.href}
-                          tooltip={item.title}
-                        >
-                          <Link to={item.href}>
-                            <item.icon className="h-4 w-4" />
-                            <span>{item.title}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            );
-          })
-        ) : (
+        {isSuperAdmin && superAdminMenuGroups.map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel className="text-sidebar-foreground/60">
+              {group.label}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location.pathname === item.href}
+                      tooltip={item.title}
+                    >
+                      <Link to={item.href}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
+
+        {isAdmin && !isSuperAdmin && adminMenuGroups.map((group) => {
+          const visibleItems = group.items.filter(item => hasPermission(item.href));
+          if (visibleItems.length === 0) return null;
+          return (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel className="text-sidebar-foreground/60">
+                {group.label}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {visibleItems.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={location.pathname === item.href}
+                        tooltip={item.title}
+                      >
+                        <Link to={item.href}>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          );
+        })}
+
+        {!isAdmin && !isSuperAdmin && (
           <SidebarGroup>
             <SidebarGroupLabel className="text-sidebar-foreground/60">
               Menu
