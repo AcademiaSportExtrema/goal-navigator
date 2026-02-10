@@ -19,7 +19,7 @@ export default function UploadPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   
-  const { user } = useAuth();
+  const { user, empresaId } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -33,7 +33,7 @@ export default function UploadPage() {
         .limit(20);
       
       if (error) throw error;
-      return data as UploadType[];
+      return data as unknown as UploadType[];
     },
   });
 
@@ -98,7 +98,8 @@ export default function UploadPage() {
           user_id: user.id,
           arquivo_path: filePath,
           arquivo_nome: selectedFile.name,
-          status: 'enviado',
+          status: 'enviado' as const,
+          empresa_id: empresaId!,
         })
         .select()
         .single();

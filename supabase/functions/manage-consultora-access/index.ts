@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { action, email, consultora_id, password } = await req.json();
+    const { action, email, consultora_id, password, empresa_id } = await req.json();
 
     if (action === 'check') {
       if (!email) {
@@ -126,13 +126,13 @@ Deno.serve(async (req) => {
       if (existingRole) {
         const { error: updateError } = await supabaseAdmin
           .from('user_roles')
-          .update({ role: 'consultora', consultora_id })
+          .update({ role: 'consultora', consultora_id, empresa_id: empresa_id || undefined })
           .eq('id', existingRole.id);
         if (updateError) throw updateError;
       } else {
         const { error: insertError } = await supabaseAdmin
           .from('user_roles')
-          .insert({ user_id: userId, role: 'consultora', consultora_id });
+          .insert({ user_id: userId, role: 'consultora', consultora_id, empresa_id });
         if (insertError) throw insertError;
       }
 
@@ -167,13 +167,13 @@ Deno.serve(async (req) => {
       if (existingRole) {
         const { error: updateError } = await supabaseAdmin
           .from('user_roles')
-          .update({ role: 'consultora', consultora_id })
+          .update({ role: 'consultora', consultora_id, empresa_id: empresa_id || undefined })
           .eq('id', existingRole.id);
         if (updateError) throw updateError;
       } else {
         const { error: insertError } = await supabaseAdmin
           .from('user_roles')
-          .insert({ user_id: targetUser.id, role: 'consultora', consultora_id });
+          .insert({ user_id: targetUser.id, role: 'consultora', consultora_id, empresa_id });
         if (insertError) throw insertError;
       }
 

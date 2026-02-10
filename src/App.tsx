@@ -19,11 +19,16 @@ import Pendencias from "./pages/Pendencias";
 import ConfiguracaoMes from "./pages/ConfiguracaoMes";
 import Consultoras from "./pages/Consultoras";
 import Configuracao from "./pages/Configuracao";
-// Metas foi unificado no Dashboard
 import MinhaPerformance from "./pages/MinhaPerformance";
 import SolicitarAjuste from "./pages/SolicitarAjuste";
 import Ajustes from "./pages/Ajustes";
+import EmpresaBloqueada from "./pages/EmpresaBloqueada";
 import NotFound from "./pages/NotFound";
+
+// Super Admin
+import Empresas from "./pages/super-admin/Empresas";
+import NovaEmpresa from "./pages/super-admin/NovaEmpresa";
+import Financeiro from "./pages/super-admin/Financeiro";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +46,30 @@ const App = () => (
             <Route path="/esqueci-senha" element={<EsqueciSenha />} />
             <Route path="/redefinir-senha" element={<RedefinirSenha />} />
             
+            {/* Empresa bloqueada */}
+            <Route path="/empresa-bloqueada" element={
+              <ProtectedRoute>
+                <EmpresaBloqueada />
+              </ProtectedRoute>
+            } />
+
+            {/* Super Admin routes */}
+            <Route path="/super-admin/empresas" element={
+              <ProtectedRoute requiredRole="super_admin">
+                <Empresas />
+              </ProtectedRoute>
+            } />
+            <Route path="/super-admin/empresa/nova" element={
+              <ProtectedRoute requiredRole="super_admin">
+                <NovaEmpresa />
+              </ProtectedRoute>
+            } />
+            <Route path="/super-admin/financeiro" element={
+              <ProtectedRoute requiredRole="super_admin">
+                <Financeiro />
+              </ProtectedRoute>
+            } />
+
             {/* Admin routes */}
             <Route path="/dashboard" element={
               <ProtectedRoute>

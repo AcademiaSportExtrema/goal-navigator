@@ -1,13 +1,16 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import type { AppRole, UserRole } from '@/types/database';
+import type { AppRole } from '@/types/database';
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   role: AppRole | null;
   consultoraId: string | null;
+  empresaId: string | null;
+  isSuperAdmin: boolean;
+  empresaAtiva: boolean;
   isLoading: boolean;
   isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -22,56 +25,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [consultoraId, setConsultoraId] = useState<string | null>(null);
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
+  const [empresaAtiva, setEmpresaAtiva] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
 
+  const fetchUserData = async (userId: string) => {
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role, consultora_id, empresa_id')
+      .eq('user_id', userId)
+      .single();
+
+    if (roleData) {
+      setRole(roleData.role as AppRole);
+      setConsultoraId(roleData.consultora_id);
+      setEmpresaId(roleData.empresa_id);
+
+      // Check if empresa is active (skip for super_admin)
+      if (roleData.role !== 'super_admin' && roleData.empresa_id) {
+        const { data: empresa } = await supabase
+          .from('empresas')
+          .select('ativo, subscription_status, trial_ends_at')
+          .eq('id', roleData.empresa_id)
+          .single();
+
+        if (empresa) {
+          const isActive = empresa.ativo && (
+            empresa.subscription_status === 'active' ||
+            (empresa.trial_ends_at && new Date(empresa.trial_ends_at) > new Date())
+          );
+          setEmpresaAtiva(!!isActive);
+        }
+      } else {
+        setEmpresaAtiva(true);
+      }
+    }
+  };
+
   useEffect(() => {
-    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
-          // Fetch user role
-          setTimeout(async () => {
-            const { data: roleData } = await supabase
-              .from('user_roles')
-              .select('role, consultora_id')
-              .eq('user_id', session.user.id)
-              .single();
-            
-            if (roleData) {
-              setRole(roleData.role as AppRole);
-              setConsultoraId(roleData.consultora_id);
-            }
-          }, 0);
+          setTimeout(() => fetchUserData(session.user.id), 0);
         } else {
           setRole(null);
           setConsultoraId(null);
+          setEmpresaId(null);
+          setEmpresaAtiva(true);
         }
-        
+
         setIsLoading(false);
       }
     );
 
-    // THEN check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
-        supabase
-          .from('user_roles')
-          .select('role, consultora_id')
-          .eq('user_id', session.user.id)
-          .single()
-          .then(({ data: roleData }) => {
-            if (roleData) {
-              setRole(roleData.role as AppRole);
-              setConsultoraId(roleData.consultora_id);
-            }
-            setIsLoading(false);
-          });
+        fetchUserData(session.user.id).then(() => setIsLoading(false));
       } else {
         setIsLoading(false);
       }
@@ -86,12 +101,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ 
-      email, 
+    const { error } = await supabase.auth.signUp({
+      email,
       password,
-      options: {
-        emailRedirectTo: window.location.origin
-      }
+      options: { emailRedirectTo: window.location.origin },
     });
     return { error: error as Error | null };
   };
@@ -100,6 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setRole(null);
     setConsultoraId(null);
+    setEmpresaId(null);
+    setEmpresaAtiva(true);
   };
 
   return (
@@ -109,6 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         role,
         consultoraId,
+        empresaId,
+        isSuperAdmin: role === 'super_admin',
+        empresaAtiva,
         isLoading,
         isAdmin: role === 'admin',
         signIn,

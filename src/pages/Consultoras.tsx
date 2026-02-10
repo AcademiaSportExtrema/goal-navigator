@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,6 +50,7 @@ export default function Consultoras() {
   const [createAccessPassword, setCreateAccessPassword] = useState('');
   
   const { toast } = useToast();
+  const { empresaId } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: consultoras, isLoading } = useQuery({
@@ -150,6 +152,7 @@ export default function Consultoras() {
           nome: data.nome,
           email: data.email || null,
           ativo: data.ativo,
+          empresa_id: empresaId!,
         });
       
       if (error) throw error;

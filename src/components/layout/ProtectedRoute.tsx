@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { user, role, isLoading } = useAuth();
+  const { user, role, isLoading, isSuperAdmin, empresaAtiva } = useAuth();
   const { hasPermission, isLoading: permLoading } = usePermissions();
   const location = useLocation();
 
@@ -29,8 +29,22 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Super admin can access /super-admin routes
+  if (isSuperAdmin && location.pathname.startsWith('/super-admin')) {
+    return <>{children}</>;
+  }
+
+  // Super admin accessing non-super-admin routes: allow
+  if (isSuperAdmin) {
+    return <>{children}</>;
+  }
+
+  // Block inactive empresa (except empresa-bloqueada page)
+  if (!empresaAtiva && location.pathname !== '/empresa-bloqueada') {
+    return <Navigate to="/empresa-bloqueada" replace />;
+  }
+
   if (requiredRole && role !== requiredRole) {
-    // Allow cross-role access if permission is granted (e.g. consultora accessing /dashboard)
     if (!hasPermission(location.pathname)) {
       if (role === 'consultora') {
         return <Navigate to="/minha-performance" replace />;
@@ -39,7 +53,6 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     }
   }
 
-  // Check route permission even if role matches
   if (!hasPermission(location.pathname)) {
     if (role === 'consultora') {
       return <Navigate to="/minha-performance" replace />;
