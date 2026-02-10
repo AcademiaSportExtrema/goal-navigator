@@ -1,77 +1,76 @@
 
-# Gerencial para Consultoras: Restricoes e Ajuste Inline
 
-## Contexto
+# Importacao e Exportacao em Massa de Regras via Planilha
 
-Atualmente, a rota `/gerencial` exige `requiredRole="admin"`, impedindo consultoras de acessar. O plano e permitir acesso das consultoras com restricoes especificas e adicionar a funcionalidade de solicitar ajuste diretamente da tabela.
+## Objetivo
+Permitir exportar os lancamentos pendentes (sem regra) para uma planilha CSV, analisar os dados, e depois importar regras em massa via CSV -- eliminando a necessidade de criar regras uma a uma.
+
+## Fluxo de Trabalho
+
+```text
+1. Admin clica "Exportar Pendentes" na pagina de Regras/Pendencias
+   -> Baixa CSV com todos os campos dos lancamentos pendentes
+2. Admin analisa a planilha e monta as regras em outra aba/planilha
+3. Admin sobe o CSV de regras na pagina de Regras
+   -> Sistema valida, insere todas as regras e reprocessa os pendentes
+```
 
 ## Mudancas
 
-### 1. Permitir consultoras na rota `/gerencial` (App.tsx)
+### 1. Pagina de Regras (Regras.tsx) - Adicionar botoes de exportar e importar
 
-- Remover `requiredRole="admin"` da rota `/gerencial` para que o sistema de permissoes dinamico (`permissoes_perfil`) controle o acesso
-- Assim, o admin pode habilitar/desabilitar o acesso das consultoras ao Gerencial via configuracao
+**Exportar Pendentes (CSV):**
+- Botao "Exportar Pendentes" ao lado do botao "Nova Regra"
+- Busca todos os lancamentos com `pendente_regra = true` com todos os campos
+- Gera CSV com colunas: produto, plano, modalidades, forma_pagamento, condicao_pagamento, empresa, situacao_contrato, resp_venda, resp_recebimento, valor, data_lancamento, data_inicio, nome_cliente, numero_contrato, categoria, duracao, turmas
+- Download automatico no navegador
 
-### 2. Adicionar "Gerencial" ao menu da consultora (AppSidebar.tsx)
+**Importar Regras (CSV):**
+- Botao "Importar Regras" ao lado do botao de exportar
+- Aceita arquivo CSV com as colunas: campo_alvo, operador, valor, entra_meta, responsavel_campo, regra_mes, observacao
+- Validacao no frontend antes de inserir:
+  - campo_alvo deve ser um dos valores validos (produto, plano, etc.)
+  - operador deve ser valido (contem, igual, etc.)
+  - valor nao pode ser vazio
+  - entra_meta deve ser sim/nao ou true/false
+  - responsavel_campo deve ser resp_venda ou resp_recebimento
+  - regra_mes deve ser DATA_LANCAMENTO, DATA_INICIO ou HIBRIDA
+- Preview dos dados importados em um dialog antes de confirmar
+- Insere todas as regras com prioridades sequenciais (continuando da ultima existente)
+- Apos inserir, dispara reprocessamento automatico dos pendentes
 
-- Adicionar item `{ title: 'Gerencial', icon: FileText, href: '/gerencial' }` ao array `consultoraMenuItems`
-- O sistema de permissoes ja controla a visibilidade no menu
+### 2. Funcao utilitaria de CSV (novo arquivo: src/lib/csv.ts)
 
-### 3. Restricoes para consultora no Gerencial (Gerencial.tsx)
+- `exportToCSV(data, filename)`: converte array de objetos para CSV e faz download
+- `parseCSV(file)`: le arquivo CSV e retorna array de objetos com os headers como chaves
 
-Usar o hook `useAuth()` para detectar se o usuario e consultora e aplicar:
+### 3. Componente de preview da importacao (inline no Regras.tsx)
 
-**a) Filtro de periodo fixo no mes corrente:**
-- Quando `role === 'consultora'`, forcar `dateRange` para `'thisMonth'` no estado inicial
-- Esconder o seletor de periodo e os filtros de data personalizada
-- Esconder a opcao "Todos os periodos" e "Mês passado" -- a consultora so ve dados do mes atual
+- Dialog que mostra tabela com as regras parseadas do CSV
+- Indicacao de erros de validacao por linha (linhas invalidas em vermelho)
+- Contagem: X regras validas, Y com erro
+- Botao "Importar X regras" que so importa as validas
+- Checkbox "Reprocessar pendentes apos importar" (marcado por padrao)
 
-**b) Esconder botao de exportar CSV:**
-- Renderizar o botao "Exportar CSV" apenas quando `role !== 'consultora'`
+## Formato do CSV de Regras (template)
 
-**c) Adicionar coluna "Acao" com botao "Solicitar Ajuste":**
-- Adicionar uma coluna extra na tabela (visivel apenas para consultoras)
-- Cada linha tera um botao que abre um dialog inline para solicitar ajuste do responsavel pelo recebimento
-- O dialog reutiliza a mesma logica do `SolicitarAjuste.tsx`: mostra dados do lancamento, campo de justificativa, e envia para `solicitacoes_ajuste`
-- Isso elimina a necessidade da consultora ir a outra pagina para fazer a solicitacao
-
-### 4. Restricao de dados via RLS (ja existente)
-
-- A politica RLS `Consultoras view own lancamentos` ja filtra para que consultoras vejam apenas seus proprios lancamentos
-- Nenhuma mudanca no banco de dados e necessaria
+```text
+campo_alvo,operador,valor,entra_meta,responsavel_campo,regra_mes,observacao
+produto,contem,Academia,sim,resp_venda,DATA_LANCAMENTO,Regra para academias
+plano,igual,Mensal,sim,resp_venda,DATA_INICIO,Planos mensais
+situacao_contrato,contem,Cancelado,nao,resp_venda,DATA_LANCAMENTO,Contratos cancelados
+```
 
 ## Detalhes tecnicos
 
-### Gerencial.tsx - Principais alteracoes
+- Exportacao feita 100% no frontend (query Supabase + geracao CSV no browser)
+- Importacao feita no frontend (parse CSV + insert batch no Supabase + invoke classificar-meta)
+- Sem necessidade de nova edge function
+- Valores de `entra_meta` aceitos: sim/nao, true/false, 1/0, s/n
+- Encoding UTF-8 com BOM para compatibilidade com Excel
+- Separador ponto-e-virgula (;) como opcao para Excel brasileiro, com deteccao automatica
 
-```text
-1. Import useAuth
-2. Obter { role } de useAuth()
-3. Estado inicial dateRange: role === 'consultora' ? 'thisMonth' : 'all'
-4. Condicional no JSX:
-   - Seletor de periodo: escondido se consultora
-   - Botao Exportar CSV: escondido se consultora
-   - Coluna extra "Acao": visivel se consultora
-5. Dialog de solicitacao de ajuste inline (mesmo padrao do SolicitarAjuste.tsx)
-```
+### Arquivos modificados/criados
+- `src/lib/csv.ts` (novo) - Utilitarios de exportacao/importacao CSV
+- `src/pages/Regras.tsx` - Botoes de exportar pendentes e importar regras + dialog de preview
 
-### Fluxo da consultora no Gerencial
-
-```text
-Consultora acessa /gerencial
-  -> Ve apenas seus lancamentos (RLS)
-  -> Filtrado automaticamente no mes atual
-  -> Sem opcao de exportar
-  -> Coluna "Acao" com botao "Solicitar Ajuste"
-     -> Clica no botao
-     -> Dialog abre com dados do lancamento
-     -> Preenche justificativa
-     -> Envia solicitacao
-     -> Solicitacao aparece em /pendencias para o admin
-```
-
-### Arquivos modificados
-
-- `src/App.tsx` - Remover requiredRole da rota /gerencial
-- `src/components/layout/AppSidebar.tsx` - Adicionar Gerencial ao menu consultora
-- `src/pages/Gerencial.tsx` - Adicionar restricoes por role e dialog de ajuste inline
