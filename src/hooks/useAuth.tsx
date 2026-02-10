@@ -128,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isSuperAdmin: role === 'super_admin',
         empresaAtiva,
         isLoading,
-        isAdmin: role === 'admin',
+        isAdmin: role === 'admin' || role === 'super_admin',
         signIn,
         signUp,
         signOut,
