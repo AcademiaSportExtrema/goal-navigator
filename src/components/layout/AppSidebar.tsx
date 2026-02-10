@@ -62,6 +62,7 @@ const adminMenuGroups = [
 
 const consultoraMenuItems = [
   { title: 'Minha Performance', icon: TrendingUp, href: '/minha-performance' },
+  { title: 'Gerencial', icon: FileText, href: '/gerencial' },
   { title: 'Solicitar Ajuste', icon: ArrowRightLeft, href: '/solicitar-ajuste' },
   { title: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
 ];

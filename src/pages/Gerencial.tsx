@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { 
   Select,
   SelectContent,
@@ -21,13 +23,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Download, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon, Columns3 } from 'lucide-react';
+import { Search, Download, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon, Columns3, Send } from 'lucide-react';
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 import type { Lancamento } from '@/types/database';
 
 const ITEMS_PER_PAGE = 50;
@@ -92,15 +96,25 @@ function getDateRangeDates(range: string): { from?: Date; to?: Date } {
 }
 
 export default function Gerencial() {
+  const { role, empresaId, consultoraId } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const isConsultora = role === 'consultora';
+
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [dateRange, setDateRange] = useState('all');
+  const [dateRange, setDateRange] = useState(isConsultora ? 'thisMonth' : 'all');
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set(defaultHiddenColumns));
+
+  // Ajuste inline state
+  const [ajusteDialogOpen, setAjusteDialogOpen] = useState(false);
+  const [selectedLancamento, setSelectedLancamento] = useState<Lancamento | null>(null);
+  const [justificativa, setJustificativa] = useState('');
 
   const visibleColumns = useMemo(() => columns.filter(c => !hiddenColumns.has(c.key)), [hiddenColumns]);
 
@@ -123,6 +137,46 @@ export default function Gerencial() {
       
       if (error) throw error;
       return data as Lancamento[];
+    },
+  });
+
+  // Get consultora info for ajuste
+  const { data: consultora } = useQuery({
+    queryKey: ['consultora-info-gerencial', consultoraId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('consultoras')
+        .select('id, nome')
+        .eq('id', consultoraId!)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: isConsultora && !!consultoraId,
+  });
+
+  // Submit ajuste mutation
+  const submitAjuste = useMutation({
+    mutationFn: async () => {
+      if (!selectedLancamento || !consultora) throw new Error('Dados incompletos');
+      const { error } = await supabase.from('solicitacoes_ajuste').insert({
+        lancamento_id: selectedLancamento.id,
+        consultora_id: consultora.id,
+        resp_recebimento_atual: selectedLancamento.resp_recebimento || '',
+        resp_recebimento_novo: consultora.nome,
+        justificativa,
+        empresa_id: empresaId!,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: 'Solicitação enviada com sucesso!' });
+      setAjusteDialogOpen(false);
+      setSelectedLancamento(null);
+      setJustificativa('');
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro ao enviar solicitação', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -264,12 +318,12 @@ export default function Gerencial() {
   const clearFilters = () => {
     setFilters({});
     setSearchTerm('');
-    setDateRange('all');
+    setDateRange(isConsultora ? 'thisMonth' : 'all');
     setDateFrom(undefined);
     setDateTo(undefined);
   };
 
-  const activeFiltersCount = Object.values(filters).filter(v => v && v !== 'all').length + (dateRange !== 'all' ? 1 : 0);
+  const activeFiltersCount = Object.values(filters).filter(v => v && v !== 'all').length + (dateRange !== (isConsultora ? 'thisMonth' : 'all') ? 1 : 0);
 
   const filterLabels: Record<string, string> = {
     empresa: 'Empresa',
@@ -280,10 +334,13 @@ export default function Gerencial() {
     forma_pagamento: 'Forma Pgto.',
   };
 
+  const formatCurrency = (value: number | null) =>
+    value != null ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-';
+
   return (
     <AppLayout title="Análises Gerenciais">
       <div className="space-y-4">
-        {/* Filtros avançados - sempre visíveis */}
+        {/* Filtros avançados */}
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center justify-between mb-3">
@@ -317,21 +374,23 @@ export default function Gerencial() {
                 </Select>
               ))}
 
-              {/* Período */}
-              <Select value={dateRange} onValueChange={(v) => { setDateRange(v); setCurrentPage(1); }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Período" />
-                </SelectTrigger>
-                <SelectContent>
-                  {dateRangeOptions.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Período - hidden for consultora */}
+              {!isConsultora && (
+                <Select value={dateRange} onValueChange={(v) => { setDateRange(v); setCurrentPage(1); }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dateRangeOptions.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
-            {/* Date pickers for custom range */}
-            {dateRange === 'custom' && (
+            {/* Date pickers for custom range - not for consultora */}
+            {!isConsultora && dateRange === 'custom' && (
               <div className="flex gap-3 mt-3">
                 <Popover>
                   <PopoverTrigger asChild>
@@ -369,10 +428,12 @@ export default function Gerencial() {
                   className="pl-10"
                 />
               </div>
-              <Button variant="outline" onClick={handleExportCSV} disabled={!filteredData.length}>
-                <Download className="h-4 w-4 mr-2" />
-                Exportar CSV
-              </Button>
+              {!isConsultora && (
+                <Button variant="outline" onClick={handleExportCSV} disabled={!filteredData.length}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Exportar CSV
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -383,6 +444,7 @@ export default function Gerencial() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">
                 {filteredData.length.toLocaleString('pt-BR')} registros
+                {isConsultora && <span className="text-xs font-normal text-muted-foreground ml-2">(mês atual)</span>}
               </CardTitle>
               <div className="flex items-center gap-2">
                 <Popover>
@@ -437,6 +499,7 @@ export default function Gerencial() {
                         </div>
                       </TableHead>
                     ))}
+                    {isConsultora && <TableHead className="whitespace-nowrap">Ação</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -448,6 +511,7 @@ export default function Gerencial() {
                             <div className="h-4 bg-muted rounded animate-pulse" />
                           </TableCell>
                         ))}
+                        {isConsultora && <TableCell><div className="h-4 bg-muted rounded animate-pulse" /></TableCell>}
                       </TableRow>
                     ))
                   ) : paginatedData.length > 0 ? (
@@ -458,11 +522,26 @@ export default function Gerencial() {
                             {formatValue(col.key, item[col.key as keyof Lancamento])}
                           </TableCell>
                         ))}
+                        {isConsultora && (
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedLancamento(item);
+                                setJustificativa('');
+                                setAjusteDialogOpen(true);
+                              }}
+                            >
+                              Solicitar Ajuste
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={visibleColumns.length} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={visibleColumns.length + (isConsultora ? 1 : 0)} className="text-center py-8 text-muted-foreground">
                         Nenhum registro encontrado
                       </TableCell>
                     </TableRow>
@@ -479,6 +558,7 @@ export default function Gerencial() {
                            '-'}
                         </TableCell>
                       ))}
+                      {isConsultora && <TableCell>-</TableCell>}
                     </TableRow>
                   </TableFooter>
                 )}
@@ -487,6 +567,50 @@ export default function Gerencial() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Dialog de Solicitar Ajuste */}
+      <Dialog open={ajusteDialogOpen} onOpenChange={setAjusteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Solicitar Ajuste de Responsável</DialogTitle>
+          </DialogHeader>
+          {selectedLancamento && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div><strong>Contrato:</strong> {selectedLancamento.numero_contrato || '-'}</div>
+                <div><strong>Cliente:</strong> {selectedLancamento.nome_cliente || '-'}</div>
+                <div><strong>Produto:</strong> {selectedLancamento.produto || '-'}</div>
+                <div><strong>Valor:</strong> {formatCurrency(selectedLancamento.valor)}</div>
+                <div className="col-span-2">
+                  <strong>Resp. Recebimento atual:</strong> {selectedLancamento.resp_recebimento || '-'}
+                </div>
+                <div className="col-span-2">
+                  <strong>Novo Resp. Recebimento:</strong> {consultora?.nome || '-'}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Justificativa *</label>
+                <Textarea
+                  placeholder="Explique por que este lançamento deve ser creditado a você..."
+                  value={justificativa}
+                  onChange={(e) => setJustificativa(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAjusteDialogOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={() => submitAjuste.mutate()}
+              disabled={!justificativa.trim() || submitAjuste.isPending}
+            >
+              <Send className="h-4 w-4 mr-2" />
+              {submitAjuste.isPending ? 'Enviando...' : 'Enviar Solicitação'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

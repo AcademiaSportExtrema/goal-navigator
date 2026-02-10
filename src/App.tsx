@@ -88,7 +88,7 @@ const App = () => (
               </ProtectedRoute>
             } />
             <Route path="/gerencial" element={
-              <ProtectedRoute requiredRole="admin">
+              <ProtectedRoute>
                 <Gerencial />
               </ProtectedRoute>
             } />
