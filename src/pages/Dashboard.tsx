@@ -311,7 +311,21 @@ export default function Dashboard() {
               <div className="text-2xl font-bold">
                 {formatCurrency(totalVendidoInicio || 0)}
               </div>
-              <p className="text-xs text-muted-foreground">Vendas com início no mês</p>
+              {metaMensal ? (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    <span className={(() => {
+                      const pct = metaMensal ? ((totalVendidoInicio || 0) / Number(metaMensal.meta_total)) * 100 : 0;
+                      return pct >= 100 ? 'text-success' : 'text-warning';
+                    })()}>
+                      {(metaMensal ? ((totalVendidoInicio || 0) / Number(metaMensal.meta_total)) * 100 : 0).toFixed(1)}% da meta
+                    </span>
+                  </p>
+                  <Progress value={Math.min(metaMensal ? ((totalVendidoInicio || 0) / Number(metaMensal.meta_total)) * 100 : 0, 100)} className="mt-2" />
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">Vendas com início no mês</p>
+              )}
             </CardContent>
           </Card>
 
@@ -324,18 +338,7 @@ export default function Dashboard() {
               <div className="text-2xl font-bold">
                 {formatCurrency(totalFaturado || 0)}
               </div>
-              {metaMensal ? (
-                <>
-                  <p className="text-xs text-muted-foreground">
-                    <span className={(dashboardData?.percentualAtingido || 0) >= 100 ? 'text-success' : 'text-warning'}>
-                      {(dashboardData?.percentualAtingido || 0).toFixed(1)}% da meta
-                    </span>
-                  </p>
-                  <Progress value={Math.min(dashboardData?.percentualAtingido || 0, 100)} className="mt-2" />
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">Faturado no mês (por data lançamento)</p>
-              )}
+              <p className="text-xs text-muted-foreground">Faturado no mês</p>
             </CardContent>
           </Card>
 
