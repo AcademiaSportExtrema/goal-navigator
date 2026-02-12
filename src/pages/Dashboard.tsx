@@ -246,7 +246,7 @@ export default function Dashboard() {
         {/* Seletor de mês */}
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold">
-            {format(new Date(mesSelecionado + '-01'), 'MMMM yyyy', { locale: ptBR })}
+            {format(new Date(Number(mesSelecionado.split('-')[0]), Number(mesSelecionado.split('-')[1]) - 1, 1), 'MMMM yyyy', { locale: ptBR })}
           </h2>
           <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
             <SelectTrigger className="w-48">
