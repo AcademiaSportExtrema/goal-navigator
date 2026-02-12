@@ -106,7 +106,9 @@ export default function SolicitarAjuste() {
         resp_recebimento_novo: consultora.nome,
         justificativa,
         empresa_id: empresaId!,
-      });
+        numero_contrato: selectedLancamento.numero_contrato || null,
+        nome_cliente: selectedLancamento.nome_cliente || null,
+      } as any);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -243,9 +245,9 @@ export default function SolicitarAjuste() {
                           {new Date(sol.created_at).toLocaleDateString('pt-BR')}
                         </TableCell>
                         <TableCell className="font-mono text-xs">
-                          {sol.lancamentos?.numero_contrato || '-'}
+                          {sol.numero_contrato || sol.lancamentos?.numero_contrato || '-'}
                         </TableCell>
-                        <TableCell>{sol.lancamentos?.nome_cliente || '-'}</TableCell>
+                        <TableCell>{sol.nome_cliente || sol.lancamentos?.nome_cliente || '-'}</TableCell>
                         <TableCell>{sol.resp_recebimento_atual || '-'}</TableCell>
                         <TableCell>{sol.resp_recebimento_novo}</TableCell>
                         <TableCell>{statusBadge(sol.status)}</TableCell>
