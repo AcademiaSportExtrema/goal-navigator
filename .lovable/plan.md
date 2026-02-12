@@ -1,40 +1,53 @@
 
 
-# Correcao em Massa das Regras: DATA_INICIO para HIBRIDA
+# Correção da Importação: empresa_id ausente nos lançamentos
 
-## Problema Identificado
-- 28 regras estao configuradas com `regra_mes = DATA_INICIO`
-- 86 dos 201 lancamentos nao possuem `data_inicio` preenchido
-- 44 lancamentos foram classificados por regras DATA_INICIO sem ter data_inicio (o sistema fez fallback para data_lancamento, entao o mes_competencia esta correto, mas a configuracao nao reflete a intencao)
+## Problema
+O último upload de 400 linhas falhou completamente. Todas as linhas retornaram o erro:
+> "null value in column empresa_id of relation lancamentos violates not-null constraint"
 
-## Solucao
+A função de importação monta o objeto do lançamento sem incluir o campo `empresa_id`, que é obrigatório na tabela.
 
-### Passo 1 - Atualizar todas as regras DATA_INICIO para HIBRIDA
-Executar um UPDATE direto nas 28 regras que usam `DATA_INICIO`, alterando para `HIBRIDA`.
+## Solução
 
-Com a regra HIBRIDA, o comportamento sera:
-- Lancamento **com plano** preenchido: usa `data_inicio` (fallback para `data_lancamento` se vazio)
-- Lancamento **sem plano**: usa `data_lancamento`
+### 1. Corrigir a função de importação (`upload-importar-xls`)
+- No início do processamento, buscar o `empresa_id` a partir do registro do upload (`uploads` table) usando o `upload_id` recebido
+- Incluir o `empresa_id` em cada lançamento antes da inserção
 
-### Passo 2 - Reprocessar todos os lancamentos
-Apos a atualizacao das regras, disparar o reprocessamento de todos os lancamentos (nao apenas os pendentes) para que o `mes_competencia` seja recalculado com a logica correta.
+### 2. Reimportar os dados
+- Após o deploy da correção, disparar novamente a importação do último upload que falhou, para que as 400 linhas sejam processadas corretamente
 
-Isso sera feito chamando a edge function `classificar-meta` com a flag `reprocessar_todos` aplicada a todos os lancamentos (pendentes e ja classificados).
+## Detalhes técnicos
 
-### Detalhes tecnicos
+**Alteração na edge function `upload-importar-xls/index.ts`:**
 
-**Atualizacao das regras (SQL):**
-```sql
-UPDATE regras_meta
-SET regra_mes = 'HIBRIDA', updated_at = now()
-WHERE regra_mes = 'DATA_INICIO' AND ativo = true;
+Adicionar, logo após o download do arquivo, a busca do `empresa_id`:
+
+```typescript
+// Buscar empresa_id do upload
+const { data: uploadData, error: uploadFetchError } = await supabase
+  .from('uploads')
+  .select('empresa_id')
+  .eq('id', upload_id)
+  .single();
+
+if (uploadFetchError || !uploadData) throw new Error('Upload não encontrado');
+const empresa_id = uploadData.empresa_id;
 ```
 
-**Reprocessamento:**
-- Invocar `classificar-meta` passando todos os IDs de lancamentos (nao so pendentes)
-- O motor reclassificara cada lancamento com a nova logica HIBRIDA
+E no objeto `lancamento`, incluir:
+
+```typescript
+const lancamento = {
+  upload_id,
+  empresa_id,  // <-- campo que estava faltando
+  produto: row['Produto'] || null,
+  // ... restante dos campos
+};
+```
+
+**Reimportação:**
+Após o deploy, chamar a função novamente com o `upload_id` e `arquivo_path` do upload que falhou para processar as 400 linhas pendentes.
 
 ### Arquivos modificados
-- Nenhum arquivo de codigo sera alterado
-- Apenas dados no banco: tabela `regras_meta` (UPDATE) + reprocessamento dos `lancamentos`
-
+- `supabase/functions/upload-importar-xls/index.ts` -- adicionar busca e inclusão do `empresa_id`
