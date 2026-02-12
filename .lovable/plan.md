@@ -1,53 +1,40 @@
 
 
-# Correção da Importação: empresa_id ausente nos lançamentos
+# Correcao do titulo do mes no Dashboard
 
 ## Problema
-O último upload de 400 linhas falhou completamente. Todas as linhas retornaram o erro:
-> "null value in column empresa_id of relation lancamentos violates not-null constraint"
-
-A função de importação monta o objeto do lançamento sem incluir o campo `empresa_id`, que é obrigatório na tabela.
-
-## Solução
-
-### 1. Corrigir a função de importação (`upload-importar-xls`)
-- No início do processamento, buscar o `empresa_id` a partir do registro do upload (`uploads` table) usando o `upload_id` recebido
-- Incluir o `empresa_id` em cada lançamento antes da inserção
-
-### 2. Reimportar os dados
-- Após o deploy da correção, disparar novamente a importação do último upload que falhou, para que as 400 linhas sejam processadas corretamente
-
-## Detalhes técnicos
-
-**Alteração na edge function `upload-importar-xls/index.ts`:**
-
-Adicionar, logo após o download do arquivo, a busca do `empresa_id`:
+Na linha 249 do `src/pages/Dashboard.tsx`, o titulo do mes e gerado assim:
 
 ```typescript
-// Buscar empresa_id do upload
-const { data: uploadData, error: uploadFetchError } = await supabase
-  .from('uploads')
-  .select('empresa_id')
-  .eq('id', upload_id)
-  .single();
-
-if (uploadFetchError || !uploadData) throw new Error('Upload não encontrado');
-const empresa_id = uploadData.empresa_id;
+format(new Date(mesSelecionado + '-01'), 'MMMM yyyy', { locale: ptBR })
 ```
 
-E no objeto `lancamento`, incluir:
+`new Date('2026-02-01')` interpreta a string como UTC meia-noite. No fuso horario do Brasil (UTC-3), isso vira 31 de janeiro as 21h, e o `format()` exibe "janeiro 2026" em vez de "fevereiro 2026".
+
+## Solucao
+Construir a data usando componentes numericos para evitar a interpretacao UTC:
 
 ```typescript
-const lancamento = {
-  upload_id,
-  empresa_id,  // <-- campo que estava faltando
-  produto: row['Produto'] || null,
-  // ... restante dos campos
-};
+const [ano, mes] = mesSelecionado.split('-').map(Number);
+// ...
+format(new Date(ano, mes - 1, 1), 'MMMM yyyy', { locale: ptBR })
 ```
 
-**Reimportação:**
-Após o deploy, chamar a função novamente com o `upload_id` e `arquivo_path` do upload que falhou para processar as 400 linhas pendentes.
+Isso cria a data no fuso local, eliminando o desvio de mes.
 
-### Arquivos modificados
-- `supabase/functions/upload-importar-xls/index.ts` -- adicionar busca e inclusão do `empresa_id`
+## Detalhes tecnicos
+
+**Arquivo:** `src/pages/Dashboard.tsx`
+
+**Alteracao na linha 249:**
+De:
+```typescript
+{format(new Date(mesSelecionado + '-01'), 'MMMM yyyy', { locale: ptBR })}
+```
+Para:
+```typescript
+{format(new Date(Number(mesSelecionado.split('-')[0]), Number(mesSelecionado.split('-')[1]) - 1, 1), 'MMMM yyyy', { locale: ptBR })}
+```
+
+Tambem sera feita uma revisao rapida no restante do arquivo para verificar se ha outros usos de `new Date('YYYY-MM-DD')` com o mesmo problema.
+
