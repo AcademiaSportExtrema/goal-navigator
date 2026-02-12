@@ -148,6 +148,46 @@ export default function Dashboard() {
     },
   });
 
+  // Total Vendido: entra_meta=true + data_inicio no mês selecionado
+  const { data: totalVendidoInicio } = useQuery({
+    queryKey: ['dashboard-vendido-inicio', mesSelecionado],
+    queryFn: async () => {
+      const [ano, mes] = mesSelecionado.split('-').map(Number);
+      const inicioMes = `${mesSelecionado}-01`;
+      const fimMes = new Date(ano, mes, 0).toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('lancamentos')
+        .select('valor')
+        .eq('entra_meta', true)
+        .gte('data_inicio', inicioMes)
+        .lte('data_inicio', fimMes);
+
+      if (error) throw error;
+      return (data || []).reduce((acc, l) => acc + (Number(l.valor) || 0), 0);
+    },
+  });
+
+  // Total Faturado: entra_meta=true + data_lancamento no mês selecionado
+  const { data: totalFaturado } = useQuery({
+    queryKey: ['dashboard-faturado', mesSelecionado],
+    queryFn: async () => {
+      const [ano, mes] = mesSelecionado.split('-').map(Number);
+      const inicioMes = `${mesSelecionado}-01`;
+      const fimMes = new Date(ano, mes, 0).toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('lancamentos')
+        .select('valor')
+        .eq('entra_meta', true)
+        .gte('data_lancamento', inicioMes)
+        .lte('data_lancamento', fimMes);
+
+      if (error) throw error;
+      return (data || []).reduce((acc, l) => acc + (Number(l.valor) || 0), 0);
+    },
+  });
+
   // === Cálculos de metas ===
   const dashboardData = useMemo(() => {
     if (!lancamentos || !metaMensal) return null;
@@ -261,7 +301,7 @@ export default function Dashboard() {
         </div>
 
         {/* Cards resumo rápido */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Vendido</CardTitle>
@@ -269,7 +309,20 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {formatCurrency(dashboardData?.totalVendido || 0)}
+                {formatCurrency(totalVendidoInicio || 0)}
+              </div>
+              <p className="text-xs text-muted-foreground">Vendas com início no mês</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Faturado</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {formatCurrency(totalFaturado || 0)}
               </div>
               {metaMensal ? (
                 <>
@@ -281,7 +334,7 @@ export default function Dashboard() {
                   <Progress value={Math.min(dashboardData?.percentualAtingido || 0, 100)} className="mt-2" />
                 </>
               ) : (
-                <p className="text-xs text-muted-foreground">Meta não configurada</p>
+                <p className="text-xs text-muted-foreground">Faturado no mês (por data lançamento)</p>
               )}
             </CardContent>
           </Card>
