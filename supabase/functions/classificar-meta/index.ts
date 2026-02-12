@@ -27,8 +27,8 @@ Deno.serve(async (req) => {
     } else if (mes_competencia) {
       query = query.eq('mes_competencia', mes_competencia);
     } else if (reprocessar_todos) {
-      // Processa todos os pendentes
-      query = query.eq('pendente_regra', true);
+      // Processa TODOS os lançamentos (não apenas pendentes)
+      // Não aplica filtro - processa tudo
     }
 
     const { data: lancamentos, error: fetchError } = await query;
