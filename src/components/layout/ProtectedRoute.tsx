@@ -45,12 +45,10 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
   }
 
   if (requiredRole && role !== requiredRole) {
-    if (!hasPermission(location.pathname)) {
-      if (role === 'consultora') {
-        return <Navigate to="/minha-performance" replace />;
-      }
-      return <Navigate to="/dashboard" replace />;
+    if (role === 'consultora') {
+      return <Navigate to="/minha-performance" replace />;
     }
+    return <Navigate to="/dashboard" replace />;
   }
 
   if (!hasPermission(location.pathname)) {
