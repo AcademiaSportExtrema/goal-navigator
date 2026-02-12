@@ -23,6 +23,16 @@ Deno.serve(async (req) => {
       throw new Error('upload_id e arquivo_path são obrigatórios');
     }
 
+    // Buscar empresa_id do upload
+    const { data: uploadData, error: uploadFetchError } = await supabase
+      .from('uploads')
+      .select('empresa_id')
+      .eq('id', upload_id)
+      .single();
+
+    if (uploadFetchError || !uploadData) throw new Error('Upload não encontrado');
+    const empresa_id = uploadData.empresa_id;
+
     // Atualizar status para importando
     await supabase.from('uploads').update({ status: 'importando' }).eq('id', upload_id);
 
@@ -83,6 +93,7 @@ Deno.serve(async (req) => {
 
         const lancamento = {
           upload_id,
+          empresa_id,
           produto: row['Produto'] || null,
           matricula: row['Matrícula'] || row['Matricula'] || null,
           nome_cliente: row['Nome'] || null,
