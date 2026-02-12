@@ -451,6 +451,8 @@ export type Database = {
           id: string
           justificativa: string
           lancamento_id: string
+          nome_cliente: string | null
+          numero_contrato: string | null
           resp_recebimento_atual: string | null
           resp_recebimento_novo: string
           status: Database["public"]["Enums"]["ajuste_status"]
@@ -465,6 +467,8 @@ export type Database = {
           id?: string
           justificativa: string
           lancamento_id: string
+          nome_cliente?: string | null
+          numero_contrato?: string | null
           resp_recebimento_atual?: string | null
           resp_recebimento_novo: string
           status?: Database["public"]["Enums"]["ajuste_status"]
@@ -479,6 +483,8 @@ export type Database = {
           id?: string
           justificativa?: string
           lancamento_id?: string
+          nome_cliente?: string | null
+          numero_contrato?: string | null
           resp_recebimento_atual?: string | null
           resp_recebimento_novo?: string
           status?: Database["public"]["Enums"]["ajuste_status"]
