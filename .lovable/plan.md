@@ -1,60 +1,60 @@
 
 
-# Corrigir exibição de Cliente e Contrato em "Minhas Solicitações"
+# Resolver problemas de segurança detectados
 
-## Problema
+## Problema 1: Emails de consultoras expostos (REAL)
 
-Quando uma consultora faz uma solicitação de ajuste, ela pede crédito de um lançamento que pertence a outra pessoa. A tabela `lancamentos` tem RLS que só permite consultoras verem lançamentos onde `consultora_chave` é o seu próprio nome. Por isso, o join na query de "Minhas Solicitações" retorna nulo para `nome_cliente` e `numero_contrato`.
+A tabela `consultoras` tem uma politica SELECT que permite qualquer usuario da mesma empresa ver TODAS as consultoras, incluindo emails. Uma consultora consegue ver os dados de todas as outras.
 
-## Solução
+### Solucao
 
-Salvar `numero_contrato` e `nome_cliente` diretamente na tabela `solicitacoes_ajuste` no momento da criação, eliminando a dependência do join com `lancamentos` (que o RLS bloqueia).
+Substituir a politica atual `Users view own empresa consultoras` por duas politicas mais restritivas:
 
-### 1. Migração: adicionar colunas à tabela `solicitacoes_ajuste`
+1. **Admins veem todas as consultoras da empresa** -- necessario para gestao
+2. **Consultoras veem apenas seu proprio registro** -- usando `get_user_consultora_id(auth.uid())`
 
 ```sql
-ALTER TABLE public.solicitacoes_ajuste 
-  ADD COLUMN numero_contrato text,
-  ADD COLUMN nome_cliente text;
+-- Remover politica atual
+DROP POLICY "Users view own empresa consultoras" ON public.consultoras;
+
+-- Admins veem todas da empresa
+CREATE POLICY "Admins view empresa consultoras"
+ON public.consultoras FOR SELECT
+USING (
+  has_role(auth.uid(), 'admin'::app_role)
+  AND empresa_id = get_user_empresa_id(auth.uid())
+);
+
+-- Consultoras veem apenas seu proprio registro
+CREATE POLICY "Consultoras view own record"
+ON public.consultoras FOR SELECT
+USING (
+  id = get_user_consultora_id(auth.uid())
+  AND empresa_id = get_user_empresa_id(auth.uid())
+);
 ```
 
-Essas colunas armazenam uma cópia dos dados do lançamento no momento da solicitação.
+### Impacto no codigo
 
-### 2. Atualizar o insert no `SolicitarAjuste.tsx`
+Paginas de admin (`Consultoras.tsx`, `Metas.tsx`, `ConfiguracaoMes.tsx`, `ConsultorasContent.tsx`) continuam funcionando porque admins mantem acesso total. Paginas de consultora (`MinhaPerformance.tsx`, `SolicitarAjuste.tsx`, `Gerencial.tsx`) ja filtram por `consultora_id`, entao continuam funcionando normalmente.
 
-No `submitMutation`, incluir os dois novos campos:
+## Problema 2: Dados de clientes em lancamentos (FALSO POSITIVO)
 
-```typescript
-await supabase.from('solicitacoes_ajuste').insert({
-  lancamento_id: selectedLancamento.id,
-  consultora_id: consultora.id,
-  resp_recebimento_atual: selectedLancamento.resp_recebimento || '',
-  resp_recebimento_novo: consultora.nome,
-  justificativa,
-  empresa_id: empresaId!,
-  numero_contrato: selectedLancamento.numero_contrato || null,  // NOVO
-  nome_cliente: selectedLancamento.nome_cliente || null,         // NOVO
-});
-```
+A politica RLS `Consultoras view own lancamentos` ja restringe o acesso por `consultora_chave`, garantindo que cada consultora so veja seus proprios lancamentos. O scanner identificou isso incorretamente como uma vulnerabilidade.
 
-### 3. Atualizar a exibição em "Minhas Solicitações"
+### Acao
 
-Na query, remover (ou manter como fallback) o join com `lancamentos` e usar os campos diretos:
+Marcar este finding como ignorado no sistema de seguranca, com justificativa de que o RLS ja protege adequadamente.
 
-```typescript
-// Antes:
-{sol.lancamentos?.numero_contrato || '-'}
-{sol.lancamentos?.nome_cliente || '-'}
+## Resumo
 
-// Depois:
-{sol.numero_contrato || sol.lancamentos?.numero_contrato || '-'}
-{sol.nome_cliente || sol.lancamentos?.nome_cliente || '-'}
-```
+| Problema | Acao |
+|----------|------|
+| Emails de consultoras expostos | Restringir politica RLS para consultoras verem apenas seu proprio registro |
+| Dados de clientes em lancamentos | Ignorar -- RLS ja protege corretamente |
 
-O fallback para `sol.lancamentos?.` garante que solicitações antigas (criadas antes da migração) ainda funcionem para admins que conseguem ver todos os lançamentos.
+### Arquivos e migracoes
 
-### Arquivo modificado
-- `src/pages/SolicitarAjuste.tsx` -- insert + exibição
+- **Migracao SQL**: substituir politica RLS da tabela `consultoras`
+- **Nenhum arquivo de codigo precisa ser alterado**
 
-### Migração
-- Adicionar colunas `numero_contrato` e `nome_cliente` em `solicitacoes_ajuste`
