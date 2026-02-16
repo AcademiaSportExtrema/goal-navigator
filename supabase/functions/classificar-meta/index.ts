@@ -17,18 +17,53 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
+    // Auth: verify JWT
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Token inválido' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Auth: verify admin or super_admin role
+    const { data: isAdmin } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'admin' });
+    const { data: isSuperAdmin } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'super_admin' });
+    if (!isAdmin && !isSuperAdmin) {
+      return new Response(JSON.stringify({ error: 'Apenas administradores podem reclassificar' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Get user's empresa_id for scoping
+    const { data: userEmpresaId } = await supabase.rpc('get_user_empresa_id', { _user_id: user.id });
+    if (!userEmpresaId && !isSuperAdmin) {
+      return new Response(JSON.stringify({ error: 'Empresa não encontrada' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const { reprocessar_todos, mes_competencia, lancamento_ids } = await req.json();
 
-    // Buscar lançamentos a processar
+    // Buscar lançamentos a processar (scoped by empresa)
     let query = supabase.from('lancamentos').select('*');
     
+    // Super admin can optionally skip empresa filter; admin always filtered
+    if (!isSuperAdmin && userEmpresaId) {
+      query = query.eq('empresa_id', userEmpresaId);
+    }
+
     if (lancamento_ids?.length) {
       query = query.in('id', lancamento_ids);
     } else if (mes_competencia) {
       query = query.eq('mes_competencia', mes_competencia);
     } else if (reprocessar_todos) {
-      // Processa TODOS os lançamentos (não apenas pendentes)
-      // Não aplica filtro - processa tudo
+      // Processa lançamentos (scoped by empresa filter above)
     }
 
     const { data: lancamentos, error: fetchError } = await query;
