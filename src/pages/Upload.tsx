@@ -79,7 +79,7 @@ export default function UploadPage() {
     try {
       // 1. Upload do arquivo para o Storage
       const fileName = `${Date.now()}_${selectedFile.name}`;
-      const filePath = `${user.id}/${fileName}`;
+      const filePath = `${empresaId}/${fileName}`;
 
       setUploadProgress(20);
 
