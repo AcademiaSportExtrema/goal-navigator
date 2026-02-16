@@ -3,7 +3,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 Deno.serve(async (req) => {
@@ -17,10 +17,27 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
+    // Authenticate the caller
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Token inválido' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const { upload_id, arquivo_path } = await req.json();
 
     if (!upload_id || !arquivo_path) {
-      throw new Error('upload_id e arquivo_path são obrigatórios');
+      return new Response(JSON.stringify({ error: 'upload_id e arquivo_path são obrigatórios' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // Buscar empresa_id do upload
@@ -30,7 +47,20 @@ Deno.serve(async (req) => {
       .eq('id', upload_id)
       .single();
 
-    if (uploadFetchError || !uploadData) throw new Error('Upload não encontrado');
+    if (uploadFetchError || !uploadData) {
+      return new Response(JSON.stringify({ error: 'Upload não encontrado' }), {
+        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Verify user belongs to the same empresa
+    const { data: userEmpresaId } = await supabase.rpc('get_user_empresa_id', { _user_id: user.id });
+    if (uploadData.empresa_id !== userEmpresaId) {
+      return new Response(JSON.stringify({ error: 'Acesso negado' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const empresa_id = uploadData.empresa_id;
 
     // Atualizar status para importando
