@@ -14,6 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Target, TrendingUp, DollarSign, Award, Calendar } from 'lucide-react';
+import { AiCoach } from '@/components/AiCoach';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
@@ -143,17 +144,20 @@ export default function MinhaPerformance() {
     <AppLayout title="Minha Performance">
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl font-bold">
-            {consultora?.nome?.charAt(0) || '?'}
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl font-bold">
+              {consultora?.nome?.charAt(0) || '?'}
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold">{consultora?.nome || 'Carregando...'}</h2>
+              <p className="text-muted-foreground flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                {format(new Date(), 'MMMM yyyy', { locale: ptBR })}
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-2xl font-bold">{consultora?.nome || 'Carregando...'}</h2>
-            <p className="text-muted-foreground flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              {format(new Date(), 'MMMM yyyy', { locale: ptBR })}
-            </p>
-          </div>
+          {consultoraId && <AiCoach consultoraId={consultoraId} />}
         </div>
 
         {!metaMensal ? (
