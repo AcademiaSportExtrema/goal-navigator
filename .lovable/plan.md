@@ -1,38 +1,90 @@
 
 
-# Grafico de Progresso por Consultora
+# AI Coach para Consultoras
 
-## O que sera feito
+## Conceito
 
-Substituir o grafico atual "Performance por Consultora" (que mostra apenas o valor vendido) por um **grafico de barras horizontais empilhadas** que mostra dois segmentos por consultora:
+Adicionar um botão "Pedir dica ao Coach" (ou um chat flutuante) na página **Minha Performance** que envia os dados reais da consultora para uma IA e retorna orientações personalizadas de como vender mais e atingir a meta.
 
-1. **Vendido** (em azul/verde) -- o quanto ja vendeu
-2. **Falta** (em vermelho claro) -- o quanto falta para atingir 100% da meta
+## Dados que a IA receberia como contexto
 
-Isso permite que cada consultora veja visualmente, de forma imediata, o tamanho da lacuna ate a meta.
+- Nome da consultora
+- Meta individual do mes (R$)
+- Total vendido ate agora (R$)
+- Percentual atingido (%)
+- Dias restantes no mes
+- Quantidade de vendas realizadas
+- Tipos de produtos/planos mais vendidos por ela
+- Ticket medio das vendas
+- Nivel de comissao atual e quanto falta para o proximo nivel
 
-Consultoras que ja atingiram a meta mostram a barra inteira em verde, sem segmento "Falta".
+## Tipos de orientacoes que a IA poderia dar
 
-## Visual esperado
+1. **Diagnostico de ritmo** -- "Voce vendeu R$13k em 18 dias. Para atingir R$40k, precisa vender R$1.588/dia nos proximos 17 dias."
+2. **Sugestao de foco em produto** -- "Seus planos anuais tem ticket medio 3x maior que mensais. Priorize oferecer anuais."
+3. **Estrategia de upsell** -- "Dos seus 12 contratos, 8 sao planos basicos. Tente converter 3 para premium e ganha +R$2.400."
+4. **Motivacao por nivel de comissao** -- "Voce esta no nivel 2 (3% comissao). Faltam R$4k para subir ao nivel 3 (5%) -- isso aumentaria sua comissao em R$800."
+5. **Acoes praticas** -- "Fale com os alunos que estao no periodo de experiencia esta semana. Eles sao os mais propensos a fechar."
+6. **Comparativo temporal** -- "No mes passado nesta mesma data voce estava com 45%. Este mes esta com 32%. Hora de acelerar!"
+
+## Implementacao tecnica
+
+### 1. Backend function: `supabase/functions/ai-coach/index.ts`
+
+- Recebe o `consultora_id` via POST
+- Busca todos os dados de performance da consultora no banco (vendas, meta, niveis)
+- Monta um prompt rico com o contexto numerico
+- Chama o Lovable AI Gateway (modelo `google/gemini-3-flash-preview`) com streaming
+- Retorna a resposta em SSE para renderizacao progressiva
+
+### 2. Frontend: novo componente `src/components/AiCoach.tsx`
+
+- Botao com icone de lampada/robo na pagina MinhaPerformance
+- Ao clicar, abre um dialog/sheet lateral
+- Mostra a resposta da IA com streaming (token a token)
+- Usa markdown para formatar a resposta (listas, negritos, etc.)
+- Botoes de acao rapida: "Como vender mais?", "Analise meu ritmo", "Dicas de abordagem"
+
+### 3. Alteracao: `src/pages/MinhaPerformance.tsx`
+
+- Adicionar o componente AiCoach na pagina
+- Passar os dados de metricas ja calculados como props
+
+### 4. Configuracao
+
+- Atualizar `supabase/config.toml` para incluir a nova function
+- A function usa `LOVABLE_API_KEY` que ja esta configurada -- nenhuma chave adicional necessaria
+
+### Dependencia adicional
+
+- Instalar `react-markdown` para renderizar a resposta formatada da IA
+
+## Experiencia do usuario
 
 ```text
-NICOLE         [========Vendido 21k========|===Falta 19k===] R$40k
-LIVIA          [=======Vendido 20k========|====Falta 20k===] R$40k
-KETLYN         [======Vendido 17k======|======Falta 23k=====] R$40k
-NATHALIA       [====Vendido 13k====|=========Falta 27k======] R$40k
-GIULIA         [==Vendido 7.9k==|===========Falta 32k=======] R$40k
-RECORRENCIA    [===Vendido 4.7k===]  (sem meta, sem "Falta")
+[Pagina Minha Performance]
+
+  Cards: Meta | Vendido | % Atingido | Comissao
+  
+  [Botao: "Pedir dica ao Coach IA"]
+  
+  --> Abre painel lateral:
+  
+  +------------------------------------------+
+  |  Coach IA                            [X] |
+  |                                          |
+  |  Perguntas rapidas:                      |
+  |  [Como vender mais?] [Analise meu ritmo] |
+  |  [Dicas de abordagem]                    |
+  |                                          |
+  |  Ola Nicole! Aqui vai minha analise:     |
+  |                                          |
+  |  Voce vendeu R$21.430 de R$40.000        |
+  |  (53.6%). Faltam R$18.570 em 12 dias.    |
+  |                                          |
+  |  **Acoes recomendadas:**                 |
+  |  1. Foque nos planos anuais...           |
+  |  2. Faltam R$3k pro nivel 3...           |
+  |  3. Retome contato com leads...          |
+  +------------------------------------------+
 ```
-
-## Detalhes tecnicos
-
-### Arquivo alterado: `src/pages/Dashboard.tsx`
-
-- Atualizar o `chartData` para incluir os campos `vendido`, `falta` e `meta` (alem do `name` e `percentual` que ja existem)
-- Substituir o `<BarChart>` atual por um grafico empilhado com duas `<Bar>`:
-  - `dataKey="vendido"` -- cor verde para atingidas, azul para em progresso
-  - `dataKey="falta"` -- cor vermelha clara (somente aparece quando falta > 0)
-- Tooltip customizado mostrando: Vendido, Falta e % de atingimento
-- Manter layout vertical (barras horizontais) e o titulo do card como "Progresso da Meta por Consultora"
-
-Nenhuma outra pagina ou arquivo sera alterado. A tabela "Detalhamento por Consultora" permanece inalterada abaixo do grafico.
