@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useSalesMetrics } from '@/hooks/useSalesMetrics';
 import { RevenueTrendChart } from '@/components/dashboard/RevenueTrendChart';
 import { RevenueByPaymentChart } from '@/components/dashboard/RevenueByPaymentChart';
-import { TopProductsChart } from '@/components/dashboard/TopProductsChart';
+import { PlanSalesTable } from '@/components/dashboard/PlanSalesTable';
 import { CategoryShareChart } from '@/components/dashboard/CategoryShareChart';
 import { TicketHistogram } from '@/components/dashboard/TicketHistogram';
 import { useQuery } from '@tanstack/react-query';
@@ -570,7 +570,7 @@ export default function Dashboard() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <TopProductsChart data={salesMetrics.topProducts} />
+              <PlanSalesTable data={salesMetrics.salesByPlan} />
               <CategoryShareChart data={salesMetrics.salesByPlan} />
             </div>
 
