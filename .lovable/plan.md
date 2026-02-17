@@ -1,90 +1,31 @@
 
+# Coach IA no Dashboard para Admins
 
-# AI Coach para Consultoras
+## O que sera feito
 
-## Conceito
+Adicionar um botao "Coach IA" na tabela "Detalhamento por Consultora" do Dashboard, permitindo que o admin selecione qualquer consultora e veja as mesmas orientacoes personalizadas que ela veria.
 
-Adicionar um botão "Pedir dica ao Coach" (ou um chat flutuante) na página **Minha Performance** que envia os dados reais da consultora para uma IA e retorna orientações personalizadas de como vender mais e atingir a meta.
+## Como vai funcionar
 
-## Dados que a IA receberia como contexto
+1. Na tabela de detalhamento, cada linha de consultora tera um botao/icone de lampada clicavel
+2. Ao clicar, abre o mesmo painel lateral (Sheet) do Coach IA, mas passando o ID da consultora selecionada
+3. A IA analisa os dados daquela consultora especifica e retorna orientacoes personalizadas
 
-- Nome da consultora
-- Meta individual do mes (R$)
-- Total vendido ate agora (R$)
-- Percentual atingido (%)
-- Dias restantes no mes
-- Quantidade de vendas realizadas
-- Tipos de produtos/planos mais vendidos por ela
-- Ticket medio das vendas
-- Nivel de comissao atual e quanto falta para o proximo nivel
+## Detalhes tecnicos
 
-## Tipos de orientacoes que a IA poderia dar
+### Arquivo alterado: `src/pages/Dashboard.tsx`
 
-1. **Diagnostico de ritmo** -- "Voce vendeu R$13k em 18 dias. Para atingir R$40k, precisa vender R$1.588/dia nos proximos 17 dias."
-2. **Sugestao de foco em produto** -- "Seus planos anuais tem ticket medio 3x maior que mensais. Priorize oferecer anuais."
-3. **Estrategia de upsell** -- "Dos seus 12 contratos, 8 sao planos basicos. Tente converter 3 para premium e ganha +R$2.400."
-4. **Motivacao por nivel de comissao** -- "Voce esta no nivel 2 (3% comissao). Faltam R$4k para subir ao nivel 3 (5%) -- isso aumentaria sua comissao em R$800."
-5. **Acoes praticas** -- "Fale com os alunos que estao no periodo de experiencia esta semana. Eles sao os mais propensos a fechar."
-6. **Comparativo temporal** -- "No mes passado nesta mesma data voce estava com 45%. Este mes esta com 32%. Hora de acelerar!"
+- Importar o componente `AiCoach` ja existente
+- Adicionar o `consultora_id` aos dados calculados em `consultoraDados`, buscando o ID do registro em `metasConsultoras` (que ja faz join com a tabela `consultoras`)
+- Adicionar uma coluna "Coach" na tabela de detalhamento
+- Cada linha tera um botao com icone de lampada que, ao clicar, abre o `AiCoach` com o `consultoraId` correspondente
+- Usar estado local (`selectedConsultoraId`) para controlar qual consultora esta selecionada
 
-## Implementacao tecnica
+### Componente `AiCoach` -- ajuste menor
 
-### 1. Backend function: `supabase/functions/ai-coach/index.ts`
+- Tornar o componente controlavel externamente: aceitar props `open` e `onOpenChange` opcionais, para que o Dashboard possa abrir/fechar o painel sem depender do SheetTrigger interno
+- Quando essas props nao forem passadas, manter o comportamento atual (botao interno)
 
-- Recebe o `consultora_id` via POST
-- Busca todos os dados de performance da consultora no banco (vendas, meta, niveis)
-- Monta um prompt rico com o contexto numerico
-- Chama o Lovable AI Gateway (modelo `google/gemini-3-flash-preview`) com streaming
-- Retorna a resposta em SSE para renderizacao progressiva
+### Nenhuma alteracao no backend
 
-### 2. Frontend: novo componente `src/components/AiCoach.tsx`
-
-- Botao com icone de lampada/robo na pagina MinhaPerformance
-- Ao clicar, abre um dialog/sheet lateral
-- Mostra a resposta da IA com streaming (token a token)
-- Usa markdown para formatar a resposta (listas, negritos, etc.)
-- Botoes de acao rapida: "Como vender mais?", "Analise meu ritmo", "Dicas de abordagem"
-
-### 3. Alteracao: `src/pages/MinhaPerformance.tsx`
-
-- Adicionar o componente AiCoach na pagina
-- Passar os dados de metricas ja calculados como props
-
-### 4. Configuracao
-
-- Atualizar `supabase/config.toml` para incluir a nova function
-- A function usa `LOVABLE_API_KEY` que ja esta configurada -- nenhuma chave adicional necessaria
-
-### Dependencia adicional
-
-- Instalar `react-markdown` para renderizar a resposta formatada da IA
-
-## Experiencia do usuario
-
-```text
-[Pagina Minha Performance]
-
-  Cards: Meta | Vendido | % Atingido | Comissao
-  
-  [Botao: "Pedir dica ao Coach IA"]
-  
-  --> Abre painel lateral:
-  
-  +------------------------------------------+
-  |  Coach IA                            [X] |
-  |                                          |
-  |  Perguntas rapidas:                      |
-  |  [Como vender mais?] [Analise meu ritmo] |
-  |  [Dicas de abordagem]                    |
-  |                                          |
-  |  Ola Nicole! Aqui vai minha analise:     |
-  |                                          |
-  |  Voce vendeu R$21.430 de R$40.000        |
-  |  (53.6%). Faltam R$18.570 em 12 dias.    |
-  |                                          |
-  |  **Acoes recomendadas:**                 |
-  |  1. Foque nos planos anuais...           |
-  |  2. Faltam R$3k pro nivel 3...           |
-  |  3. Retome contato com leads...          |
-  +------------------------------------------+
-```
+A edge function `ai-coach` ja aceita qualquer `consultora_id` e busca os dados no banco. Como o admin tem acesso RLS a todos os dados da empresa, a funcao ja funciona corretamente para este caso.
