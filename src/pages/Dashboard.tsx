@@ -264,14 +264,28 @@ export default function Dashboard() {
 
   const chartData = dashboardData?.consultoras.slice(0, 10).map(c => ({
     name: c.nome.length > 15 ? c.nome.substring(0, 15) + '...' : c.nome,
-    valor: c.vendido,
+    vendido: c.vendido,
+    falta: c.falta,
+    meta: c.meta,
     percentual: c.percentual,
   })) || [];
 
-  const getBarColor = (percentual: number) => {
+  const getVendidoColor = (percentual: number) => {
     if (percentual >= 100) return 'hsl(var(--success))';
-    if (percentual >= 80) return 'hsl(var(--warning))';
     return 'hsl(var(--chart-1))';
+  };
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const data = payload[0]?.payload;
+    return (
+      <div className="rounded-lg border bg-background p-3 shadow-md text-sm space-y-1">
+        <p className="font-semibold">{label}</p>
+        <p>Vendido: {formatCurrency(data.vendido)}</p>
+        {data.meta > 0 && <p className="text-destructive">Falta: {formatCurrency(data.falta)}</p>}
+        {data.meta > 0 && <p className="text-muted-foreground">Meta: {formatCurrency(data.meta)} ({data.percentual.toFixed(1)}%)</p>}
+      </div>
+    );
   };
 
   const formatCurrency = (value: number) =>
@@ -439,23 +453,22 @@ export default function Dashboard() {
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Performance por Consultora</CardTitle>
+                <CardTitle>Progresso da Meta por Consultora</CardTitle>
               </CardHeader>
               <CardContent>
                 {chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={chartData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" />
+                  <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 45)}>
+                    <BarChart data={chartData} layout="vertical" stackOffset="none">
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                       <XAxis type="number" tickFormatter={(v) => `R$ ${(v/1000).toFixed(0)}k`} />
-                      <YAxis type="category" dataKey="name" width={100} />
-                      <Tooltip 
-                        formatter={(value: number) => [formatCurrency(value), 'Vendido']}
-                      />
-                      <Bar dataKey="valor" radius={[0, 4, 4, 0]}>
+                      <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12 }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="vendido" stackId="a" name="Vendido" radius={[0, 0, 0, 0]}>
                         {chartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={getBarColor(entry.percentual)} />
+                          <Cell key={`vendido-${index}`} fill={getVendidoColor(entry.percentual)} />
                         ))}
                       </Bar>
+                      <Bar dataKey="falta" stackId="a" name="Falta" fill="hsl(var(--destructive) / 0.3)" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
