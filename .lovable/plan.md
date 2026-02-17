@@ -1,33 +1,38 @@
 
 
-# Substituir Top 10 Produtos por Tabela de Planos Vendidos
+# Visao da Consultora para Admins
 
 ## O que sera feito
 
-- Remover o grafico "Top 10 Produtos" (barras horizontais)
-- Criar no lugar uma tabela mostrando a quantidade de cada plano vendido, com receita e percentual
+Criar uma nova pagina "/visao-consultora" acessivel pelo menu lateral (somente para admins), onde o administrador seleciona uma consultora e visualiza exatamente a mesma tela "Minha Performance" que ela veria, incluindo cards de meta, nivel de comissao, tabela de vendas e Coach IA.
 
-## Alteracoes
+## Como vai funcionar
 
-### 1. Hook `src/hooks/useSalesMetrics.ts`
+1. No menu lateral, na secao "Operacional", sera adicionado um item "Visao Consultora" com icone de olho (Eye)
+2. A pagina exibe um seletor (dropdown) com todas as consultoras da empresa
+3. Ao selecionar uma consultora, renderiza os mesmos dados da pagina "Minha Performance" para aquela consultora
+4. O admin pode trocar de consultora a qualquer momento sem sair da pagina
 
-- Adicionar campo `pedidos` (quantidade) na interface `SalesByPlan` e no calculo da secao D
-- O `planMap` passara a acumular tambem a contagem de lancamentos por plano
+## Detalhes tecnicos
 
-### 2. Novo componente: `src/components/dashboard/PlanSalesTable.tsx`
+### 1. Nova pagina: `src/pages/VisaoConsultora.tsx`
 
-- Tabela estilizada com as colunas: Plano, Qtd Vendida, Receita, % Participacao
-- Ordenada por receita (maior primeiro)
-- Usa os componentes `Card`, `Table` ja existentes no projeto
-- Linha de total no rodape
+- Rota protegida com `requiredRole="admin"`
+- Busca todas as consultoras da empresa via `supabase.from('consultoras').select('id, nome').eq('empresa_id', empresaId)`
+- Dropdown (Select) para escolher a consultora
+- Reutiliza a mesma logica de calculo da pagina `MinhaPerformance`: busca meta mensal, meta individual, lancamentos filtrados por `consultora_chave`, niveis de comissao
+- Renderiza os mesmos cards (Meta, Vendido, % Atingido, Comissao), niveis de comissao e tabela de vendas
+- Inclui o componente AiCoach com o `consultoraId` selecionado
 
-### 3. Dashboard `src/pages/Dashboard.tsx`
+### 2. Alteracao: `src/components/layout/AppSidebar.tsx`
 
-- Remover import e uso do `TopProductsChart`
-- Importar e usar `PlanSalesTable` no mesmo lugar (grid 1/2 ao lado do donut "Mix por Plano")
+- Adicionar item "Visao Consultora" na secao "Operacional" com icone `Eye` e href `/visao-consultora`
 
-### 4. Limpeza
+### 3. Alteracao: `src/App.tsx`
 
-- O arquivo `src/components/dashboard/TopProductsChart.tsx` pode ser removido (nao sera mais usado)
-- A interface `TopProduct` e o calculo `topProducts` no hook podem ser removidos tambem
+- Adicionar rota `/visao-consultora` com `ProtectedRoute requiredRole="admin"`
+
+### Nenhuma alteracao no backend
+
+Os dados ja existem e o admin ja tem acesso RLS a todas as consultoras e lancamentos da empresa.
 
