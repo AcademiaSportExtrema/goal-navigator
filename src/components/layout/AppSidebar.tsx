@@ -16,6 +16,7 @@ import {
   PlusCircle,
   DollarSign,
   Plug,
+  Eye,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -48,6 +49,7 @@ const adminMenuGroups = [
       { title: 'Gerencial', icon: FileText, href: '/gerencial' },
       { title: 'Pendências', icon: AlertCircle, href: '/pendencias' },
       { title: 'Ajustes', icon: GitPullRequest, href: '/ajustes' },
+      { title: 'Visão Consultora', icon: Eye, href: '/visao-consultora' },
     ],
   },
   {
