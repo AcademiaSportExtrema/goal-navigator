@@ -1,60 +1,38 @@
 
 
-# Resolver problemas de segurança detectados
+# Grafico de Progresso por Consultora
 
-## Problema 1: Emails de consultoras expostos (REAL)
+## O que sera feito
 
-A tabela `consultoras` tem uma politica SELECT que permite qualquer usuario da mesma empresa ver TODAS as consultoras, incluindo emails. Uma consultora consegue ver os dados de todas as outras.
+Substituir o grafico atual "Performance por Consultora" (que mostra apenas o valor vendido) por um **grafico de barras horizontais empilhadas** que mostra dois segmentos por consultora:
 
-### Solucao
+1. **Vendido** (em azul/verde) -- o quanto ja vendeu
+2. **Falta** (em vermelho claro) -- o quanto falta para atingir 100% da meta
 
-Substituir a politica atual `Users view own empresa consultoras` por duas politicas mais restritivas:
+Isso permite que cada consultora veja visualmente, de forma imediata, o tamanho da lacuna ate a meta.
 
-1. **Admins veem todas as consultoras da empresa** -- necessario para gestao
-2. **Consultoras veem apenas seu proprio registro** -- usando `get_user_consultora_id(auth.uid())`
+Consultoras que ja atingiram a meta mostram a barra inteira em verde, sem segmento "Falta".
 
-```sql
--- Remover politica atual
-DROP POLICY "Users view own empresa consultoras" ON public.consultoras;
+## Visual esperado
 
--- Admins veem todas da empresa
-CREATE POLICY "Admins view empresa consultoras"
-ON public.consultoras FOR SELECT
-USING (
-  has_role(auth.uid(), 'admin'::app_role)
-  AND empresa_id = get_user_empresa_id(auth.uid())
-);
-
--- Consultoras veem apenas seu proprio registro
-CREATE POLICY "Consultoras view own record"
-ON public.consultoras FOR SELECT
-USING (
-  id = get_user_consultora_id(auth.uid())
-  AND empresa_id = get_user_empresa_id(auth.uid())
-);
+```text
+NICOLE         [========Vendido 21k========|===Falta 19k===] R$40k
+LIVIA          [=======Vendido 20k========|====Falta 20k===] R$40k
+KETLYN         [======Vendido 17k======|======Falta 23k=====] R$40k
+NATHALIA       [====Vendido 13k====|=========Falta 27k======] R$40k
+GIULIA         [==Vendido 7.9k==|===========Falta 32k=======] R$40k
+RECORRENCIA    [===Vendido 4.7k===]  (sem meta, sem "Falta")
 ```
 
-### Impacto no codigo
+## Detalhes tecnicos
 
-Paginas de admin (`Consultoras.tsx`, `Metas.tsx`, `ConfiguracaoMes.tsx`, `ConsultorasContent.tsx`) continuam funcionando porque admins mantem acesso total. Paginas de consultora (`MinhaPerformance.tsx`, `SolicitarAjuste.tsx`, `Gerencial.tsx`) ja filtram por `consultora_id`, entao continuam funcionando normalmente.
+### Arquivo alterado: `src/pages/Dashboard.tsx`
 
-## Problema 2: Dados de clientes em lancamentos (FALSO POSITIVO)
+- Atualizar o `chartData` para incluir os campos `vendido`, `falta` e `meta` (alem do `name` e `percentual` que ja existem)
+- Substituir o `<BarChart>` atual por um grafico empilhado com duas `<Bar>`:
+  - `dataKey="vendido"` -- cor verde para atingidas, azul para em progresso
+  - `dataKey="falta"` -- cor vermelha clara (somente aparece quando falta > 0)
+- Tooltip customizado mostrando: Vendido, Falta e % de atingimento
+- Manter layout vertical (barras horizontais) e o titulo do card como "Progresso da Meta por Consultora"
 
-A politica RLS `Consultoras view own lancamentos` ja restringe o acesso por `consultora_chave`, garantindo que cada consultora so veja seus proprios lancamentos. O scanner identificou isso incorretamente como uma vulnerabilidade.
-
-### Acao
-
-Marcar este finding como ignorado no sistema de seguranca, com justificativa de que o RLS ja protege adequadamente.
-
-## Resumo
-
-| Problema | Acao |
-|----------|------|
-| Emails de consultoras expostos | Restringir politica RLS para consultoras verem apenas seu proprio registro |
-| Dados de clientes em lancamentos | Ignorar -- RLS ja protege corretamente |
-
-### Arquivos e migracoes
-
-- **Migracao SQL**: substituir politica RLS da tabela `consultoras`
-- **Nenhum arquivo de codigo precisa ser alterado**
-
+Nenhuma outra pagina ou arquivo sera alterado. A tabela "Detalhamento por Consultora" permanece inalterada abaixo do grafico.
