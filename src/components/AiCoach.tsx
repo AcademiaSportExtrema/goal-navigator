@@ -7,6 +7,8 @@ import { toast } from 'sonner';
 
 interface AiCoachProps {
   consultoraId: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const QUICK_QUESTIONS = [
@@ -15,11 +17,23 @@ const QUICK_QUESTIONS = [
   { label: 'Dicas de abordagem', icon: MessageCircle, pergunta: 'Me dê dicas de abordagem comercial para fechar mais vendas na academia, considerando os produtos que mais vendo.' },
 ];
 
-export function AiCoach({ consultoraId }: AiCoachProps) {
-  const [open, setOpen] = useState(false);
+export function AiCoach({ consultoraId, open: controlledOpen, onOpenChange: controlledOnOpenChange }: AiCoachProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
+
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled ? controlledOnOpenChange! : setInternalOpen;
+
+  // Reset response when opening with a new consultora
+  useEffect(() => {
+    if (open) {
+      setResponse('');
+      setLoading(false);
+    }
+  }, [open, consultoraId]);
 
   useEffect(() => {
     if (contentRef.current) {
@@ -117,6 +131,65 @@ export function AiCoach({ consultoraId }: AiCoachProps) {
     }
   };
 
+  const sheetContent = (
+    <SheetContent className="w-full sm:max-w-lg flex flex-col">
+      <SheetHeader>
+        <SheetTitle className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-primary" />
+          Coach IA
+        </SheetTitle>
+      </SheetHeader>
+
+      <div className="flex flex-wrap gap-2 mt-4">
+        {QUICK_QUESTIONS.map((q) => (
+          <Button
+            key={q.label}
+            variant="outline"
+            size="sm"
+            disabled={loading}
+            onClick={() => askCoach(q.pergunta)}
+            className="gap-1.5"
+          >
+            <q.icon className="h-3.5 w-3.5" />
+            {q.label}
+          </Button>
+        ))}
+      </div>
+
+      <div
+        ref={contentRef}
+        className="flex-1 mt-4 overflow-y-auto rounded-lg border bg-muted/30 p-4"
+      >
+        {loading && !response && (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Analisando seus dados...
+          </div>
+        )}
+
+        {response ? (
+          <div className="prose prose-sm dark:prose-invert max-w-none">
+            <ReactMarkdown>{response}</ReactMarkdown>
+            {loading && <Loader2 className="h-4 w-4 animate-spin inline-block ml-1" />}
+          </div>
+        ) : !loading ? (
+          <p className="text-muted-foreground text-sm text-center py-8">
+            Clique em uma das perguntas acima para receber orientações personalizadas do Coach IA baseadas nos seus dados reais de vendas.
+          </p>
+        ) : null}
+      </div>
+    </SheetContent>
+  );
+
+  // When externally controlled, don't render a trigger button
+  if (isControlled) {
+    return (
+      <Sheet open={open} onOpenChange={setOpen}>
+        {sheetContent}
+      </Sheet>
+    );
+  }
+
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
@@ -125,53 +198,7 @@ export function AiCoach({ consultoraId }: AiCoachProps) {
           Pedir dica ao Coach IA
         </Button>
       </SheetTrigger>
-      <SheetContent className="w-full sm:max-w-lg flex flex-col">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            Coach IA
-          </SheetTitle>
-        </SheetHeader>
-
-        <div className="flex flex-wrap gap-2 mt-4">
-          {QUICK_QUESTIONS.map((q) => (
-            <Button
-              key={q.label}
-              variant="outline"
-              size="sm"
-              disabled={loading}
-              onClick={() => askCoach(q.pergunta)}
-              className="gap-1.5"
-            >
-              <q.icon className="h-3.5 w-3.5" />
-              {q.label}
-            </Button>
-          ))}
-        </div>
-
-        <div
-          ref={contentRef}
-          className="flex-1 mt-4 overflow-y-auto rounded-lg border bg-muted/30 p-4"
-        >
-          {loading && !response && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Analisando seus dados...
-            </div>
-          )}
-
-          {response ? (
-            <div className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown>{response}</ReactMarkdown>
-              {loading && <Loader2 className="h-4 w-4 animate-spin inline-block ml-1" />}
-            </div>
-          ) : !loading ? (
-            <p className="text-muted-foreground text-sm text-center py-8">
-              Clique em uma das perguntas acima para receber orientações personalizadas do Coach IA baseadas nos seus dados reais de vendas.
-            </p>
-          ) : null}
-        </div>
-      </SheetContent>
+      {sheetContent}
     </Sheet>
   );
 }

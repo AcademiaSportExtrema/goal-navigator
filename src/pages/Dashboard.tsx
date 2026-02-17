@@ -19,6 +19,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
+import { AiCoach } from '@/components/AiCoach';
 import { 
   Upload, 
   FileText, 
@@ -28,6 +30,7 @@ import {
   Users,
   Award,
   DollarSign,
+  Lightbulb,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format, subMonths, addMonths } from 'date-fns';
@@ -37,6 +40,8 @@ import type { Lancamento, MetaMensal, MetaConsultora, ComissaoNivel, Consultora 
 
 export default function Dashboard() {
   const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
+  const [selectedConsultoraId, setSelectedConsultoraId] = useState<string | null>(null);
+  const [coachOpen, setCoachOpen] = useState(false);
 
   // Gerar lista de meses
   const meses = Array.from({ length: 12 }, (_, i) => {
@@ -250,6 +255,7 @@ export default function Dashboard() {
         nivel: nivelConsultora,
         comissao: c.valor * comissaoPercentConsultora,
         falta,
+        consultoraId: metaConsultora?.consultora_id || null,
       };
     }).sort((a, b) => b.vendido - a.vendido);
 
@@ -494,6 +500,7 @@ export default function Dashboard() {
                       <TableHead className="text-right">Falta</TableHead>
                       <TableHead className="text-right">Nível</TableHead>
                       <TableHead className="text-right">Comissão</TableHead>
+                      <TableHead className="text-center w-12">Coach</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -518,6 +525,22 @@ export default function Dashboard() {
                         <TableCell className="text-right">{c.nivel}</TableCell>
                         <TableCell className="text-right text-success">
                           {formatCurrencyCompact(c.comissao)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {c.consultoraId && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              title="Coach IA"
+                              onClick={() => {
+                                setSelectedConsultoraId(c.consultoraId!);
+                                setCoachOpen(true);
+                              }}
+                            >
+                              <Lightbulb className="h-4 w-4 text-primary" />
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -633,6 +656,14 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {selectedConsultoraId && (
+        <AiCoach
+          consultoraId={selectedConsultoraId}
+          open={coachOpen}
+          onOpenChange={setCoachOpen}
+        />
+      )}
     </AppLayout>
   );
 }
