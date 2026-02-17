@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.save-integration-key]
 verify_jwt = false
+
+[functions.ai-coach]
+verify_jwt = false
