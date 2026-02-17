@@ -15,15 +15,10 @@ export interface RevenueByPayment {
   pedidos: number;
 }
 
-export interface TopProduct {
-  produto: string;
-  receita: number;
-  qtd: number;
-}
-
 export interface SalesByPlan {
   plano: string;
   receita: number;
+  pedidos: number;
   percentual: number;
 }
 
@@ -35,7 +30,6 @@ export interface TicketBin {
 export interface SalesMetrics {
   revenueByDay: RevenueByDay[];
   revenueByPayment: RevenueByPayment[];
-  topProducts: TopProduct[];
   salesByPlan: SalesByPlan[];
   ticketDistribution: TicketBin[];
   ticketMedioGlobal: number;
@@ -46,7 +40,6 @@ export function useSalesMetrics(lancamentos: Lancamento[] | undefined): SalesMet
     const empty: SalesMetrics = {
       revenueByDay: [],
       revenueByPayment: [],
-      topProducts: [],
       salesByPlan: [],
       ticketDistribution: [],
       ticketMedioGlobal: 0,
@@ -92,58 +85,47 @@ export function useSalesMetrics(lancamentos: Lancamento[] | undefined): SalesMet
       .map(([forma, v]) => ({ forma, ...v }))
       .sort((a, b) => b.receita - a.receita);
 
-    // C) Top 10 products
-    const prodMap = new Map<string, { receita: number; qtd: number }>();
-    for (const l of lancamentos) {
-      const produto = l.produto || 'Não informado';
-      const entry = prodMap.get(produto) || { receita: 0, qtd: 0 };
-      entry.receita += Number(l.valor) || 0;
-      entry.qtd += 1;
-      prodMap.set(produto, entry);
-    }
-    const topProducts: TopProduct[] = Array.from(prodMap.entries())
-      .map(([produto, v]) => ({ produto, ...v }))
-      .sort((a, b) => b.receita - a.receita)
-      .slice(0, 10);
-
-    // D) Sales by plan (donut)
-    const planMap = new Map<string, number>();
+    // C) Sales by plan
+    const planMap = new Map<string, { receita: number; pedidos: number }>();
     let totalReceita = 0;
     for (const l of lancamentos) {
       const plano = l.plano || 'Não informado';
-      planMap.set(plano, (planMap.get(plano) || 0) + (Number(l.valor) || 0));
+      const entry = planMap.get(plano) || { receita: 0, pedidos: 0 };
+      entry.receita += Number(l.valor) || 0;
+      entry.pedidos += 1;
+      planMap.set(plano, entry);
       totalReceita += Number(l.valor) || 0;
     }
     let planEntries = Array.from(planMap.entries())
-      .map(([plano, receita]) => ({ plano, receita }))
+      .map(([plano, v]) => ({ plano, ...v }))
       .sort((a, b) => b.receita - a.receita);
 
-    // Group smaller into "Outros" if > 6
     let salesByPlan: SalesByPlan[];
     if (planEntries.length > 6) {
       const top5 = planEntries.slice(0, 5);
-      const outrosReceita = planEntries.slice(5).reduce((s, e) => s + e.receita, 0);
+      const outros = planEntries.slice(5);
+      const outrosReceita = outros.reduce((s, e) => s + e.receita, 0);
+      const outrosPedidos = outros.reduce((s, e) => s + e.pedidos, 0);
       salesByPlan = [
         ...top5.map(e => ({
-          plano: e.plano,
-          receita: e.receita,
+          ...e,
           percentual: totalReceita > 0 ? (e.receita / totalReceita) * 100 : 0,
         })),
         {
           plano: 'Outros',
           receita: outrosReceita,
+          pedidos: outrosPedidos,
           percentual: totalReceita > 0 ? (outrosReceita / totalReceita) * 100 : 0,
         },
       ];
     } else {
       salesByPlan = planEntries.map(e => ({
-        plano: e.plano,
-        receita: e.receita,
+        ...e,
         percentual: totalReceita > 0 ? (e.receita / totalReceita) * 100 : 0,
       }));
     }
 
-    // E) Ticket distribution
+    // D) Ticket distribution
     const bins = [
       { faixa: 'R$0-100', min: 0, max: 100 },
       { faixa: 'R$100-300', min: 100, max: 300 },
@@ -167,7 +149,6 @@ export function useSalesMetrics(lancamentos: Lancamento[] | undefined): SalesMet
     return {
       revenueByDay,
       revenueByPayment,
-      topProducts,
       salesByPlan,
       ticketDistribution: ticketCounts,
       ticketMedioGlobal,
