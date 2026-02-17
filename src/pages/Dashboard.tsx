@@ -1,4 +1,10 @@
 import { useState, useMemo } from 'react';
+import { useSalesMetrics } from '@/hooks/useSalesMetrics';
+import { RevenueTrendChart } from '@/components/dashboard/RevenueTrendChart';
+import { RevenueByPaymentChart } from '@/components/dashboard/RevenueByPaymentChart';
+import { TopProductsChart } from '@/components/dashboard/TopProductsChart';
+import { CategoryShareChart } from '@/components/dashboard/CategoryShareChart';
+import { TicketHistogram } from '@/components/dashboard/TicketHistogram';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -276,6 +282,8 @@ export default function Dashboard() {
     percentual: c.percentual,
   })) || [];
 
+  const salesMetrics = useSalesMetrics(lancamentos);
+
   const getVendidoColor = (percentual: number) => {
     if (percentual >= 100) return 'hsl(var(--success))';
     return 'hsl(var(--chart-1))';
@@ -549,6 +557,28 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* Gráficos de Performance */}
+        {lancamentos && lancamentos.length > 0 && (
+          <>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <RevenueTrendChart data={salesMetrics.revenueByDay} />
+              </div>
+              <RevenueByPaymentChart data={salesMetrics.revenueByPayment} />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <TopProductsChart data={salesMetrics.topProducts} />
+              <CategoryShareChart data={salesMetrics.salesByPlan} />
+            </div>
+
+            <TicketHistogram
+              data={salesMetrics.ticketDistribution}
+              ticketMedio={salesMetrics.ticketMedioGlobal}
+            />
+          </>
         )}
 
         {/* Últimos uploads + Equipe */}
