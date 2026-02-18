@@ -1,0 +1,393 @@
+import { useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  ArrowLeft,
+  Building,
+  Users,
+  FileText,
+  Upload,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Shield,
+} from 'lucide-react';
+import { toast } from 'sonner';
+
+interface EmpresaDetails {
+  empresa: {
+    id: string;
+    nome: string;
+    slug: string;
+    ativo: boolean;
+    subscription_status: string;
+    trial_ends_at: string | null;
+    created_at: string;
+    updated_at: string;
+  };
+  users: {
+    user_id: string;
+    email: string;
+    role: string;
+    consultora_id: string | null;
+    created_at: string;
+    last_sign_in_at: string | null;
+  }[];
+  counts: {
+    consultoras: number;
+    lancamentos: number;
+    uploads: number;
+  };
+  recent_logs: {
+    id: string;
+    created_at: string;
+    actor_email: string;
+    action: string;
+    target_table: string | null;
+    metadata: Record<string, any>;
+  }[];
+}
+
+const statusLabels: Record<string, string> = {
+  active: 'Ativa',
+  past_due: 'Inadimplente',
+  canceled: 'Cancelada',
+  trialing: 'Trial',
+};
+
+export default function EmpresaDetalhes() {
+  const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error } = useQuery<EmpresaDetails>({
+    queryKey: ['empresa-details', id],
+    queryFn: async () => {
+      const { data: result, error } = await supabase.functions.invoke('admin-empresa-details', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        body: undefined,
+      });
+      // The invoke doesn't support query params directly, so re-call with fetch
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-empresa-details?empresa_id=${id}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erro ao carregar detalhes');
+      }
+      return res.json();
+    },
+    enabled: !!id,
+  });
+
+  const toggleAtivo = useMutation({
+    mutationFn: async (ativo: boolean) => {
+      const { error } = await supabase
+        .from('empresas')
+        .update({ ativo })
+        .eq('id', id!);
+      if (error) throw error;
+      await supabase.functions.invoke('audit-log', {
+        body: {
+          action: 'empresa.toggle_ativo',
+          target_table: 'empresas',
+          target_id: id,
+          empresa_id: id,
+          metadata: { ativo, nome: data?.empresa.nome },
+        },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['empresa-details', id] });
+      toast.success('Empresa atualizada');
+    },
+  });
+
+  const updateSubscription = useMutation({
+    mutationFn: async (status: string) => {
+      const { error } = await supabase
+        .from('empresas')
+        .update({ subscription_status: status })
+        .eq('id', id!);
+      if (error) throw error;
+      await supabase.functions.invoke('audit-log', {
+        body: {
+          action: 'empresa.update_subscription',
+          target_table: 'empresas',
+          target_id: id,
+          empresa_id: id,
+          metadata: { subscription_status: status, nome: data?.empresa.nome },
+        },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['empresa-details', id] });
+      toast.success('Status da assinatura atualizado');
+    },
+  });
+
+  const formatDate = (d: string | null) => {
+    if (!d) return '-';
+    return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const roleLabel = (role: string) => {
+    const map: Record<string, string> = { admin: 'Admin', consultora: 'Consultora', super_admin: 'Super Admin' };
+    return map[role] || role;
+  };
+
+  if (isLoading) {
+    return (
+      <AppLayout title="Detalhes da Empresa">
+        <div className="flex items-center justify-center py-16">
+          <p className="text-muted-foreground">Carregando...</p>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <AppLayout title="Detalhes da Empresa">
+        <div className="space-y-4">
+          <Button variant="ghost" asChild>
+            <Link to="/super-admin/empresas"><ArrowLeft className="h-4 w-4 mr-2" />Voltar</Link>
+          </Button>
+          <p className="text-destructive">Erro ao carregar detalhes da empresa.</p>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const { empresa, users, counts, recent_logs } = data;
+
+  return (
+    <AppLayout title={`Empresa: ${empresa.nome}`}>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" asChild>
+              <Link to="/super-admin/empresas"><ArrowLeft className="h-4 w-4" /></Link>
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">{empresa.nome}</h1>
+              <p className="text-muted-foreground">Slug: {empresa.slug}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={empresa.ativo ? 'default' : 'secondary'}>
+              {empresa.ativo ? 'Ativa' : 'Inativa'}
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => toggleAtivo.mutate(!empresa.ativo)}
+              disabled={toggleAtivo.isPending}
+            >
+              {empresa.ativo ? 'Desativar' : 'Ativar'}
+            </Button>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="flex items-center gap-3 pt-6">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Users className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{counts.consultoras}</p>
+                <p className="text-xs text-muted-foreground">Consultoras</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 pt-6">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <FileText className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{counts.lancamentos.toLocaleString('pt-BR')}</p>
+                <p className="text-xs text-muted-foreground">Lançamentos</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 pt-6">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Upload className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{counts.uploads}</p>
+                <p className="text-xs text-muted-foreground">Uploads</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 pt-6">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Clock className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">{formatDate(empresa.created_at)}</p>
+                <p className="text-xs text-muted-foreground">Criada em</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Subscription & Info */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Building className="h-5 w-5" />
+              Informações da Empresa
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Status da Assinatura</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Select
+                    value={empresa.subscription_status}
+                    onValueChange={(v) => updateSubscription.mutate(v)}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Ativa</SelectItem>
+                      <SelectItem value="trialing">Trial</SelectItem>
+                      <SelectItem value="past_due">Inadimplente</SelectItem>
+                      <SelectItem value="canceled">Cancelada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Trial expira em</p>
+                <p className="text-sm font-medium mt-1">{empresa.trial_ends_at ? formatDate(empresa.trial_ends_at) : 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Última atualização</p>
+                <p className="text-sm font-medium mt-1">{formatDate(empresa.updated_at)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Users */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Usuários ({users.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Criado em</TableHead>
+                  <TableHead>Último login</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.map((u) => (
+                  <TableRow key={u.user_id}>
+                    <TableCell className="font-medium">{u.email}</TableCell>
+                    <TableCell>
+                      <Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>
+                        {roleLabel(u.role)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{formatDate(u.created_at)}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatDate(u.last_sign_in_at)}</TableCell>
+                  </TableRow>
+                ))}
+                {users.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                      Nenhum usuário encontrado
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {/* Audit Logs */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Logs de Auditoria Recentes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Ator</TableHead>
+                  <TableHead>Ação</TableHead>
+                  <TableHead>Tabela</TableHead>
+                  <TableHead>Detalhes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recent_logs.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="text-muted-foreground whitespace-nowrap">{formatDate(log.created_at)}</TableCell>
+                    <TableCell className="text-sm">{log.actor_email || '-'}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{log.action}</Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{log.target_table || '-'}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                      {JSON.stringify(log.metadata)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {recent_logs.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      Nenhum log encontrado
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+    </AppLayout>
+  );
+}
