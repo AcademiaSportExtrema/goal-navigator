@@ -33,12 +33,22 @@ export default function Empresas() {
   });
 
   const toggleAtivo = useMutation({
-    mutationFn: async ({ id, ativo }: { id: string; ativo: boolean }) => {
+    mutationFn: async ({ id, ativo, nome }: { id: string; ativo: boolean; nome: string }) => {
       const { error } = await supabase
         .from('empresas')
         .update({ ativo })
         .eq('id', id);
       if (error) throw error;
+      // Audit log
+      await supabase.functions.invoke('audit-log', {
+        body: {
+          action: 'empresa.toggle_ativo',
+          target_table: 'empresas',
+          target_id: id,
+          empresa_id: id,
+          metadata: { ativo, nome },
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['empresas'] });
@@ -110,7 +120,7 @@ export default function Empresas() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => toggleAtivo.mutate({ id: empresa.id, ativo: !empresa.ativo })}
+                            onClick={() => toggleAtivo.mutate({ id: empresa.id, ativo: !empresa.ativo, nome: empresa.nome })}
                           >
                             {empresa.ativo ? 'Desativar' : 'Ativar'}
                           </Button>

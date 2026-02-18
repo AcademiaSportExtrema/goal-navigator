@@ -136,6 +136,17 @@ Deno.serve(async (req) => {
         if (insertError) throw insertError;
       }
 
+      // Audit log
+      await supabaseAdmin.from('audit_logs').insert({
+        actor_id: caller.id,
+        actor_email: caller.email,
+        actor_role: 'admin',
+        empresa_id: empresa_id || null,
+        action: 'consultora.create_and_link',
+        target_table: 'user_roles',
+        metadata: { email, consultora_id },
+      });
+
       return new Response(JSON.stringify({ success: true, message: 'Conta criada e acesso vinculado com sucesso' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -177,6 +188,17 @@ Deno.serve(async (req) => {
         if (insertError) throw insertError;
       }
 
+      // Audit log
+      await supabaseAdmin.from('audit_logs').insert({
+        actor_id: caller.id,
+        actor_email: caller.email,
+        actor_role: 'admin',
+        empresa_id: empresa_id || null,
+        action: 'consultora.link',
+        target_table: 'user_roles',
+        metadata: { email, consultora_id },
+      });
+
       return new Response(JSON.stringify({ success: true, message: 'Acesso vinculado com sucesso' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -196,6 +218,17 @@ Deno.serve(async (req) => {
         .eq('role', 'consultora');
 
       if (deleteError) throw deleteError;
+
+      // Audit log
+      await supabaseAdmin.from('audit_logs').insert({
+        actor_id: caller.id,
+        actor_email: caller.email,
+        actor_role: 'admin',
+        empresa_id: empresa_id || null,
+        action: 'consultora.unlink',
+        target_table: 'user_roles',
+        metadata: { consultora_id },
+      });
 
       return new Response(JSON.stringify({ success: true, message: 'Acesso removido com sucesso' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
