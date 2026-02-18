@@ -61,6 +61,17 @@ Deno.serve(async (req) => {
     const { error: updateError } = await supabase.auth.admin.updateUserById(targetUser.id, { password });
     if (updateError) throw updateError;
 
+    // Audit log
+    await supabase.from('audit_logs').insert({
+      actor_id: caller.id,
+      actor_email: caller.email,
+      actor_role: 'admin',
+      action: 'user.reset_password',
+      target_table: 'auth.users',
+      target_id: targetUser.id,
+      metadata: { target_email: email },
+    });
+
     return new Response(
       JSON.stringify({ success: true, message: `Senha redefinida com sucesso para ${email}` }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -98,6 +98,18 @@ Deno.serve(async (req) => {
 
     await supabaseAdmin.from('permissoes_perfil').insert(permissoes);
 
+    // Audit log
+    await supabaseAdmin.from('audit_logs').insert({
+      actor_id: caller.id,
+      actor_email: caller.email,
+      actor_role: 'super_admin',
+      empresa_id: empresa.id,
+      action: 'empresa.create',
+      target_table: 'empresas',
+      target_id: empresa.id,
+      metadata: { nome, slug, email_admin },
+    });
+
     return new Response(JSON.stringify({ success: true, empresa_id: empresa.id }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

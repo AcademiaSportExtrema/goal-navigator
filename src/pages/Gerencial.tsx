@@ -197,8 +197,25 @@ export default function Gerencial() {
   // Delete lancamento mutation
   const deleteLancamento = useMutation({
     mutationFn: async (id: string) => {
+      const target = lancamentos?.find(l => l.id === id);
       const { error } = await supabase.from('lancamentos').delete().eq('id', id);
       if (error) throw error;
+      // Audit log
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        await supabase.functions.invoke('audit-log', {
+          body: {
+            action: 'lancamento.delete',
+            target_table: 'lancamentos',
+            target_id: id,
+            metadata: {
+              numero_contrato: target?.numero_contrato,
+              nome_cliente: target?.nome_cliente,
+              valor: target?.valor,
+            },
+          },
+        });
+      }
     },
     onSuccess: () => {
       toast({ title: 'Lançamento excluído com sucesso!' });
