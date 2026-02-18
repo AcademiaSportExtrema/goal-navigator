@@ -185,7 +185,13 @@ Deno.serve(async (req) => {
                 match = valorStr.endsWith(regraValor);
                 break;
               case 'regex':
-                match = new RegExp(regra.valor, 'i').test(valorStr);
+                try {
+                  if (valorStr.length > 1000) break;
+                  match = new RegExp(regra.valor, 'i').test(valorStr);
+                } catch (e) {
+                  console.error('Regex error:', e);
+                  match = false;
+                }
                 break;
             }
 
