@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Building, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Plus, Building, CheckCircle, XCircle, Clock, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -116,7 +117,17 @@ export default function Empresas() {
                         <TableCell className="text-muted-foreground">
                           {new Date(empresa.created_at).toLocaleDateString('pt-BR')}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            asChild
+                          >
+                            <Link to={`/super-admin/empresas/${empresa.id}`}>
+                              <Eye className="h-3 w-3 mr-1" />
+                              Detalhes
+                            </Link>
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"

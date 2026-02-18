@@ -29,8 +29,10 @@ import NotFound from "./pages/NotFound";
 // Super Admin
 import Empresas from "./pages/super-admin/Empresas";
 import NovaEmpresa from "./pages/super-admin/NovaEmpresa";
+import EmpresaDetalhes from "./pages/super-admin/EmpresaDetalhes";
 import Financeiro from "./pages/super-admin/Financeiro";
 import Integracoes from "./pages/super-admin/Integracoes";
+import Usuarios from "./pages/super-admin/Usuarios";
 
 const queryClient = new QueryClient();
 
@@ -74,6 +76,16 @@ const App = () => (
             <Route path="/super-admin/integracoes" element={
               <ProtectedRoute requiredRole="super_admin">
                 <Integracoes />
+              </ProtectedRoute>
+            } />
+            <Route path="/super-admin/empresas/:id" element={
+              <ProtectedRoute requiredRole="super_admin">
+                <EmpresaDetalhes />
+              </ProtectedRoute>
+            } />
+            <Route path="/super-admin/usuarios" element={
+              <ProtectedRoute requiredRole="super_admin">
+                <Usuarios />
               </ProtectedRoute>
             } />
 

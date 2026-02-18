@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.audit-log]
 verify_jwt = false
+
+[functions.admin-empresa-details]
+verify_jwt = false
+
+[functions.list-users-admin]
+verify_jwt = false
