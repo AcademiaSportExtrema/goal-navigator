@@ -1,38 +1,27 @@
 
-
-# Visao da Consultora para Admins
+# Excluir Lancamentos -- Admin
 
 ## O que sera feito
 
-Criar uma nova pagina "/visao-consultora" acessivel pelo menu lateral (somente para admins), onde o administrador seleciona uma consultora e visualiza exatamente a mesma tela "Minha Performance" que ela veria, incluindo cards de meta, nivel de comissao, tabela de vendas e Coach IA.
+Adicionar um botao de excluir em cada linha da tabela na pagina Gerencial (`/gerencial`), visivel somente para admins. Ao clicar, um dialog de confirmacao aparece com os detalhes do lancamento. Ao confirmar, o lancamento e removido do banco.
 
-## Como vai funcionar
+## Alteracoes
 
-1. No menu lateral, na secao "Operacional", sera adicionado um item "Visao Consultora" com icone de olho (Eye)
-2. A pagina exibe um seletor (dropdown) com todas as consultoras da empresa
-3. Ao selecionar uma consultora, renderiza os mesmos dados da pagina "Minha Performance" para aquela consultora
-4. O admin pode trocar de consultora a qualquer momento sem sair da pagina
+### 1. `src/pages/Gerencial.tsx`
 
-## Detalhes tecnicos
-
-### 1. Nova pagina: `src/pages/VisaoConsultora.tsx`
-
-- Rota protegida com `requiredRole="admin"`
-- Busca todas as consultoras da empresa via `supabase.from('consultoras').select('id, nome').eq('empresa_id', empresaId)`
-- Dropdown (Select) para escolher a consultora
-- Reutiliza a mesma logica de calculo da pagina `MinhaPerformance`: busca meta mensal, meta individual, lancamentos filtrados por `consultora_chave`, niveis de comissao
-- Renderiza os mesmos cards (Meta, Vendido, % Atingido, Comissao), niveis de comissao e tabela de vendas
-- Inclui o componente AiCoach com o `consultoraId` selecionado
-
-### 2. Alteracao: `src/components/layout/AppSidebar.tsx`
-
-- Adicionar item "Visao Consultora" na secao "Operacional" com icone `Eye` e href `/visao-consultora`
-
-### 3. Alteracao: `src/App.tsx`
-
-- Adicionar rota `/visao-consultora` com `ProtectedRoute requiredRole="admin"`
+- Adicionar coluna "Acoes" no header da tabela (visivel para admins)
+- Adicionar botao com icone de lixeira (Trash2) em cada linha
+- Ao clicar, abrir um AlertDialog de confirmacao mostrando contrato, cliente, produto e valor
+- Criar mutation `deleteLancamento` que faz `supabase.from('lancamentos').delete().eq('id', id)`
+- Ao confirmar, invalidar queries relacionadas (lancamentos-gerencial, dashboard, etc.)
+- Toast de sucesso/erro apos a operacao
 
 ### Nenhuma alteracao no backend
 
-Os dados ja existem e o admin ja tem acesso RLS a todas as consultoras e lancamentos da empresa.
+O admin ja possui RLS policy com permissao ALL na tabela lancamentos ("Admins manage own empresa lancamentos"), que inclui DELETE. Nao e necessario criar nenhuma migration.
 
+## Seguranca
+
+- O botao so aparece para usuarios com `role === 'admin'` ou `isSuperAdmin`
+- A exclusao e protegida por RLS no banco -- apenas admins da mesma empresa podem deletar
+- Dialog de confirmacao previne exclusoes acidentais
