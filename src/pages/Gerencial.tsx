@@ -24,10 +24,20 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Download, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon, Columns3, Send } from 'lucide-react';
+import { Search, Download, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon, Columns3, Send, Trash2 } from 'lucide-react';
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -96,10 +106,11 @@ function getDateRangeDates(range: string): { from?: Date; to?: Date } {
 }
 
 export default function Gerencial() {
-  const { role, empresaId, consultoraId } = useAuth();
+  const { role, empresaId, consultoraId, isSuperAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isConsultora = role === 'consultora';
+  const isAdmin = role === 'admin' || isSuperAdmin;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -115,6 +126,9 @@ export default function Gerencial() {
   const [ajusteDialogOpen, setAjusteDialogOpen] = useState(false);
   const [selectedLancamento, setSelectedLancamento] = useState<Lancamento | null>(null);
   const [justificativa, setJustificativa] = useState('');
+
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = useState<Lancamento | null>(null);
 
   const visibleColumns = useMemo(() => columns.filter(c => !hiddenColumns.has(c.key)), [hiddenColumns]);
 
@@ -177,6 +191,23 @@ export default function Gerencial() {
     },
     onError: (error: any) => {
       toast({ title: 'Erro ao enviar solicitação', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Delete lancamento mutation
+  const deleteLancamento = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('lancamentos').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: 'Lançamento excluído com sucesso!' });
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['lancamentos-gerencial'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro ao excluir lançamento', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -500,6 +531,7 @@ export default function Gerencial() {
                       </TableHead>
                     ))}
                     {isConsultora && <TableHead className="whitespace-nowrap">Ação</TableHead>}
+                    {isAdmin && <TableHead className="whitespace-nowrap">Ações</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -512,6 +544,7 @@ export default function Gerencial() {
                           </TableCell>
                         ))}
                         {isConsultora && <TableCell><div className="h-4 bg-muted rounded animate-pulse" /></TableCell>}
+                        {isAdmin && <TableCell><div className="h-4 bg-muted rounded animate-pulse" /></TableCell>}
                       </TableRow>
                     ))
                   ) : paginatedData.length > 0 ? (
@@ -537,11 +570,23 @@ export default function Gerencial() {
                             </Button>
                           </TableCell>
                         )}
+                        {isAdmin && (
+                          <TableCell>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => setDeleteTarget(item)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={visibleColumns.length + (isConsultora ? 1 : 0)} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={visibleColumns.length + (isConsultora ? 1 : 0) + (isAdmin ? 1 : 0)} className="text-center py-8 text-muted-foreground">
                         Nenhum registro encontrado
                       </TableCell>
                     </TableRow>
@@ -559,6 +604,7 @@ export default function Gerencial() {
                         </TableCell>
                       ))}
                       {isConsultora && <TableCell>-</TableCell>}
+                      {isAdmin && <TableCell>-</TableCell>}
                     </TableRow>
                   </TableFooter>
                 )}
@@ -611,6 +657,37 @@ export default function Gerencial() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* AlertDialog de confirmação de exclusão */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir lançamento</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este lançamento? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteTarget && (
+            <div className="grid grid-cols-2 gap-2 text-sm py-2">
+              <div><strong>Contrato:</strong> {deleteTarget.numero_contrato || '-'}</div>
+              <div><strong>Cliente:</strong> {deleteTarget.nome_cliente || '-'}</div>
+              <div><strong>Produto:</strong> {deleteTarget.produto || '-'}</div>
+              <div><strong>Valor:</strong> {formatCurrency(deleteTarget.valor)}</div>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteTarget && deleteLancamento.mutate(deleteTarget.id)}
+              disabled={deleteLancamento.isPending}
+            >
+              {deleteLancamento.isPending ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </AppLayout>
   );
 }
