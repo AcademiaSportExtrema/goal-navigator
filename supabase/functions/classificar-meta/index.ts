@@ -95,7 +95,15 @@ Deno.serve(async (req) => {
             case 'igual': match = valorStr === regraValor; break;
             case 'comeca_com': match = valorStr.startsWith(regraValor); break;
             case 'termina_com': match = valorStr.endsWith(regraValor); break;
-            case 'regex': match = new RegExp(regra.valor, 'i').test(valorStr); break;
+            case 'regex':
+              try {
+                if (valorStr.length > 1000) break;
+                match = new RegExp(regra.valor, 'i').test(valorStr);
+              } catch (e) {
+                console.error('Regex error:', e);
+                match = false;
+              }
+              break;
           }
 
           if (match) {
