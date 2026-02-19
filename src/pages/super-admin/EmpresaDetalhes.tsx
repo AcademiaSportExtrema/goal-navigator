@@ -91,12 +91,6 @@ export default function EmpresaDetalhes() {
   const { data, isLoading, error } = useQuery<EmpresaDetails>({
     queryKey: ['empresa-details', id],
     queryFn: async () => {
-      const { data: result, error } = await supabase.functions.invoke('admin-empresa-details', {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        body: undefined,
-      });
-      // The invoke doesn't support query params directly, so re-call with fetch
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-empresa-details?empresa_id=${id}`,
