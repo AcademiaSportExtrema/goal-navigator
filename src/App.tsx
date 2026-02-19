@@ -33,6 +33,7 @@ import EmpresaDetalhes from "./pages/super-admin/EmpresaDetalhes";
 import Financeiro from "./pages/super-admin/Financeiro";
 import Integracoes from "./pages/super-admin/Integracoes";
 import Usuarios from "./pages/super-admin/Usuarios";
+import Tickets from "./pages/super-admin/Tickets";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,11 @@ const App = () => (
             <Route path="/super-admin/usuarios" element={
               <ProtectedRoute requiredRole="super_admin">
                 <Usuarios />
+              </ProtectedRoute>
+            } />
+            <Route path="/super-admin/tickets" element={
+              <ProtectedRoute requiredRole="super_admin">
+                <Tickets />
               </ProtectedRoute>
             } />
 
