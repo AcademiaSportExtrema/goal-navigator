@@ -4,6 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { ImpersonationProvider } from "@/hooks/useImpersonation";
+import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 
 // Pages
@@ -44,6 +46,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <ImpersonationProvider>
+            <ImpersonationBanner />
           <Routes>
             {/* Auth routes */}
             <Route path="/login" element={<Login />} />
@@ -161,6 +165,7 @@ const App = () => (
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </ImpersonationProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
