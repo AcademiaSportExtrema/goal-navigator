@@ -561,6 +561,88 @@ export type Database = {
           },
         ]
       }
+      support_messages: {
+        Row: {
+          created_at: string
+          id: string
+          is_internal: boolean
+          mensagem: string
+          ticket_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          mensagem: string
+          ticket_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          mensagem?: string
+          ticket_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_tickets: {
+        Row: {
+          assigned_to: string | null
+          assunto: string
+          created_at: string
+          created_by: string
+          descricao: string
+          empresa_id: string
+          id: string
+          prioridade: Database["public"]["Enums"]["ticket_prioridade"]
+          status: Database["public"]["Enums"]["ticket_status"]
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          assunto: string
+          created_at?: string
+          created_by: string
+          descricao: string
+          empresa_id: string
+          id?: string
+          prioridade?: Database["public"]["Enums"]["ticket_prioridade"]
+          status?: Database["public"]["Enums"]["ticket_status"]
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          assunto?: string
+          created_at?: string
+          created_by?: string
+          descricao?: string
+          empresa_id?: string
+          id?: string
+          prioridade?: Database["public"]["Enums"]["ticket_prioridade"]
+          status?: Database["public"]["Enums"]["ticket_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       uploads: {
         Row: {
           arquivo_nome: string
@@ -699,6 +781,8 @@ export type Database = {
         | "regex"
       regra_mes: "DATA_LANCAMENTO" | "DATA_INICIO" | "HIBRIDA"
       responsavel_campo: "resp_venda" | "resp_recebimento"
+      ticket_prioridade: "baixa" | "media" | "alta" | "urgente"
+      ticket_status: "aberto" | "em_andamento" | "resolvido" | "fechado"
       upload_status: "enviado" | "importando" | "concluido" | "erro"
     }
     CompositeTypes: {
@@ -843,6 +927,8 @@ export const Constants = {
       operador_regra: ["contem", "igual", "comeca_com", "termina_com", "regex"],
       regra_mes: ["DATA_LANCAMENTO", "DATA_INICIO", "HIBRIDA"],
       responsavel_campo: ["resp_venda", "resp_recebimento"],
+      ticket_prioridade: ["baixa", "media", "alta", "urgente"],
+      ticket_status: ["aberto", "em_andamento", "resolvido", "fechado"],
       upload_status: ["enviado", "importando", "concluido", "erro"],
     },
   },
