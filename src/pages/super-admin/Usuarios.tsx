@@ -22,9 +22,11 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Search, Users, KeyRound, Building } from 'lucide-react';
+import { Search, Users, KeyRound, Building, UserCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useImpersonation } from '@/hooks/useImpersonation';
+import { Textarea } from '@/components/ui/textarea';
 
 interface UserEntry {
   id: string;
@@ -43,6 +45,10 @@ export default function Usuarios() {
   const [resetDialog, setResetDialog] = useState<UserEntry | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [resetting, setResetting] = useState(false);
+  const [impersonateDialog, setImpersonateDialog] = useState<UserEntry | null>(null);
+  const [impersonateMotivo, setImpersonateMotivo] = useState('');
+  const [impersonating, setImpersonating] = useState(false);
+  const { startImpersonation } = useImpersonation();
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-users', search, empresaFilter],
@@ -190,7 +196,20 @@ export default function Usuarios() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(user.created_at)}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(user.last_sign_in_at)}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right space-x-1">
+                        {user.role !== 'super_admin' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setImpersonateDialog(user);
+                              setImpersonateMotivo('');
+                            }}
+                          >
+                            <UserCheck className="h-3 w-3 mr-1" />
+                            Impersonar
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -246,6 +265,49 @@ export default function Usuarios() {
               disabled={!newPassword || newPassword.length < 6 || resetting}
             >
               {resetting ? 'Redefinindo...' : 'Redefinir Senha'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Impersonate Dialog */}
+      <Dialog open={!!impersonateDialog} onOpenChange={(open) => { if (!open) setImpersonateDialog(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Impersonar Usuário</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Você entrará na sessão de <strong>{impersonateDialog?.email}</strong> ({impersonateDialog?.empresa_nome || 'sem empresa'}).
+            </p>
+            <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20">
+              <p className="text-xs text-destructive font-medium">
+                ⚠️ Esta ação será registrada no log de auditoria. Informe o motivo obrigatoriamente.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Motivo da impersonação</Label>
+              <Textarea
+                value={impersonateMotivo}
+                onChange={(e) => setImpersonateMotivo(e.target.value)}
+                placeholder="Ex: investigar erro reportado pelo cliente, verificar configuração..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImpersonateDialog(null)}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!impersonateDialog) return;
+                setImpersonating(true);
+                await startImpersonation(impersonateDialog.id, impersonateMotivo);
+                setImpersonating(false);
+              }}
+              disabled={impersonateMotivo.trim().length < 5 || impersonating}
+            >
+              {impersonating ? 'Impersonando...' : 'Confirmar Impersonação'}
             </Button>
           </DialogFooter>
         </DialogContent>

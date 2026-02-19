@@ -16,6 +16,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
   ArrowLeft,
   Building,
   Users,
@@ -25,8 +34,10 @@ import {
   CheckCircle,
   XCircle,
   Shield,
+  UserCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useImpersonation } from '@/hooks/useImpersonation';
 
 interface EmpresaDetails {
   empresa: {
@@ -72,6 +83,10 @@ const statusLabels: Record<string, string> = {
 export default function EmpresaDetalhes() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { startImpersonation } = useImpersonation();
+  const [impersonateDialog, setImpersonateDialog] = useState<{ user_id: string; email: string } | null>(null);
+  const [impersonateMotivo, setImpersonateMotivo] = useState('');
+  const [impersonating, setImpersonating] = useState(false);
 
   const { data, isLoading, error } = useQuery<EmpresaDetails>({
     queryKey: ['empresa-details', id],
@@ -316,6 +331,7 @@ export default function EmpresaDetalhes() {
                   <TableHead>Role</TableHead>
                   <TableHead>Criado em</TableHead>
                   <TableHead>Último login</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -329,11 +345,26 @@ export default function EmpresaDetalhes() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">{formatDate(u.created_at)}</TableCell>
                     <TableCell className="text-muted-foreground">{formatDate(u.last_sign_in_at)}</TableCell>
+                    <TableCell className="text-right">
+                      {u.role !== 'super_admin' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setImpersonateDialog({ user_id: u.user_id, email: u.email });
+                            setImpersonateMotivo('');
+                          }}
+                        >
+                          <UserCheck className="h-3 w-3 mr-1" />
+                          Impersonar
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {users.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                       Nenhum usuário encontrado
                     </TableCell>
                   </TableRow>
@@ -388,6 +419,49 @@ export default function EmpresaDetalhes() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Impersonate Dialog */}
+      <Dialog open={!!impersonateDialog} onOpenChange={(open) => { if (!open) setImpersonateDialog(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Impersonar Usuário</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Você entrará na sessão de <strong>{impersonateDialog?.email}</strong>.
+            </p>
+            <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20">
+              <p className="text-xs text-destructive font-medium">
+                ⚠️ Esta ação será registrada no log de auditoria.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Motivo da impersonação</Label>
+              <Textarea
+                value={impersonateMotivo}
+                onChange={(e) => setImpersonateMotivo(e.target.value)}
+                placeholder="Ex: investigar erro reportado pelo cliente..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImpersonateDialog(null)}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!impersonateDialog) return;
+                setImpersonating(true);
+                await startImpersonation(impersonateDialog.user_id, impersonateMotivo);
+                setImpersonating(false);
+              }}
+              disabled={impersonateMotivo.trim().length < 5 || impersonating}
+            >
+              {impersonating ? 'Impersonando...' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
