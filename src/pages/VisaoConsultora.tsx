@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,11 +16,17 @@ import { CoachDicaDoDia } from '@/components/CoachDicaDoDia';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
+import { PaginationControls } from '@/components/PaginationControls';
+
+const ITEMS_PER_PAGE = 20;
 
 export default function VisaoConsultora() {
   const { empresaId } = useAuth();
   const [selectedConsultoraId, setSelectedConsultoraId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const mesAtual = format(new Date(), 'yyyy-MM');
+
+  useEffect(() => { setCurrentPage(1); }, [selectedConsultoraId]);
 
   // Buscar todas as consultoras da empresa
   const { data: consultoras } = useQuery({
@@ -317,34 +323,54 @@ export default function VisaoConsultora() {
                 <CardTitle>Vendas do Mês ({lancamentos?.length || 0})</CardTitle>
               </CardHeader>
               <CardContent>
-                {lancamentos && lancamentos.length > 0 ? (
-                  <div className="overflow-x-auto scrollbar-thin">
-                    <Table className="table-dense">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Data</TableHead>
-                          <TableHead>Produto</TableHead>
-                          <TableHead>Cliente</TableHead>
-                          <TableHead>Plano</TableHead>
-                          <TableHead className="text-right">Valor</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {lancamentos.map((l) => (
-                          <TableRow key={l.id}>
-                            <TableCell>
-                              {l.data_lancamento ? format(new Date(l.data_lancamento), 'dd/MM') : '-'}
-                            </TableCell>
-                            <TableCell>{l.produto || '-'}</TableCell>
-                            <TableCell>{l.nome_cliente || '-'}</TableCell>
-                            <TableCell>{l.plano || '-'}</TableCell>
-                            <TableCell className="text-right font-medium">{fmt(Number(l.valor))}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
+                {lancamentos && lancamentos.length > 0 ? (() => {
+                  const totalPages = Math.ceil(lancamentos.length / ITEMS_PER_PAGE);
+                  const paginatedLancamentos = lancamentos.slice(
+                    (currentPage - 1) * ITEMS_PER_PAGE,
+                    currentPage * ITEMS_PER_PAGE
+                  );
+                  const pagination = totalPages > 1 ? (
+                    <PaginationControls
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      totalCount={lancamentos.length}
+                      itemsPerPage={ITEMS_PER_PAGE}
+                      onPageChange={setCurrentPage}
+                    />
+                  ) : null;
+                  return (
+                    <>
+                      {pagination}
+                      <div className="overflow-x-auto scrollbar-thin">
+                        <Table className="table-dense">
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Data</TableHead>
+                              <TableHead>Produto</TableHead>
+                              <TableHead>Cliente</TableHead>
+                              <TableHead>Plano</TableHead>
+                              <TableHead className="text-right">Valor</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {paginatedLancamentos.map((l) => (
+                              <TableRow key={l.id}>
+                                <TableCell>
+                                  {l.data_lancamento ? format(new Date(l.data_lancamento), 'dd/MM') : '-'}
+                                </TableCell>
+                                <TableCell>{l.produto || '-'}</TableCell>
+                                <TableCell>{l.nome_cliente || '-'}</TableCell>
+                                <TableCell>{l.plano || '-'}</TableCell>
+                                <TableCell className="text-right font-medium">{fmt(Number(l.valor))}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      {pagination}
+                    </>
+                  );
+                })() : (
                   <p className="text-center py-8 text-muted-foreground">
                     Nenhuma venda encontrada para este mês
                   </p>
