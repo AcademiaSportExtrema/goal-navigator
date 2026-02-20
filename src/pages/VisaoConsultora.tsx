@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Target, TrendingUp, DollarSign, Award, Calendar, Eye } from 'lucide-react';
-import { AiCoach } from '@/components/AiCoach';
+import { CoachDicaDoDia } from '@/components/CoachDicaDoDia';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
@@ -199,7 +199,7 @@ export default function VisaoConsultora() {
                   <p className="text-muted-foreground text-sm">Visualização como consultora</p>
                 </div>
               </div>
-              <AiCoach consultoraId={selectedConsultoraId} />
+              
             </div>
 
             {/* Cards de resumo */}
@@ -254,6 +254,9 @@ export default function VisaoConsultora() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Dica do Dia */}
+            <CoachDicaDoDia consultoraId={selectedConsultoraId} />
 
             {/* Níveis de comissão */}
             <Card>
