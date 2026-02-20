@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,6 +10,21 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -19,8 +34,10 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Plus, Edit, Trash2, Mail, User, UserPlus, Unlink, KeyRound } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, Mail, User, UserPlus, Unlink, KeyRound, Search, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import type { Consultora } from '@/types/database';
+
+const ITEMS_PER_PAGE = 20;
 
 interface ConsultoraForm {
   nome: string;
@@ -49,6 +66,13 @@ export default function Consultoras() {
   const [createAccessConsultora, setCreateAccessConsultora] = useState<Consultora | null>(null);
   const [createAccessPassword, setCreateAccessPassword] = useState('');
   
+  // Filter & sort state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortCol, setSortCol] = useState<string>('nome');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  
   const { toast } = useToast();
   const { empresaId } = useAuth();
   const queryClient = useQueryClient();
@@ -66,7 +90,6 @@ export default function Consultoras() {
     },
   });
 
-  // Fetch user_roles to know which consultoras have access
   const { data: userRoles } = useQuery({
     queryKey: ['user-roles-consultoras'],
     queryFn: async () => {
@@ -84,6 +107,75 @@ export default function Consultoras() {
     if (!consultora.email) return 'no_email';
     const hasRole = userRoles?.some(r => r.consultora_id === consultora.id);
     return hasRole ? 'linked' : 'not_linked';
+  };
+
+  // Filter + sort logic
+  const filteredSorted = useMemo(() => {
+    if (!consultoras) return [];
+    
+    let result = consultoras.filter(c => {
+      // Search
+      if (searchTerm) {
+        const s = searchTerm.toLowerCase();
+        if (!c.nome.toLowerCase().includes(s) && !(c.email || '').toLowerCase().includes(s)) return false;
+      }
+      // Status filter
+      if (statusFilter === 'ativas' && !c.ativo) return false;
+      if (statusFilter === 'inativas' && c.ativo) return false;
+      if (statusFilter === 'com_acesso' && getAccessStatus(c) !== 'linked') return false;
+      if (statusFilter === 'sem_acesso' && getAccessStatus(c) === 'linked') return false;
+      return true;
+    });
+
+    // Sort
+    result.sort((a, b) => {
+      let aVal: string;
+      let bVal: string;
+      
+      switch (sortCol) {
+        case 'email':
+          aVal = a.email || '';
+          bVal = b.email || '';
+          break;
+        case 'status':
+          aVal = a.ativo ? 'ativa' : 'inativa';
+          bVal = b.ativo ? 'ativa' : 'inativa';
+          break;
+        case 'acesso':
+          aVal = getAccessStatus(a);
+          bVal = getAccessStatus(b);
+          break;
+        default:
+          aVal = a.nome;
+          bVal = b.nome;
+      }
+      
+      const cmp = aVal.localeCompare(bVal, 'pt-BR');
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    return result;
+  }, [consultoras, searchTerm, statusFilter, sortCol, sortDir, userRoles]);
+
+  const totalPages = Math.ceil(filteredSorted.length / ITEMS_PER_PAGE);
+  const paginatedData = filteredSorted.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const handleSort = (col: string) => {
+    if (sortCol === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ col }: { col: string }) => {
+    if (sortCol !== col) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    if (sortDir === 'asc') return <ArrowUp className="h-3 w-3 ml-1" />;
+    return <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
   const createAndLink = useMutation({
@@ -154,7 +246,6 @@ export default function Consultoras() {
           ativo: data.ativo,
           empresa_id: empresaId!,
         });
-      
       if (error) throw error;
     },
     onSuccess: () => {
@@ -177,7 +268,6 @@ export default function Consultoras() {
           ativo: data.ativo,
         })
         .eq('id', id);
-      
       if (error) throw error;
     },
     onSuccess: () => {
@@ -196,7 +286,6 @@ export default function Consultoras() {
         .from('consultoras')
         .delete()
         .eq('id', id);
-      
       if (error) throw error;
     },
     onSuccess: () => {
@@ -214,7 +303,6 @@ export default function Consultoras() {
         .from('consultoras')
         .update({ ativo })
         .eq('id', id);
-      
       if (error) throw error;
     },
     onSuccess: () => {
@@ -243,7 +331,6 @@ export default function Consultoras() {
       toast({ title: 'Nome é obrigatório', variant: 'destructive' });
       return;
     }
-
     if (editingConsultora) {
       updateConsultora.mutate({ id: editingConsultora.id, data: form });
     } else {
@@ -294,7 +381,7 @@ export default function Consultoras() {
           </Card>
         </div>
 
-        {/* Lista */}
+        {/* Tabela */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -322,7 +409,6 @@ export default function Consultoras() {
                       O nome deve corresponder exatamente ao que aparece na coluna "Resp. Venda" do Excel
                     </DialogDescription>
                   </DialogHeader>
-
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
                       <Label>Nome *</Label>
@@ -336,7 +422,6 @@ export default function Consultoras() {
                         />
                       </div>
                     </div>
-
                     <div className="space-y-2">
                       <Label>Email (usado para vincular acesso ao sistema)</Label>
                       <div className="relative">
@@ -353,7 +438,6 @@ export default function Consultoras() {
                         A consultora deve se cadastrar no sistema com este mesmo email
                       </p>
                     </div>
-
                     <div className="flex items-center justify-between p-3 rounded-lg bg-muted">
                       <Label className="cursor-pointer">Ativo</Label>
                       <Switch
@@ -362,7 +446,6 @@ export default function Consultoras() {
                       />
                     </div>
                   </div>
-
                   <DialogFooter>
                     <Button variant="outline" onClick={handleCloseDialog}>Cancelar</Button>
                     <Button onClick={handleSubmit} disabled={createConsultora.isPending || updateConsultora.isPending}>
@@ -372,139 +455,198 @@ export default function Consultoras() {
                 </DialogContent>
               </Dialog>
             </div>
+
+            {/* Search + Filter bar */}
+            <div className="flex flex-col md:flex-row gap-3 mt-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome ou email..."
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                  className="pl-10"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="ativas">Ativas</SelectItem>
+                  <SelectItem value="inativas">Inativas</SelectItem>
+                  <SelectItem value="com_acesso">Com Acesso</SelectItem>
+                  <SelectItem value="sem_acesso">Sem Acesso</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {isLoading ? (
-              <div className="space-y-3">
+              <div className="space-y-3 p-6">
                 {[1, 2, 3].map(i => (
-                  <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
+                  <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />
                 ))}
               </div>
-            ) : consultoras && consultoras.length > 0 ? (
-              <div className="space-y-2">
-                {consultoras.map((consultora) => {
-                  const accessStatus = getAccessStatus(consultora);
-                  return (
-                    <div
-                      key={consultora.id}
-                      className={`flex items-center justify-between p-4 rounded-lg border ${
-                        consultora.ativo ? 'bg-card' : 'bg-muted/50 opacity-60'
-                      }`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                          {consultora.nome.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{consultora.nome}</p>
-                            {accessStatus === 'linked' && (
-                              <Badge variant="default" className="bg-success text-success-foreground text-[10px] px-1.5 py-0">
-                                Com acesso
-                              </Badge>
-                            )}
-                            {accessStatus === 'not_linked' && (
-                              <Badge variant="secondary" className="bg-warning/20 text-warning text-[10px] px-1.5 py-0">
-                                Sem vínculo
-                              </Badge>
-                            )}
-                            {accessStatus === 'no_email' && (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                Sem email
-                              </Badge>
-                            )}
-                          </div>
-                          {consultora.email && (
-                            <p className="text-sm text-muted-foreground">{consultora.email}</p>
-                          )}
-                        </div>
-                      </div>
+            ) : filteredSorted.length > 0 ? (
+              <>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('nome')}>
+                          <div className="flex items-center">Nome <SortIcon col="nome" /></div>
+                        </TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('email')}>
+                          <div className="flex items-center">Email <SortIcon col="email" /></div>
+                        </TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('status')}>
+                          <div className="flex items-center">Status <SortIcon col="status" /></div>
+                        </TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('acesso')}>
+                          <div className="flex items-center">Acesso <SortIcon col="acesso" /></div>
+                        </TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedData.map((consultora) => {
+                        const accessStatus = getAccessStatus(consultora);
+                        return (
+                          <TableRow key={consultora.id} className={!consultora.ativo ? 'opacity-60' : ''}>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm">
+                                  {consultora.nome.charAt(0).toUpperCase()}
+                                </div>
+                                <span className="font-medium">{consultora.nome}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {consultora.email || '-'}
+                            </TableCell>
+                            <TableCell>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                consultora.ativo ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'
+                              }`}>
+                                {consultora.ativo ? 'Ativa' : 'Inativa'}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              {accessStatus === 'linked' && (
+                                <Badge variant="default" className="bg-success text-success-foreground text-[10px]">
+                                  Com acesso
+                                </Badge>
+                              )}
+                              {accessStatus === 'not_linked' && (
+                                <Badge variant="secondary" className="bg-warning/20 text-warning text-[10px]">
+                                  Sem vínculo
+                                </Badge>
+                              )}
+                              {accessStatus === 'no_email' && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  Sem email
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center justify-end gap-1">
+                                {accessStatus === 'not_linked' && consultora.email && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-xs gap-1"
+                                    onClick={() => {
+                                      setCreateAccessConsultora(consultora);
+                                      setCreateAccessPassword('');
+                                      setCreateAccessDialogOpen(true);
+                                    }}
+                                  >
+                                    <UserPlus className="h-3 w-3" />
+                                    Criar Acesso
+                                  </Button>
+                                )}
+                                {accessStatus === 'linked' && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-xs gap-1 text-destructive"
+                                      disabled={unlinkAccess.isPending}
+                                      onClick={() => {
+                                        if (confirm('Remover acesso desta consultora?')) {
+                                          unlinkAccess.mutate(consultora.id);
+                                        }
+                                      }}
+                                    >
+                                      <Unlink className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-xs gap-1"
+                                      onClick={() => {
+                                        setResetForm({ email: consultora.email!, password: '' });
+                                        setResetDialogOpen(true);
+                                      }}
+                                    >
+                                      <KeyRound className="h-3 w-3" />
+                                    </Button>
+                                  </>
+                                )}
+                                <Switch
+                                  checked={consultora.ativo}
+                                  onCheckedChange={(checked) => toggleAtivo.mutate({ id: consultora.id, ativo: checked })}
+                                />
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(consultora)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => {
+                                    if (confirm('Tem certeza que deseja excluir esta consultora?')) {
+                                      deleteConsultora.mutate(consultora.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
 
-                      <div className="flex items-center gap-1">
-                        {/* Access management buttons */}
-                        {accessStatus === 'not_linked' && consultora.email && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs gap-1"
-                            onClick={() => {
-                              setCreateAccessConsultora(consultora);
-                              setCreateAccessPassword('');
-                              setCreateAccessDialogOpen(true);
-                            }}
-                          >
-                            <UserPlus className="h-3 w-3" />
-                            Criar Acesso
-                          </Button>
-                        )}
-                        {accessStatus === 'linked' && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-xs gap-1 text-destructive"
-                              disabled={unlinkAccess.isPending}
-                              onClick={() => {
-                                if (confirm('Remover acesso desta consultora?')) {
-                                  unlinkAccess.mutate(consultora.id);
-                                }
-                              }}
-                            >
-                              <Unlink className="h-3 w-3" />
-                              Desvincular
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-xs gap-1"
-                              onClick={() => {
-                                setResetForm({ email: consultora.email!, password: '' });
-                                setResetDialogOpen(true);
-                              }}
-                            >
-                              <KeyRound className="h-3 w-3" />
-                              Senha
-                            </Button>
-                          </>
-                        )}
-
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          consultora.ativo ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'
-                        }`}>
-                          {consultora.ativo ? 'Ativa' : 'Inativa'}
-                        </span>
-                        <Switch
-                          checked={consultora.ativo}
-                          onCheckedChange={(checked) => toggleAtivo.mutate({ id: consultora.id, ativo: checked })}
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(consultora)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            if (confirm('Tem certeza que deseja excluir esta consultora?')) {
-                              deleteConsultora.mutate(consultora.id);
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-6 py-3 border-t">
+                    <span className="text-sm text-muted-foreground">
+                      {filteredSorted.length} consultora{filteredSorted.length !== 1 ? 's' : ''}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm">Página {currentPage} de {totalPages}</span>
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center py-12 text-muted-foreground">
                 <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                <p className="font-medium">Nenhuma consultora cadastrada</p>
-                <p className="text-sm">Cadastre as consultoras para vincular às metas</p>
+                <p className="font-medium">Nenhuma consultora encontrada</p>
+                <p className="text-sm">
+                  {searchTerm || statusFilter !== 'all' ? 'Tente ajustar os filtros' : 'Cadastre as consultoras para vincular às metas'}
+                </p>
               </div>
             )}
           </CardContent>
