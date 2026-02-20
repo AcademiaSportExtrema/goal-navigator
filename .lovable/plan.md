@@ -1,31 +1,19 @@
 
 
-## Adicionar Paginacao na tabela "Vendas do Mes" da Visao Consultora
+## Remover opcao "Cadastre-se" da tela de Login
 
 ### Problema
 
-A tabela "Vendas do Mes" na pagina Visao Consultora exibe todos os lancamentos sem paginacao. Com muitas vendas, a lista fica longa e dificil de navegar.
+A tela de login exibe um link "Nao tem uma conta? Cadastre-se" que direciona para `/cadastro`. Porem, somente usuarios pre-cadastrados pelo administrador devem ter acesso ao sistema, tornando essa opcao incorreta.
 
 ### Solucao
 
-Adicionar paginacao frontend usando o componente `PaginationControls` ja existente, renderizado acima e abaixo da tabela de vendas. Como os dados ja sao carregados todos de uma vez (filtrados por consultora e mes), a paginacao sera apenas no frontend com 20 itens por pagina.
+Remover o bloco de texto e link "Cadastre-se" do final do formulario de login.
 
 ### Detalhes tecnicos
 
-**Arquivo:** `src/pages/VisaoConsultora.tsx`
+**Arquivo:** `src/pages/Login.tsx`
 
-1. Importar `PaginationControls` de `@/components/PaginationControls`
-2. Adicionar estado `currentPage` (resetar para 1 ao trocar de consultora)
-3. Definir constante `ITEMS_PER_PAGE = 20`
-4. Calcular `totalPages` e fatiar o array `lancamentos` com `.slice()` para exibir apenas a pagina atual
-5. Renderizar `<PaginationControls>` antes e depois da `<Table>` dentro do CardContent
-6. O titulo do card continua mostrando o total geral: "Vendas do Mes (61)"
-
-**Logica:**
-```text
-const totalPages = Math.ceil(lancamentos.length / ITEMS_PER_PAGE);
-const paginatedLancamentos = lancamentos.slice((currentPage-1)*20, currentPage*20);
-```
-
-**Nenhum outro arquivo precisa ser alterado.**
+- Remover as linhas 109-114 que contem o `<div>` com o texto "Nao tem uma conta?" e o `<Link to="/cadastro">`
+- Nenhuma outra alteracao necessaria
 
