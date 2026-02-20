@@ -14,7 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Target, TrendingUp, DollarSign, Award, Calendar } from 'lucide-react';
-import { AiCoach } from '@/components/AiCoach';
+import { CoachDicaDoDia } from '@/components/CoachDicaDoDia';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
@@ -157,7 +157,7 @@ export default function MinhaPerformance() {
               </p>
             </div>
           </div>
-          {consultoraId && <AiCoach consultoraId={consultoraId} />}
+          
         </div>
 
         {!metaMensal ? (
@@ -244,6 +244,9 @@ export default function MinhaPerformance() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Dica do Dia */}
+            {consultoraId && <CoachDicaDoDia consultoraId={consultoraId} />}
 
             {/* Níveis de comissão */}
             <Card>
