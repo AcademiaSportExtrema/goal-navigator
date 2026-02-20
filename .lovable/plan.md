@@ -1,57 +1,74 @@
 
-## Dica do Dia do Coach IA
 
-### O que muda
+## Corrigir Importador e Reprocessar Uploads Problematicos
 
-Substituir o botao "Pedir dica ao Coach IA" (que abre um Sheet com 3 opcoes) por um **card fixo de "Dica do Dia"** posicionado entre os cards de meta e os niveis de comissao. O card exibira uma analise completa gerada automaticamente (unificando as 3 perguntas em uma unica) na primeira vez que a consultora acessa a pagina no dia. A dica fica visivel ate que ela clique em "Atualizar analise".
+### Problema
 
-### Comportamento
+O upload `4e575dfd` (216 lancamentos) foi importado sem `nome_cliente`, `resp_venda`, `resp_recebimento` e `consultora_chave`. Os dados mostram produtos como "BOLD DOCE DE LEITE 60G" e "CRISTAL AGUA 500ML", indicando que o arquivo tem cabecalhos diferentes do esperado pelo importador.
 
-1. Ao abrir a pagina (VisaoConsultora ou MinhaPerformance), verifica-se em `localStorage` se ja existe uma dica gerada para aquele `consultoraId + data de hoje`.
-2. Se nao existir, dispara automaticamente a chamada ao edge function `ai-coach` com um prompt unificado que combina as 3 perguntas (vender mais + ritmo + abordagem).
-3. O texto gerado via streaming e exibido dentro do card e salvo em `localStorage` com a chave `coach-dica-{consultoraId}-{YYYY-MM-DD}`.
-4. Se ja existir no localStorage, exibe direto sem chamar a API.
-5. Um botao "Atualizar analise" limpa o cache do dia e dispara nova chamada.
+### Solucao em 2 partes
 
-### Layout do card
+#### Parte 1 -- Melhorar mapeamento de colunas no importador
+
+**Arquivo:** `supabase/functions/upload-importar-xls/index.ts`
+
+Adicionar um sistema de aliases flexivel para mapear cabecalhos variados:
+
+1. Criar funcao `normalizeHeader(h)` que remove acentos, converte para minusculo e remove pontuacao
+2. Criar dicionario `COLUMN_ALIASES` com todas as variacoes conhecidas para cada campo:
 
 ```text
-+--------------------------------------------------+
-| [icone Sparkles] Dica do Coach IA                 |
-|                               [Atualizar analise] |
-|--------------------------------------------------|
-| Texto em markdown da dica do dia...               |
-| ...                                               |
-| (ou skeleton/loader enquanto carrega)             |
-+--------------------------------------------------+
+nome_cliente  -> "nome", "cliente", "nome cliente", "nome do cliente", "razao social"
+resp_venda    -> "resp. venda", "resp venda", "responsavel venda", "vendedor", "consultor"
+resp_recebimento -> "resp. recebimento", "resp recebimento", "responsavel recebimento"
+numero_contrato  -> "n contrato", "contrato", "numero contrato", "nro contrato"
+(e demais campos que ja tem variacoes)
 ```
 
-### Mudancas nas duas paginas
+3. Antes de processar as linhas, construir um `headerMap` que traduz cada cabecalho real do Excel para o campo correto do banco
+4. Adicionar log dos cabecalhos encontrados vs mapeados para facilitar debug
 
-O card aparecera em ambas:
-- `src/pages/VisaoConsultora.tsx` -- entre os cards de resumo e os niveis de comissao
-- `src/pages/MinhaPerformance.tsx` -- na mesma posicao
+#### Parte 2 -- Criar endpoint de reprocessamento
 
-O componente `AiCoach` em formato Sheet sera mantido no codigo mas o botao de trigger sera removido do header das paginas (substituido pelo card inline).
+**Novo edge function:** `supabase/functions/reprocessar-upload/index.ts`
+
+Endpoint que recebe um `upload_id` e:
+
+1. Valida autenticacao e permissao (mesmo esquema do importador)
+2. Busca o `arquivo_path` na tabela `uploads`
+3. Deleta todos os lancamentos com aquele `upload_id`
+4. Baixa o arquivo do storage
+5. Reprocessa usando a mesma logica do importador (com o mapeamento corrigido)
+6. Atualiza o resumo do upload
+
+Isso permite reprocessar qualquer upload sem precisar reuploar o arquivo.
+
+#### Parte 3 -- Reprocessar automaticamente apos deploy
+
+Apos o deploy das correcoes, chamar o endpoint de reprocessamento para o upload `4e575dfd-8af0-437d-89f7-e4c9c6a82b3b` (o unico com problemas).
+
+Opcionalmente, adicionar um botao "Reprocessar" na tela de uploads para que o admin possa reprocessar qualquer upload futuro que tenha dado problema.
 
 ### Detalhes tecnicos
 
-**Novo componente: `src/components/CoachDicaDoDia.tsx`**
-- Props: `consultoraId: string`
-- Usa `useState` para o texto e loading, `useEffect` para disparar na montagem
-- Chave de localStorage: `coach-dica-{consultoraId}-{YYYY-MM-DD}`
-- Ao montar, verifica localStorage. Se encontrar, seta o texto. Se nao, chama a edge function `ai-coach` via streaming (reaproveitando a mesma logica de SSE do AiCoach atual)
-- Prompt unificado enviado como `pergunta`: "Faca uma analise completa: 1) Como posso vender mais este mes com base nos meus numeros? 2) Analise meu ritmo de vendas e diga se estou no caminho para a meta, calculando o que preciso por dia. 3) De dicas de abordagem comercial para fechar mais vendas."
-- Apos stream completo, salva em localStorage
-- Botao "Atualizar analise" com icone `RefreshCw`: limpa localStorage e re-dispara a chamada
-- Renderiza resposta com `ReactMarkdown` dentro de `prose prose-sm`
+**Alteracoes em `supabase/functions/upload-importar-xls/index.ts`:**
+- Extrair a logica de mapeamento de colunas para funcao reutilizavel
+- Adicionar `normalizeHeader()` e `COLUMN_ALIASES`
+- Substituir acessos diretos como `row['Resp. Venda']` por `row[headerMap.resp_venda]`
 
-**Alteracoes em `src/pages/VisaoConsultora.tsx`**
-- Remover `<AiCoach>` do header (linha 202)
-- Adicionar `<CoachDicaDoDia consultoraId={selectedConsultoraId} />` entre o grid de cards de resumo (apos linha 256) e o card de niveis de comissao (antes da linha 258)
+**Novo arquivo `supabase/functions/reprocessar-upload/index.ts`:**
+- Reutiliza a logica de processamento do importador
+- Fluxo: autenticar -> buscar upload -> deletar lancamentos antigos -> baixar arquivo -> reimportar -> atualizar resumo
+- Protegido: apenas admins da mesma empresa podem reprocessar
 
-**Alteracoes em `src/pages/MinhaPerformance.tsx`**
-- Remover `<AiCoach>` do header (linha 160)
-- Adicionar `<CoachDicaDoDia consultoraId={consultoraId} />` entre os cards de resumo e os niveis de comissao
+**Alteracoes em `supabase/config.toml`:** nao necessarias (o config.toml ja e gerenciado automaticamente)
 
-Nenhuma alteracao no edge function e necessaria -- o prompt unificado e enviado como `pergunta` e o backend ja o aceita.
+**Nenhuma alteracao de schema** -- usa as mesmas tabelas existentes.
+
+### Resultado esperado
+
+Apos a implementacao:
+1. O importador aceita cabecalhos variados sem perder dados
+2. Os 216 lancamentos problematicos sao corrigidos automaticamente via reprocessamento
+3. Se futuros uploads tiverem problemas, o admin pode reprocessar sem reuploar o arquivo
+
