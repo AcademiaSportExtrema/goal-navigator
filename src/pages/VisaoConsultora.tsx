@@ -17,6 +17,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
 import { PaginationControls } from '@/components/PaginationControls';
+import { getNivelNome } from '@/lib/utils';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -246,7 +247,7 @@ export default function VisaoConsultora() {
                   }`}>
                     {(metricas?.percentualAtingido || 0).toFixed(1)}%
                   </div>
-                  <p className="text-xs text-muted-foreground">Nível {metricas?.nivelAtual || 1} de 5</p>
+                  <p className="text-xs text-muted-foreground">{getNivelNome(metricas?.nivelAtual || 1)}</p>
                 </CardContent>
               </Card>
 
@@ -289,7 +290,7 @@ export default function VisaoConsultora() {
                             : 'bg-muted'
                         }`}
                       >
-                        <div className="font-bold">Nível {nivel.nivel}</div>
+                        <div className="font-bold">{getNivelNome(nivel.nivel)}</div>
                         <div className="text-sm opacity-80">
                           {(deP * 100).toFixed(0)}% - {(ateP * 100).toFixed(0)}%
                         </div>

@@ -43,6 +43,7 @@ import { format, subMonths, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import type { Lancamento, MetaMensal, MetaConsultora, ComissaoNivel, Consultora } from '@/types/database';
+import { getNivelNome } from '@/lib/utils';
 
 export default function Dashboard() {
   const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
@@ -443,8 +444,8 @@ export default function Dashboard() {
                 <Award className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">Nível {dashboardData.nivelAtual}</div>
-                <p className="text-xs text-muted-foreground">de 5 níveis</p>
+                <div className="text-2xl font-bold">{getNivelNome(dashboardData.nivelAtual)}</div>
+                <p className="text-xs text-muted-foreground">Ferro → Diamante</p>
               </CardContent>
             </Card>
 

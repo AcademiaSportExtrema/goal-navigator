@@ -24,6 +24,7 @@ import { format, subMonths, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import type { Lancamento, MetaMensal, MetaConsultora, ComissaoNivel, Consultora } from '@/types/database';
+import { getNivelNome } from '@/lib/utils';
 
 export default function Metas() {
   const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
@@ -286,10 +287,10 @@ export default function Metas() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    Nível {dashboardData?.nivelAtual || 1}
+                    {getNivelNome(dashboardData?.nivelAtual || 1)}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    de 5 níveis
+                    Ferro → Diamante
                   </p>
                 </CardContent>
               </Card>

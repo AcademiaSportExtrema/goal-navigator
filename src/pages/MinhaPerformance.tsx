@@ -18,6 +18,7 @@ import { CoachDicaDoDia } from '@/components/CoachDicaDoDia';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
+import { getNivelNome } from '@/lib/utils';
 
 export default function MinhaPerformance() {
   const { consultoraId } = useAuth();
@@ -227,7 +228,7 @@ export default function MinhaPerformance() {
                     {(metricas?.percentualAtingido || 0).toFixed(1)}%
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Nível {metricas?.nivelAtual || 1} de 5
+                    {getNivelNome(metricas?.nivelAtual || 1)}
                   </p>
                 </CardContent>
               </Card>
@@ -278,7 +279,7 @@ export default function MinhaPerformance() {
                             : 'bg-muted'
                         }`}
                       >
-                        <div className="font-bold">Nível {nivel.nivel}</div>
+                        <div className="font-bold">{getNivelNome(nivel.nivel)}</div>
                         <div className="text-sm opacity-80">
                           {(deP * 100).toFixed(0)}% - {(ateP * 100).toFixed(0)}%
                         </div>
