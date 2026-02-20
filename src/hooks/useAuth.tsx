@@ -9,6 +9,8 @@ interface AuthContextType {
   role: AppRole | null;
   consultoraId: string | null;
   empresaId: string | null;
+  empresaNome: string | null;
+  empresaLogoUrl: string | null;
   isSuperAdmin: boolean;
   empresaAtiva: boolean;
   isLoading: boolean;
@@ -26,6 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [consultoraId, setConsultoraId] = useState<string | null>(null);
   const [empresaId, setEmpresaId] = useState<string | null>(null);
+  const [empresaNome, setEmpresaNome] = useState<string | null>(null);
+  const [empresaLogoUrl, setEmpresaLogoUrl] = useState<string | null>(null);
   const [empresaAtiva, setEmpresaAtiva] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -45,11 +49,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (roleData.role !== 'super_admin' && roleData.empresa_id) {
         const { data: empresa } = await supabase
           .from('empresas')
-          .select('ativo, subscription_status, trial_ends_at')
+          .select('nome, logo_url, ativo, subscription_status, trial_ends_at')
           .eq('id', roleData.empresa_id)
           .single();
 
         if (empresa) {
+          setEmpresaNome(empresa.nome);
+          setEmpresaLogoUrl((empresa as any).logo_url);
           const isActive = empresa.ativo && (
             empresa.subscription_status === 'active' ||
             (empresa.trial_ends_at && new Date(empresa.trial_ends_at) > new Date())
@@ -74,6 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setRole(null);
           setConsultoraId(null);
           setEmpresaId(null);
+          setEmpresaNome(null);
+          setEmpresaLogoUrl(null);
           setEmpresaAtiva(true);
         }
 
@@ -114,6 +122,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRole(null);
     setConsultoraId(null);
     setEmpresaId(null);
+    setEmpresaNome(null);
+    setEmpresaLogoUrl(null);
     setEmpresaAtiva(true);
   };
 
@@ -125,6 +135,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role,
         consultoraId,
         empresaId,
+        empresaNome,
+        empresaLogoUrl,
         isSuperAdmin: role === 'super_admin',
         empresaAtiva,
         isLoading,
