@@ -1,41 +1,57 @@
 
-
-## Aprimorar Card de Niveis de Comissao na Visao Consultora
+## Dica do Dia do Coach IA
 
 ### O que muda
 
-O card "Niveis de Comissao" atualmente mostra apenas o range de % de atingimento e o % de comissao. A melhoria adicionara duas informacoes por nivel:
+Substituir o botao "Pedir dica ao Coach IA" (que abre um Sheet com 3 opcoes) por um **card fixo de "Dica do Dia"** posicionado entre os cards de meta e os niveis de comissao. O card exibira uma analise completa gerada automaticamente (unificando as 3 perguntas em uma unica) na primeira vez que a consultora acessa a pagina no dia. A dica fica visivel ate que ela clique em "Atualizar analise".
 
-1. **Valor em R$ do range** -- calculado como `metaIndividual * de_percent` ate `metaIndividual * ate_percent`, mostrando quanto a consultora precisa vender para atingir aquele nivel.
-2. **Range de bonus estimado** -- calculado como `valorMinRange * comissao_percent` ate `valorMaxRange * comissao_percent`, mostrando quanto ela ganharia de comissao se ficar naquele nivel.
+### Comportamento
 
-### Layout proposto
+1. Ao abrir a pagina (VisaoConsultora ou MinhaPerformance), verifica-se em `localStorage` se ja existe uma dica gerada para aquele `consultoraId + data de hoje`.
+2. Se nao existir, dispara automaticamente a chamada ao edge function `ai-coach` com um prompt unificado que combina as 3 perguntas (vender mais + ritmo + abordagem).
+3. O texto gerado via streaming e exibido dentro do card e salvo em `localStorage` com a chave `coach-dica-{consultoraId}-{YYYY-MM-DD}`.
+4. Se ja existir no localStorage, exibe direto sem chamar a API.
+5. Um botao "Atualizar analise" limpa o cache do dia e dispara nova chamada.
 
-Cada card de nivel passara a exibir:
+### Layout do card
 
 ```text
-+-----------------------+
-|     Nivel 2           |
-|   71% - 85%           |
-|  R$ 7.100 - R$ 8.500  |  <-- novo: range de vendas
-|      0.5%             |
-| Bonus: R$35 - R$42    |  <-- novo: range de bonus estimado
-+-----------------------+
++--------------------------------------------------+
+| [icone Sparkles] Dica do Coach IA                 |
+|                               [Atualizar analise] |
+|--------------------------------------------------|
+| Texto em markdown da dica do dia...               |
+| ...                                               |
+| (ou skeleton/loader enquanto carrega)             |
++--------------------------------------------------+
 ```
 
-O nivel ativo (onde a consultora esta) continuara destacado com `bg-primary`.
+### Mudancas nas duas paginas
+
+O card aparecera em ambas:
+- `src/pages/VisaoConsultora.tsx` -- entre os cards de resumo e os niveis de comissao
+- `src/pages/MinhaPerformance.tsx` -- na mesma posicao
+
+O componente `AiCoach` em formato Sheet sera mantido no codigo mas o botao de trigger sera removido do header das paginas (substituido pelo card inline).
 
 ### Detalhes tecnicos
 
-**Arquivo:** `src/pages/VisaoConsultora.tsx`
+**Novo componente: `src/components/CoachDicaDoDia.tsx`**
+- Props: `consultoraId: string`
+- Usa `useState` para o texto e loading, `useEffect` para disparar na montagem
+- Chave de localStorage: `coach-dica-{consultoraId}-{YYYY-MM-DD}`
+- Ao montar, verifica localStorage. Se encontrar, seta o texto. Se nao, chama a edge function `ai-coach` via streaming (reaproveitando a mesma logica de SSE do AiCoach atual)
+- Prompt unificado enviado como `pergunta`: "Faca uma analise completa: 1) Como posso vender mais este mes com base nos meus numeros? 2) Analise meu ritmo de vendas e diga se estou no caminho para a meta, calculando o que preciso por dia. 3) De dicas de abordagem comercial para fechar mais vendas."
+- Apos stream completo, salva em localStorage
+- Botao "Atualizar analise" com icone `RefreshCw`: limpa localStorage e re-dispara a chamada
+- Renderiza resposta com `ReactMarkdown` dentro de `prose prose-sm`
 
-- Dentro do bloco de renderizacao dos niveis (linhas 262-281), calcular para cada nivel:
-  - `valorMin = metaIndividual * de_percent`
-  - `valorMax = metaIndividual * ate_percent` (para o ultimo nivel, exibir como "+" ao inves de um teto)
-  - `bonusMin = valorMin * comissao_percent`
-  - `bonusMax = valorMax * comissao_percent`
-- Adicionar duas novas linhas de texto em cada card do nivel com esses valores formatados em BRL
-- Usar `text-xs opacity-70` para os valores monetarios para nao competir visualmente com o % principal
-- Tratar o caso em que `metaIndividual` e 0 ou nao definida, mostrando "-" nos valores
+**Alteracoes em `src/pages/VisaoConsultora.tsx`**
+- Remover `<AiCoach>` do header (linha 202)
+- Adicionar `<CoachDicaDoDia consultoraId={selectedConsultoraId} />` entre o grid de cards de resumo (apos linha 256) e o card de niveis de comissao (antes da linha 258)
 
-Nenhuma alteracao de banco de dados ou edge function e necessaria -- todos os dados ja estao disponiveis no frontend.
+**Alteracoes em `src/pages/MinhaPerformance.tsx`**
+- Remover `<AiCoach>` do header (linha 160)
+- Adicionar `<CoachDicaDoDia consultoraId={consultoraId} />` entre os cards de resumo e os niveis de comissao
+
+Nenhuma alteracao no edge function e necessaria -- o prompt unificado e enviado como `pergunta` e o backend ja o aceita.
