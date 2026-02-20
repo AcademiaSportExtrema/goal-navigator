@@ -260,24 +260,50 @@ export default function VisaoConsultora() {
               <CardHeader><CardTitle>Níveis de Comissão</CardTitle></CardHeader>
               <CardContent>
                 <div className="flex gap-2">
-                  {niveisComissao?.map((nivel) => (
-                    <div
-                      key={nivel.nivel}
-                      className={`flex-1 p-3 rounded-lg text-center border ${
-                        metricas?.nivelAtual === nivel.nivel
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-muted'
-                      }`}
-                    >
-                      <div className="font-bold">Nível {nivel.nivel}</div>
-                      <div className="text-sm opacity-80">
-                        {(Number(nivel.de_percent) * 100).toFixed(0)}% - {(Number(nivel.ate_percent) * 100).toFixed(0)}%
+                  {niveisComissao?.map((nivel, idx) => {
+                    const mi = metricas?.metaIndividual || 0;
+                    const deP = Number(nivel.de_percent);
+                    const ateP = Number(nivel.ate_percent);
+                    const comP = Number(nivel.comissao_percent);
+                    const isLast = idx === (niveisComissao.length - 1);
+                    const valorMin = mi * deP;
+                    const valorMax = mi * ateP;
+                    const bonusMin = valorMin * comP;
+                    const bonusMax = valorMax * comP;
+
+                    return (
+                      <div
+                        key={nivel.nivel}
+                        className={`flex-1 p-3 rounded-lg text-center border ${
+                          metricas?.nivelAtual === nivel.nivel
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'bg-muted'
+                        }`}
+                      >
+                        <div className="font-bold">Nível {nivel.nivel}</div>
+                        <div className="text-sm opacity-80">
+                          {(deP * 100).toFixed(0)}% - {(ateP * 100).toFixed(0)}%
+                        </div>
+                        <div className="text-xs opacity-70 mt-0.5">
+                          {mi > 0
+                            ? isLast
+                              ? `${fmt(valorMin)}+`
+                              : `${fmt(valorMin)} - ${fmt(valorMax)}`
+                            : '-'}
+                        </div>
+                        <div className="text-lg font-bold mt-1">
+                          {(comP * 100).toFixed(1)}%
+                        </div>
+                        <div className="text-xs opacity-70">
+                          {mi > 0
+                            ? isLast
+                              ? `Bônus: ${fmt(bonusMin)}+`
+                              : `Bônus: ${fmt(bonusMin)} - ${fmt(bonusMax)}`
+                            : '-'}
+                        </div>
                       </div>
-                      <div className="text-lg font-bold mt-1">
-                        {(Number(nivel.comissao_percent) * 100).toFixed(1)}%
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
