@@ -1,31 +1,43 @@
 
 
-## Atualizar card "Niveis de Comissao" na Minha Performance
+## Renomear Níveis de Comissão
 
-### Problema
+### Objetivo
 
-A pagina **Minha Performance** (vista pelas consultoras) exibe o card de niveis de comissao de forma simplificada, mostrando apenas os percentuais de atingimento e a taxa de comissao. Ja a pagina **Visao Consultora** (vista pelo admin) mostra informacoes mais completas: faixas em R$, percentual de comissao e estimativa de bonus.
+Substituir os nomes genéricos "Nível 1, 2, 3, 4, 5" por nomes temáticos: **Ferro, Bronze, Prata, Ouro, Diamante**.
 
-As consultoras nao estao vendo as faixas em R$ e os valores de bonus estimado, que sao informacoes importantes para entenderem quanto precisam vender e quanto podem ganhar.
+### Solução
 
-### Solucao
+Criar um mapeamento centralizado de número para nome e aplicar em todos os 4 arquivos que exibem o nível.
 
-Atualizar o card "Niveis de Comissao" na pagina `MinhaPerformance.tsx` para incluir as mesmas informacoes detalhadas que ja existem na pagina `VisaoConsultora.tsx`:
-- Faixa de valores em R$ (baseada na meta individual da consultora)
-- Percentual de comissao
-- Estimativa de bonus em R$
+### Detalhes técnicos
 
-### Detalhes tecnicos
+**Mapeamento (será criado em `src/lib/utils.ts` ou inline nos arquivos):**
 
-**Arquivo:** `src/pages/MinhaPerformance.tsx`
+```text
+1 -> Ferro
+2 -> Bronze
+3 -> Prata
+4 -> Ouro
+5 -> Diamante
+```
 
-1. Adicionar funcao auxiliar `fmt` para formatacao monetaria (igual a que ja existe na VisaoConsultora)
-2. Atualizar o bloco do card "Niveis de Comissao" (linhas 257-276) para replicar a logica da VisaoConsultora:
-   - Calcular `valorMin` e `valorMax` com base na meta individual
-   - Calcular `bonusMin` e `bonusMax`
-   - Tratar o ultimo nivel com sufixo "+"
-   - Exibir faixa em R$ abaixo dos percentuais
-   - Exibir estimativa de bonus abaixo da taxa de comissao
+**Arquivos a alterar:**
 
-**Nenhum outro arquivo precisa ser alterado.**
+1. **`src/pages/MinhaPerformance.tsx`**
+   - Linha 230: `Nível {metricas?.nivelAtual || 1} de 5` -> nome correspondente
+   - Linha 281: `Nível {nivel.nivel}` -> nome correspondente
+
+2. **`src/pages/Metas.tsx`**
+   - Linha 289: `Nível {dashboardData?.nivelAtual || 1}` -> nome correspondente
+
+3. **`src/pages/Dashboard.tsx`**
+   - Linha 446: `Nível {dashboardData.nivelAtual}` -> nome correspondente
+   - Linha 447: `de 5 níveis` -> ajustar texto
+
+4. **`src/pages/VisaoConsultora.tsx`**
+   - Linha 249: `Nível {metricas?.nivelAtual || 1} de 5` -> nome correspondente
+   - Linha 292: `Nível {nivel.nivel}` -> nome correspondente
+
+**Abordagem:** Criar uma constante reutilizável (array ou objeto) com os nomes, e uma funcao helper `getNivelNome(nivel: number): string` em `src/lib/utils.ts` para uso em todos os arquivos.
 
