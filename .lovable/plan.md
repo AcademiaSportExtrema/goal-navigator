@@ -1,81 +1,64 @@
 
 
-## Paginacao no Gerencial e Filtros/Ordenacao nas Consultoras
+## Paginacao Aprimorada no Gerencial e Consultoras
 
-### Parte 1 -- Gerencial: Paginacao real no banco de dados
+### O que falta
 
-Atualmente o Gerencial busca no maximo 1000 registros do banco e faz paginacao apenas no frontend (50 por pagina). Isso significa que se houver mais de 1000 lancamentos, parte dos dados fica invisivel.
+1. **Gerencial**: paginacao so aparece em cima da tabela, com apenas botoes de anterior/proximo
+2. **Consultoras**: paginacao so aparece embaixo da tabela, tambem apenas anterior/proximo
+3. Ambas as paginas precisam de: ir para primeira/ultima pagina, digitar numero da pagina, e exibir a paginacao em cima E embaixo da tabela
 
-**Mudanca:** Implementar paginacao server-side usando `.range()` do Supabase, buscando apenas os 50 registros da pagina atual. Os filtros e ordenacao tambem serao aplicados na query do banco.
+### Solucao
+
+Criar um componente reutilizavel `PaginationControls` que sera usado em ambas as paginas, renderizado antes e depois da tabela.
+
+#### Componente `PaginationControls`
+
+**Novo arquivo:** `src/components/PaginationControls.tsx`
+
+O componente recebe:
+- `currentPage`, `totalPages`, `totalCount`, `itemsPerPage`, `onPageChange`
+
+Exibe:
+- Texto "Mostrando X-Y de Z registros"
+- Botao `<<` (primeira pagina)
+- Botao `<` (pagina anterior)
+- Input numerico para digitar a pagina desejada (com texto "de N")
+- Botao `>` (proxima pagina)
+- Botao `>>` (ultima pagina)
+
+Layout compacto em uma linha, responsivo.
+
+#### Alteracoes no Gerencial
 
 **Arquivo:** `src/pages/Gerencial.tsx`
 
-- Substituir a query unica por uma que recebe `currentPage`, `filters`, `sortColumn`, `sortDirection`, `searchTerm` e `dateRange` como parametros
-- Usar `.range((page-1)*50, page*50-1)` para buscar apenas a pagina atual
-- Aplicar filtros via `.eq()`, `.ilike()` e `.gte()/.lte()` direto na query do Supabase
-- Adicionar uma segunda query com `select('id', { count: 'exact', head: true })` e os mesmos filtros para obter o total de registros (necessario para calcular o numero de paginas)
-- Os totais financeiros (soma de valor) precisarao de uma abordagem: usar uma database function ou calcular a soma apenas dos registros filtrados via uma query separada com `select('valor')` e os mesmos filtros
-- Manter o seletor de colunas, exportacao CSV e funcionalidades existentes
-- O CSV continuara exportando todos os registros filtrados (sem paginacao), fazendo uma query separada sem `.range()`
+- Substituir os botoes simples de paginacao no header por `<PaginationControls>` acima da tabela
+- Adicionar `<PaginationControls>` tambem abaixo da tabela (apos o `</Table>`)
+- Remover os botoes inline de ChevronLeft/ChevronRight que existem hoje
 
-**Nova database function** para totais:
-
-```sql
-CREATE OR REPLACE FUNCTION public.count_and_sum_lancamentos(
-  _empresa_id uuid,
-  _search text DEFAULT '',
-  _filters jsonb DEFAULT '{}'
-)
-RETURNS TABLE(total_count bigint, total_valor numeric)
-```
-
-Alternativa mais simples: duas queries -- uma com `count: 'exact'` e head:true, outra pegando todos os valores para somar. Como a soma e importante, a funcao no banco e mais eficiente.
-
-### Parte 2 -- Consultoras: Tabela com filtro, busca e ordenacao
-
-Atualmente a pagina Consultoras exibe as consultoras como cards sem nenhum filtro ou ordenacao.
-
-**Mudanca:** Converter para formato de tabela com:
+#### Alteracoes nas Consultoras
 
 **Arquivo:** `src/pages/Consultoras.tsx`
 
-- Adicionar campo de busca por nome/email
-- Adicionar filtro por status (Todas / Ativas / Inativas / Com Acesso / Sem Acesso)
-- Adicionar ordenacao clicavel nas colunas (Nome, Email, Status, Acesso)
-- Manter os cards de resumo no topo (Total, Ativas, Inativas, Com Acesso)
-- Substituir a lista de cards por uma `<Table>` com colunas: Nome, Email, Status (ativo/inativo), Acesso (badge), Acoes
-- Adicionar paginacao frontend (a quantidade de consultoras e pequena, nao precisa de server-side)
-- 20 itens por pagina com navegacao identica ao Gerencial
+- Substituir o bloco de paginacao existente (linhas 626-641) por `<PaginationControls>`
+- Adicionar `<PaginationControls>` tambem acima da tabela (antes do `<Table>`)
+- A paginacao deve aparecer sempre que houver mais de 1 pagina
 
 ### Detalhes tecnicos
 
-**Gerencial -- query paginada:**
-```typescript
-const { data, count } = await supabase
-  .from('lancamentos')
-  .select('*', { count: 'exact' })
-  .order(sortColumn || 'data_lancamento', { ascending: sortDirection === 'asc' })
-  .range((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE - 1);
+**Componente PaginationControls:**
+
+```text
+[Mostrando 1-50 de 216]  [<<] [<] [Pagina: [1] de 5] [>] [>>]
 ```
 
-Os filtros serao encadeados condicionalmente:
-- `searchTerm` -> `.or('nome_cliente.ilike.%term%,resp_venda.ilike.%term%,...')`
-- `filters.empresa` -> `.eq('empresa', value)`
-- `dateRange` -> `.gte('data_lancamento', from).lte('data_lancamento', to)`
-
-**Consultoras -- filtro e ordenacao frontend:**
-```typescript
-const [search, setSearch] = useState('');
-const [statusFilter, setStatusFilter] = useState('all');
-const [sortCol, setSortCol] = useState<string>('nome');
-const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc');
-```
-
-Filtro aplicado via `useMemo` sobre o array de consultoras ja carregado.
+- O input de pagina aceita digitacao e navega ao pressionar Enter ou ao sair do campo (onBlur)
+- Valida que o numero digitado esta entre 1 e totalPages
+- Botoes desabilitados quando na primeira/ultima pagina
+- Icones: ChevronsLeft (<<), ChevronLeft (<), ChevronRight (>), ChevronsRight (>>)
 
 **Arquivos alterados:**
-- `src/pages/Gerencial.tsx` -- paginacao server-side, queries refatoradas
-- `src/pages/Consultoras.tsx` -- tabela com busca, filtro, ordenacao e paginacao
-
-Nenhuma alteracao de schema e necessaria (a menos que se opte pela database function de totais, que seria uma migracao simples).
-
+- `src/components/PaginationControls.tsx` (novo)
+- `src/pages/Gerencial.tsx` (substituir paginacao por componente, adicionar embaixo da tabela)
+- `src/pages/Consultoras.tsx` (substituir paginacao por componente, adicionar em cima da tabela)
