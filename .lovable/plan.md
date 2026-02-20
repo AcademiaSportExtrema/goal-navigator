@@ -1,74 +1,81 @@
 
 
-## Corrigir Importador e Reprocessar Uploads Problematicos
+## Paginacao no Gerencial e Filtros/Ordenacao nas Consultoras
 
-### Problema
+### Parte 1 -- Gerencial: Paginacao real no banco de dados
 
-O upload `4e575dfd` (216 lancamentos) foi importado sem `nome_cliente`, `resp_venda`, `resp_recebimento` e `consultora_chave`. Os dados mostram produtos como "BOLD DOCE DE LEITE 60G" e "CRISTAL AGUA 500ML", indicando que o arquivo tem cabecalhos diferentes do esperado pelo importador.
+Atualmente o Gerencial busca no maximo 1000 registros do banco e faz paginacao apenas no frontend (50 por pagina). Isso significa que se houver mais de 1000 lancamentos, parte dos dados fica invisivel.
 
-### Solucao em 2 partes
+**Mudanca:** Implementar paginacao server-side usando `.range()` do Supabase, buscando apenas os 50 registros da pagina atual. Os filtros e ordenacao tambem serao aplicados na query do banco.
 
-#### Parte 1 -- Melhorar mapeamento de colunas no importador
+**Arquivo:** `src/pages/Gerencial.tsx`
 
-**Arquivo:** `supabase/functions/upload-importar-xls/index.ts`
+- Substituir a query unica por uma que recebe `currentPage`, `filters`, `sortColumn`, `sortDirection`, `searchTerm` e `dateRange` como parametros
+- Usar `.range((page-1)*50, page*50-1)` para buscar apenas a pagina atual
+- Aplicar filtros via `.eq()`, `.ilike()` e `.gte()/.lte()` direto na query do Supabase
+- Adicionar uma segunda query com `select('id', { count: 'exact', head: true })` e os mesmos filtros para obter o total de registros (necessario para calcular o numero de paginas)
+- Os totais financeiros (soma de valor) precisarao de uma abordagem: usar uma database function ou calcular a soma apenas dos registros filtrados via uma query separada com `select('valor')` e os mesmos filtros
+- Manter o seletor de colunas, exportacao CSV e funcionalidades existentes
+- O CSV continuara exportando todos os registros filtrados (sem paginacao), fazendo uma query separada sem `.range()`
 
-Adicionar um sistema de aliases flexivel para mapear cabecalhos variados:
+**Nova database function** para totais:
 
-1. Criar funcao `normalizeHeader(h)` que remove acentos, converte para minusculo e remove pontuacao
-2. Criar dicionario `COLUMN_ALIASES` com todas as variacoes conhecidas para cada campo:
-
-```text
-nome_cliente  -> "nome", "cliente", "nome cliente", "nome do cliente", "razao social"
-resp_venda    -> "resp. venda", "resp venda", "responsavel venda", "vendedor", "consultor"
-resp_recebimento -> "resp. recebimento", "resp recebimento", "responsavel recebimento"
-numero_contrato  -> "n contrato", "contrato", "numero contrato", "nro contrato"
-(e demais campos que ja tem variacoes)
+```sql
+CREATE OR REPLACE FUNCTION public.count_and_sum_lancamentos(
+  _empresa_id uuid,
+  _search text DEFAULT '',
+  _filters jsonb DEFAULT '{}'
+)
+RETURNS TABLE(total_count bigint, total_valor numeric)
 ```
 
-3. Antes de processar as linhas, construir um `headerMap` que traduz cada cabecalho real do Excel para o campo correto do banco
-4. Adicionar log dos cabecalhos encontrados vs mapeados para facilitar debug
+Alternativa mais simples: duas queries -- uma com `count: 'exact'` e head:true, outra pegando todos os valores para somar. Como a soma e importante, a funcao no banco e mais eficiente.
 
-#### Parte 2 -- Criar endpoint de reprocessamento
+### Parte 2 -- Consultoras: Tabela com filtro, busca e ordenacao
 
-**Novo edge function:** `supabase/functions/reprocessar-upload/index.ts`
+Atualmente a pagina Consultoras exibe as consultoras como cards sem nenhum filtro ou ordenacao.
 
-Endpoint que recebe um `upload_id` e:
+**Mudanca:** Converter para formato de tabela com:
 
-1. Valida autenticacao e permissao (mesmo esquema do importador)
-2. Busca o `arquivo_path` na tabela `uploads`
-3. Deleta todos os lancamentos com aquele `upload_id`
-4. Baixa o arquivo do storage
-5. Reprocessa usando a mesma logica do importador (com o mapeamento corrigido)
-6. Atualiza o resumo do upload
+**Arquivo:** `src/pages/Consultoras.tsx`
 
-Isso permite reprocessar qualquer upload sem precisar reuploar o arquivo.
-
-#### Parte 3 -- Reprocessar automaticamente apos deploy
-
-Apos o deploy das correcoes, chamar o endpoint de reprocessamento para o upload `4e575dfd-8af0-437d-89f7-e4c9c6a82b3b` (o unico com problemas).
-
-Opcionalmente, adicionar um botao "Reprocessar" na tela de uploads para que o admin possa reprocessar qualquer upload futuro que tenha dado problema.
+- Adicionar campo de busca por nome/email
+- Adicionar filtro por status (Todas / Ativas / Inativas / Com Acesso / Sem Acesso)
+- Adicionar ordenacao clicavel nas colunas (Nome, Email, Status, Acesso)
+- Manter os cards de resumo no topo (Total, Ativas, Inativas, Com Acesso)
+- Substituir a lista de cards por uma `<Table>` com colunas: Nome, Email, Status (ativo/inativo), Acesso (badge), Acoes
+- Adicionar paginacao frontend (a quantidade de consultoras e pequena, nao precisa de server-side)
+- 20 itens por pagina com navegacao identica ao Gerencial
 
 ### Detalhes tecnicos
 
-**Alteracoes em `supabase/functions/upload-importar-xls/index.ts`:**
-- Extrair a logica de mapeamento de colunas para funcao reutilizavel
-- Adicionar `normalizeHeader()` e `COLUMN_ALIASES`
-- Substituir acessos diretos como `row['Resp. Venda']` por `row[headerMap.resp_venda]`
+**Gerencial -- query paginada:**
+```typescript
+const { data, count } = await supabase
+  .from('lancamentos')
+  .select('*', { count: 'exact' })
+  .order(sortColumn || 'data_lancamento', { ascending: sortDirection === 'asc' })
+  .range((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE - 1);
+```
 
-**Novo arquivo `supabase/functions/reprocessar-upload/index.ts`:**
-- Reutiliza a logica de processamento do importador
-- Fluxo: autenticar -> buscar upload -> deletar lancamentos antigos -> baixar arquivo -> reimportar -> atualizar resumo
-- Protegido: apenas admins da mesma empresa podem reprocessar
+Os filtros serao encadeados condicionalmente:
+- `searchTerm` -> `.or('nome_cliente.ilike.%term%,resp_venda.ilike.%term%,...')`
+- `filters.empresa` -> `.eq('empresa', value)`
+- `dateRange` -> `.gte('data_lancamento', from).lte('data_lancamento', to)`
 
-**Alteracoes em `supabase/config.toml`:** nao necessarias (o config.toml ja e gerenciado automaticamente)
+**Consultoras -- filtro e ordenacao frontend:**
+```typescript
+const [search, setSearch] = useState('');
+const [statusFilter, setStatusFilter] = useState('all');
+const [sortCol, setSortCol] = useState<string>('nome');
+const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc');
+```
 
-**Nenhuma alteracao de schema** -- usa as mesmas tabelas existentes.
+Filtro aplicado via `useMemo` sobre o array de consultoras ja carregado.
 
-### Resultado esperado
+**Arquivos alterados:**
+- `src/pages/Gerencial.tsx` -- paginacao server-side, queries refatoradas
+- `src/pages/Consultoras.tsx` -- tabela com busca, filtro, ordenacao e paginacao
 
-Apos a implementacao:
-1. O importador aceita cabecalhos variados sem perder dados
-2. Os 216 lancamentos problematicos sao corrigidos automaticamente via reprocessamento
-3. Se futuros uploads tiverem problemas, o admin pode reprocessar sem reuploar o arquivo
+Nenhuma alteracao de schema e necessaria (a menos que se opte pela database function de totais, que seria uma migracao simples).
 
