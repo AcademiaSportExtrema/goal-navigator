@@ -86,7 +86,7 @@ const superAdminMenuGroups = [
 
 export function AppSidebar() {
   const location = useLocation();
-  const { user, signOut, isAdmin, isSuperAdmin } = useAuth();
+  const { user, signOut, isAdmin, isSuperAdmin, empresaNome, empresaLogoUrl } = useAuth();
   const { state } = useSidebar();
   const { hasPermission } = usePermissions();
 
@@ -96,13 +96,21 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-3 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-            <Target className="h-4 w-4" />
-          </div>
+          {!isSuperAdmin && empresaLogoUrl ? (
+            <img src={empresaLogoUrl} alt="Logo" className="h-8 w-8 rounded-lg object-contain" />
+          ) : !isSuperAdmin && empresaNome ? (
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground text-sm font-bold">
+              {empresaNome.charAt(0).toUpperCase()}
+            </div>
+          ) : (
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+              <Target className="h-4 w-4" />
+            </div>
+          )}
           {state !== 'collapsed' && (
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-sidebar-foreground">
-                Sistema de Metas
+                {!isSuperAdmin && empresaNome ? empresaNome : 'Sistema de Metas'}
               </span>
               <span className="text-xs text-sidebar-foreground/60">
                 {roleLabel}

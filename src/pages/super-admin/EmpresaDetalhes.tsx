@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,6 +35,7 @@ import {
   XCircle,
   Shield,
   UserCheck,
+  ImagePlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useImpersonation } from '@/hooks/useImpersonation';
@@ -49,6 +50,7 @@ interface EmpresaDetails {
     trial_ends_at: string | null;
     created_at: string;
     updated_at: string;
+    logo_url: string | null;
   };
   users: {
     user_id: string;
@@ -87,6 +89,8 @@ export default function EmpresaDetalhes() {
   const [impersonateDialog, setImpersonateDialog] = useState<{ user_id: string; email: string } | null>(null);
   const [impersonateMotivo, setImpersonateMotivo] = useState('');
   const [impersonating, setImpersonating] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading, error } = useQuery<EmpresaDetails>({
     queryKey: ['empresa-details', id],
@@ -159,6 +163,48 @@ export default function EmpresaDetalhes() {
   const formatDate = (d: string | null) => {
     if (!d) return '-';
     return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !id) return;
+    
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Formato não suportado. Use PNG, JPG, SVG ou WebP.');
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const path = `${id}/logo.${ext}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('logos')
+        .upload(path, file, { upsert: true });
+      
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('logos')
+        .getPublicUrl(path);
+
+      const { error: updateError } = await supabase
+        .from('empresas')
+        .update({ logo_url: publicUrl } as any)
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+
+      queryClient.invalidateQueries({ queryKey: ['empresa-details', id] });
+      toast.success('Logo atualizado com sucesso!');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao fazer upload do logo');
+    } finally {
+      setUploadingLogo(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    }
   };
 
   const roleLabel = (role: string) => {
@@ -268,7 +314,7 @@ export default function EmpresaDetalhes() {
           </Card>
         </div>
 
-        {/* Subscription & Info */}
+        {/* Logo & Subscription Info */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -277,7 +323,36 @@ export default function EmpresaDetalhes() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Logo Upload */}
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-sm text-muted-foreground">Logo</p>
+                <div
+                  className="relative h-20 w-20 rounded-lg border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => logoInputRef.current?.click()}
+                >
+                  {empresa.logo_url ? (
+                    <img src={empresa.logo_url} alt="Logo" className="h-full w-full object-contain" />
+                  ) : (
+                    <ImagePlus className="h-8 w-8 text-muted-foreground/50" />
+                  )}
+                  {uploadingLogo && (
+                    <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
+                      <span className="text-xs text-muted-foreground">Enviando...</span>
+                    </div>
+                  )}
+                </div>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                  className="hidden"
+                  onChange={handleLogoUpload}
+                />
+                <Button variant="outline" size="sm" onClick={() => logoInputRef.current?.click()} disabled={uploadingLogo}>
+                  {empresa.logo_url ? 'Alterar logo' : 'Subir logo'}
+                </Button>
+              </div>
               <div>
                 <p className="text-sm text-muted-foreground">Status da Assinatura</p>
                 <div className="flex items-center gap-2 mt-1">
