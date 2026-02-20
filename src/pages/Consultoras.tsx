@@ -34,8 +34,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Plus, Edit, Trash2, Mail, User, UserPlus, Unlink, KeyRound, Search, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, Mail, User, UserPlus, Unlink, KeyRound, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import type { Consultora } from '@/types/database';
+import { PaginationControls } from '@/components/PaginationControls';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -490,6 +491,7 @@ export default function Consultoras() {
               </div>
             ) : filteredSorted.length > 0 ? (
               <>
+                <PaginationControls currentPage={currentPage} totalPages={totalPages} totalCount={filteredSorted.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} />
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -621,24 +623,7 @@ export default function Consultoras() {
                     </TableBody>
                   </Table>
                 </div>
-
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between px-6 py-3 border-t">
-                    <span className="text-sm text-muted-foreground">
-                      {filteredSorted.length} consultora{filteredSorted.length !== 1 ? 's' : ''}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <span className="text-sm">Página {currentPage} de {totalPages}</span>
-                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}>
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                <PaginationControls currentPage={currentPage} totalPages={totalPages} totalCount={filteredSorted.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} />
               </>
             ) : (
               <div className="text-center py-12 text-muted-foreground">

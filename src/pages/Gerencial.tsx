@@ -37,7 +37,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Download, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon, Columns3, Send, Trash2 } from 'lucide-react';
+import { Search, Download, X, ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon, Columns3, Send, Trash2 } from 'lucide-react';
+import { PaginationControls } from '@/components/PaginationControls';
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -544,42 +545,34 @@ export default function Gerencial() {
                 )}
                 {isConsultora && <span className="text-xs font-normal text-muted-foreground ml-2">(mês atual)</span>}
               </CardTitle>
-              <div className="flex items-center gap-2">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <Columns3 className="h-4 w-4 mr-1" />
-                      Colunas
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-56 max-h-80 overflow-y-auto" align="end">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium mb-2">Colunas visíveis</p>
-                      {columns.map(col => (
-                        <div
-                          key={col.key}
-                          className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:bg-muted/50 rounded px-1"
-                          onClick={(e) => { e.preventDefault(); toggleColumn(col.key); }}
-                        >
-                          <Checkbox
-                            checked={!hiddenColumns.has(col.key)}
-                          />
-                          <span>{col.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-sm whitespace-nowrap">Página {currentPage} de {totalPages || 1}</span>
-                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Columns3 className="h-4 w-4 mr-1" />
+                    Colunas
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 max-h-80 overflow-y-auto" align="end">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium mb-2">Colunas visíveis</p>
+                    {columns.map(col => (
+                      <div
+                        key={col.key}
+                        className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:bg-muted/50 rounded px-1"
+                        onClick={(e) => { e.preventDefault(); toggleColumn(col.key); }}
+                      >
+                        <Checkbox
+                          checked={!hiddenColumns.has(col.key)}
+                        />
+                        <span>{col.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </CardHeader>
+          <PaginationControls currentPage={currentPage} totalPages={totalPages} totalCount={totalCount} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} />
           <CardContent className="p-0">
             <div className="overflow-x-auto scrollbar-thin">
               <Table className="table-dense">
@@ -662,6 +655,7 @@ export default function Gerencial() {
               </Table>
             </div>
           </CardContent>
+          <PaginationControls currentPage={currentPage} totalPages={totalPages} totalCount={totalCount} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} />
         </Card>
       </div>
 
