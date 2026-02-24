@@ -220,8 +220,6 @@ export default function Dashboard() {
       }
     }
 
-    const comissaoTotal = totalVendido * comissaoPercent;
-
     const porConsultora: Record<string, { nome: string; valor: number }> = {};
     for (const l of lancamentos) {
       const chave = l.consultora_chave || 'Não identificado';
@@ -265,6 +263,9 @@ export default function Dashboard() {
         consultoraId: metaConsultora?.consultora_id || null,
       };
     }).sort((a, b) => b.vendido - a.vendido);
+
+    // Comissão total = soma das comissões individuais de cada consultora
+    const comissaoTotal = consultoraDados.reduce((acc, c) => acc + c.comissao, 0);
 
     return {
       totalVendido,
