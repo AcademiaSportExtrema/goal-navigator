@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 import { useSalesMetrics } from '@/hooks/useSalesMetrics';
 import { RevenueTrendChart } from '@/components/dashboard/RevenueTrendChart';
 import { RevenueByPaymentChart } from '@/components/dashboard/RevenueByPaymentChart';
@@ -46,6 +47,7 @@ import type { Lancamento, MetaMensal, MetaConsultora, ComissaoNivel, Consultora 
 import { getNivelNome } from '@/lib/utils';
 
 export default function Dashboard() {
+  const { isAdmin } = useAuth();
   const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
   const [selectedConsultoraId, setSelectedConsultoraId] = useState<string | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
@@ -372,54 +374,60 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Meta do Mês</CardTitle>
-              <Target className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {metaMensal ? formatCurrency(Number(metaMensal.meta_total)) : 'R$ 0,00'}
-              </div>
-              <Link to="/configuracao-mes" className="text-xs text-primary hover:underline">
-                Configurar meta →
-              </Link>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Lançamentos</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalLancamentos}</div>
-              <Link to="/gerencial" className="text-xs text-primary hover:underline">
-                Ver todos →
-              </Link>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pendentes de Regra</CardTitle>
-              <AlertCircle className="h-4 w-4 text-warning" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{pendentesRegra}</div>
-              {pendentesRegra && pendentesRegra > 0 ? (
-                <Link to="/pendencias" className="text-xs text-warning hover:underline">
-                  Classificar →
+          {isAdmin && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Meta do Mês</CardTitle>
+                <Target className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {metaMensal ? formatCurrency(Number(metaMensal.meta_total)) : 'R$ 0,00'}
+                </div>
+                <Link to="/configuracao-mes" className="text-xs text-primary hover:underline">
+                  Configurar meta →
                 </Link>
-              ) : (
-                <p className="text-xs text-success">Tudo classificado!</p>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
+
+          {isAdmin && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Lançamentos</CardTitle>
+                <FileText className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{totalLancamentos}</div>
+                <Link to="/gerencial" className="text-xs text-primary hover:underline">
+                  Ver todos →
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+
+          {isAdmin && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Pendentes de Regra</CardTitle>
+                <AlertCircle className="h-4 w-4 text-warning" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{pendentesRegra}</div>
+                {pendentesRegra && pendentesRegra > 0 ? (
+                  <Link to="/pendencias" className="text-xs text-warning hover:underline">
+                    Classificar →
+                  </Link>
+                ) : (
+                  <p className="text-xs text-success">Tudo classificado!</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
-        {/* Cards de meta detalhados (nível e comissão) */}
-        {metaMensal && dashboardData && (
+        {/* Cards de meta detalhados (nível e comissão) - apenas admin */}
+        {isAdmin && metaMensal && dashboardData && (
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
