@@ -125,8 +125,6 @@ export default function Metas() {
       }
     }
 
-    const comissaoTotal = totalVendido * comissaoPercent;
-
     // Agrupar por consultora
     const porConsultora: Record<string, { nome: string; valor: number }> = {};
     
@@ -173,6 +171,9 @@ export default function Metas() {
         falta,
       };
     }).sort((a, b) => b.vendido - a.vendido);
+
+    // Comissão total = soma das comissões individuais de cada consultora
+    const comissaoTotal = consultoraDados.reduce((acc, c) => acc + c.comissao, 0);
 
     return {
       totalVendido,

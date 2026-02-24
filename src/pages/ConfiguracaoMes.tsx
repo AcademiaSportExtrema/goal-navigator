@@ -20,6 +20,7 @@ import { DollarSign, TrendingUp, Save } from 'lucide-react';
 import { format, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { MetaMensal, Consultora, MetaConsultora, ComissaoNivel } from '@/types/database';
+import { getNivelNome } from '@/lib/utils';
 
 interface NivelConfig {
   nivel: number;
@@ -380,8 +381,8 @@ export default function ConfiguracaoMes() {
                 {niveis.map((nivel, index) => (
                   <div key={nivel.nivel} className="grid grid-cols-[auto_1fr_1fr_1fr] gap-2 items-center">
                     <div className="w-16">
-                      <Badge className={`${nivelColors[nivel.nivel]} border text-xs font-bold justify-center w-10`}>
-                        {nivel.nivel}
+                      <Badge className={`${nivelColors[nivel.nivel]} border text-xs font-bold justify-center min-w-10`}>
+                        {getNivelNome(nivel.nivel)}
                       </Badge>
                     </div>
                     <Input
