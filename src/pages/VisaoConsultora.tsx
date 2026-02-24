@@ -18,6 +18,12 @@ import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
 import { PaginationControls } from '@/components/PaginationControls';
 import { getNivelNome } from '@/lib/utils';
+import { useSalesMetrics } from '@/hooks/useSalesMetrics';
+import { RevenueTrendChart } from '@/components/dashboard/RevenueTrendChart';
+import { RevenueByPaymentChart } from '@/components/dashboard/RevenueByPaymentChart';
+import { PlanSalesTable } from '@/components/dashboard/PlanSalesTable';
+import { CategoryShareChart } from '@/components/dashboard/CategoryShareChart';
+import { TicketHistogram } from '@/components/dashboard/TicketHistogram';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -138,6 +144,8 @@ export default function VisaoConsultora() {
 
     return { totalVendido, metaIndividual, percentualAtingido, nivelAtual, comissaoEstimada };
   }, [lancamentos, metaMensal, metaConsultora, niveisComissao]);
+
+  const salesMetrics = useSalesMetrics(lancamentos);
 
   const fmt = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -317,6 +325,23 @@ export default function VisaoConsultora() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Gráficos de Performance */}
+            {lancamentos && lancamentos.length > 0 && (
+              <>
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <div className="lg:col-span-2">
+                    <RevenueTrendChart data={salesMetrics.revenueByDay} />
+                  </div>
+                  <RevenueByPaymentChart data={salesMetrics.revenueByPayment} />
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <PlanSalesTable data={salesMetrics.salesByPlan} />
+                  <CategoryShareChart data={salesMetrics.salesByPlan} />
+                </div>
+                <TicketHistogram data={salesMetrics.ticketDistribution} ticketMedio={salesMetrics.ticketMedioGlobal} />
+              </>
+            )}
 
             {/* Lançamentos */}
             <Card>
