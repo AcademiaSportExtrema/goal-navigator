@@ -71,6 +71,10 @@ export default function Ajustes() {
       setComentario('');
       setSelectedId(null);
       queryClient.invalidateQueries({ queryKey: ['all-solicitacoes'] });
+      // Invalidar dados de vendas que dependem de consultora_chave
+      queryClient.invalidateQueries({ queryKey: ['lancamentos-meta'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-lancamentos'] });
+      queryClient.invalidateQueries({ queryKey: ['metas-lancamentos'] });
     },
     onError: (error: any) => {
       toast({ title: 'Erro ao processar', description: error.message, variant: 'destructive' });
