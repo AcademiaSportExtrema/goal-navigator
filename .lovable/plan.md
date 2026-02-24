@@ -1,29 +1,32 @@
 
 
-## Ocultar métricas globais do Dashboard para consultoras
+## Adicionar gráficos de performance à página Visão Consultora
 
 ### Problema
-Consultoras têm acesso ao Dashboard e veem cards com informações globais que não são relevantes para elas:
-1. **Meta do Mês** (R$ 200.000,00 com link "Configurar meta →")
-2. **% Atingimento** global
-3. **Nível Atual** global
-
-Essas informações são da empresa toda e só fazem sentido para o admin. As consultoras já têm suas métricas individuais na página Minha Performance.
+Quando um admin/super admin acessa a "Visão Consultora" para simular o que a consultora vê, a página mostra apenas KPIs, níveis de comissão e tabela de vendas. Porém, quando a consultora faz login, ela também vê no Dashboard os gráficos de performance (tendência de receita, receita por forma de pagamento, vendas por plano e histograma de ticket). A Visão Consultora não está replicando fielmente a experiência da consultora.
 
 ### Solução
-Usar a role do usuário (`useAuth`) no Dashboard para condicionar a exibição desses cards. Quando o usuário for `consultora`, esses 3 cards serão ocultados. Também serão ocultados os cards "Lançamentos" (link para Gerencial), "Pendentes de Regra" (link para Pendências) e "Comissão Estimada" global, que são informações administrativas.
+Adicionar os mesmos 5 componentes de gráficos que existem no Dashboard à página `VisaoConsultora.tsx`, alimentados pelos lançamentos da consultora selecionada (não os dados globais).
 
 ### Detalhes técnicos
 
-**Arquivo:** `src/pages/Dashboard.tsx`
+**Arquivo:** `src/pages/VisaoConsultora.tsx`
 
-1. Importar `useAuth` e obter a `role` do usuário
-2. Criar flag `isAdmin = role === 'admin'`
-3. Envolver os seguintes blocos com `{isAdmin && ...}`:
-   - Card "Meta do Mês" (linhas 375-388)
-   - Card "Lançamentos" (linhas 390-401) — link para `/gerencial`
-   - Card "Pendentes de Regra" (linhas 403-418) — link para `/pendencias`
-   - Seção inteira de "Cards de meta detalhados" com % Atingimento, Nível Atual e Comissão Estimada (linhas 421-465)
+1. Importar o hook `useSalesMetrics` e os 5 componentes de gráfico:
+   - `RevenueTrendChart`
+   - `RevenueByPaymentChart`
+   - `PlanSalesTable`
+   - `CategoryShareChart`
+   - `TicketHistogram`
 
-Isso mantém visíveis para a consultora apenas: **Total Vendido** e **Total Faturado** (informações de volume geral do mês).
+2. Chamar `useSalesMetrics(lancamentos)` passando os lançamentos já filtrados da consultora selecionada
+
+3. Adicionar os gráficos após a seção de "Níveis de Comissão" e antes da tabela de "Vendas do Mês", usando o mesmo layout do Dashboard:
+   - Grid 2/3 + 1/3: `RevenueTrendChart` + `RevenueByPaymentChart`
+   - Grid 1/2 + 1/2: `PlanSalesTable` + `CategoryShareChart`
+   - Full width: `TicketHistogram`
+
+4. Envolver com condicional `{lancamentos && lancamentos.length > 0 && ...}` para não mostrar gráficos sem dados
+
+**Nenhuma mudança de banco de dados necessária** — os dados já existem nos lançamentos carregados. É apenas uma adição de componentes visuais.
 
