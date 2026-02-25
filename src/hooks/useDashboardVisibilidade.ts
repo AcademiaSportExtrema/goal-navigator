@@ -16,6 +16,7 @@ export const DASHBOARD_COMPONENTES: DashboardComponente[] = [
   { chave: 'tabela_vendas_plano', label: 'Vendas por Plano', padrao: false },
   { chave: 'grafico_categoria', label: 'Participação por Categoria', padrao: false },
   { chave: 'histograma_ticket', label: 'Histograma de Ticket Médio', padrao: false },
+  { chave: 'grafico_share_consultora', label: 'Participação por Consultora', padrao: true },
   { chave: 'ultimos_uploads', label: 'Últimos Uploads', padrao: false },
   { chave: 'card_equipe', label: 'Equipe', padrao: false },
   { chave: 'acoes_rapidas', label: 'Ações Rápidas', padrao: false },

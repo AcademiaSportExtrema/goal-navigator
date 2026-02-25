@@ -6,6 +6,7 @@ import { RevenueTrendChart } from '@/components/dashboard/RevenueTrendChart';
 import { RevenueByPaymentChart } from '@/components/dashboard/RevenueByPaymentChart';
 import { PlanSalesTable } from '@/components/dashboard/PlanSalesTable';
 import { CategoryShareChart } from '@/components/dashboard/CategoryShareChart';
+import { ConsultoraShareChart } from '@/components/dashboard/ConsultoraShareChart';
 import { TicketHistogram } from '@/components/dashboard/TicketHistogram';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -485,6 +486,7 @@ export default function Dashboard() {
 
         {/* Gráfico + Tabela por consultora */}
         {metaMensal && dashboardData && dashboardData.consultoras.length > 0 && (
+          <>
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
@@ -578,6 +580,17 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           </div>
+
+          {show('grafico_share_consultora') && (() => {
+            const totalVendidoConsultoras = dashboardData.consultoras.reduce((acc, c) => acc + c.vendido, 0);
+            const shareData = dashboardData.consultoras.map(c => ({
+              nome: c.nome,
+              vendido: c.vendido,
+              percentual: totalVendidoConsultoras > 0 ? (c.vendido / totalVendidoConsultoras) * 100 : 0,
+            }));
+            return <ConsultoraShareChart data={shareData} />;
+          })()}
+          </>
         )}
 
         {/* Gráficos de Performance */}
