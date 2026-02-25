@@ -161,7 +161,7 @@ ${rankingText || "Nenhuma venda registrada"}
 
 Gere o relatório com estas seções:
 1. **RESUMO DO MÊS**: meta total, vendido, % atingido, projeção com base no ritmo atual, gap para meta
-2. **RANKING DE CONSULTORAS**: análise individual com destaque para quem está performando bem e quem precisa de atenção urgente
+2. **RANKING DE CONSULTORAS**: Use obrigatoriamente uma tabela markdown com as colunas: | Consultora | Vendas | % Meta | Ticket Médio | Status |. Use emojis para status: 🌟 Excepcional (>100%), ✅ No Caminho (70-100%), ⚠️ Atenção (50-70%), 🔴 Crítico (<50%). Depois da tabela, faça breves comentários sobre destaques e quem precisa de atenção.
 3. **PLANO DE AÇÃO**: ações prioritárias e concretas para atingir a meta, baseadas nos dados reais. Inclua sugestões específicas por consultora quando relevante.
 
 Limite sua resposta a no máximo 500 palavras.`;
