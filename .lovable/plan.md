@@ -1,81 +1,75 @@
 
 
-## Política Comercial para o Coach IA
+## Visibilidade do Dashboard para Consultoras
 
 ### Problema
-O Coach IA sugere estratégias de abordagem comercial (descontos, promoções, upgrades, etc.) que podem não estar alinhadas com a política comercial real da empresa. Isso gera confusão e pode levar consultoras a oferecer condições que não existem.
+Todos os gráficos e seções do Dashboard aparecem para as consultoras, mas alguns podem ser desnecessários ou até indesejados. Atualmente não há como o admin controlar quais componentes a consultora vê.
 
 ### Solução
-Criar um sistema de **Diretrizes Comerciais** onde o admin configura o que o Coach IA pode e não pode sugerir. Essas diretrizes são injetadas no prompt do Coach IA como restrições, garantindo que as sugestões estejam sempre dentro da política da empresa.
+Criar uma configuração onde o admin define quais seções do Dashboard ficam visíveis para consultoras, usando toggles simples (ligado/desligado).
+
+### Componentes configuráveis
+
+Os seguintes blocos do Dashboard poderão ser ligados/desligados para consultoras:
+
+| Chave | Seção | Padrão |
+|-------|-------|--------|
+| `card_total_vendido` | Card Total Vendido | Ligado |
+| `card_total_faturado` | Card Total Faturado | Ligado |
+| `grafico_tendencia_receita` | Tendência de Receita (linha) | Ligado |
+| `grafico_forma_pagamento` | Receita por Forma de Pagamento | Desligado |
+| `tabela_vendas_plano` | Vendas por Plano | Desligado |
+| `grafico_categoria` | Participação por Categoria | Desligado |
+| `histograma_ticket` | Histograma de Ticket Médio | Desligado |
+| `ultimos_uploads` | Últimos Uploads | Desligado |
+| `card_equipe` | Equipe | Desligado |
+| `acoes_rapidas` | Ações Rápidas | Desligado |
 
 ### Detalhes técnicos
 
-#### 1. Nova tabela no banco de dados: `coach_diretrizes`
+#### 1. Nova tabela: `dashboard_visibilidade`
 
 ```text
-coach_diretrizes
+dashboard_visibilidade
 ├── id (uuid, PK)
 ├── empresa_id (uuid, NOT NULL)
-├── tipo ('permitido' | 'proibido')
-├── texto (text) — ex: "Oferecer 1 semana grátis de teste"
-├── ativo (boolean, default true)
-├── created_at (timestamptz)
-└── updated_at (timestamptz)
+├── componente (text, NOT NULL) — chave do componente
+├── visivel (boolean, default true)
+├── created_at / updated_at
+└── UNIQUE(empresa_id, componente)
 ```
 
-RLS: admins gerenciam da própria empresa, super_admins acesso total, consultoras podem ler (para que a edge function consiga buscar via token delas).
+RLS: admins gerenciam da própria empresa, consultoras podem ler.
 
-#### 2. Nova aba em Configuração: "Coach IA"
+#### 2. Nova aba ou seção na Configuração
 
-**Arquivo:** `src/pages/Configuracao.tsx`
-- Adicionar nova tab "Coach IA" com ícone `Sparkles`
+Adicionar na aba **"Perm. Consultora"** uma seção "Visibilidade do Dashboard" com uma lista de switches (on/off) para cada componente. Alternativa: adicionar como sub-seção dentro da aba existente de permissões da consultora.
 
-**Novo arquivo:** `src/components/configuracao/CoachDiretrizesTab.tsx`
-- Interface com duas seções lado a lado:
-  - **O que PODE sugerir** (tipo = 'permitido') — ex: "Oferecer aula experimental grátis", "Sugerir upgrade de plano", "Mencionar desconto para pagamento anual"
-  - **O que NÃO PODE sugerir** (tipo = 'proibido') — ex: "Não oferecer desconto acima de 10%", "Não mencionar plano família", "Não sugerir parcelamento em mais de 12x"
-- Campo de texto + botão para adicionar nova diretriz em cada seção
-- Lista com toggle ativo/inativo e botão de excluir para cada diretriz
-- Sugestões pré-definidas que o admin pode clicar para adicionar rapidamente (ex: "Oferecer aula experimental", "Desconto para indicação", "Upgrade de plano")
+**Arquivo:** `src/components/configuracao/PermissoesTab.tsx`
+- Quando `targetRole === 'consultora'`, exibir abaixo das permissões de rota uma seção extra "Dashboard — o que a consultora vê" com Switch para cada componente.
 
-#### 3. Atualizar Edge Function `ai-coach`
+#### 3. Hook: `useDashboardVisibilidade`
 
-**Arquivo:** `supabase/functions/ai-coach/index.ts`
-- Após buscar dados da consultora, buscar diretrizes ativas da empresa:
-  ```sql
-  SELECT tipo, texto FROM coach_diretrizes 
-  WHERE empresa_id = ? AND ativo = true
-  ```
-- Injetar no prompt do sistema uma seção `POLÍTICA COMERCIAL DA EMPRESA`:
-  ```
-  POLÍTICA COMERCIAL DA EMPRESA:
-  VOCÊ PODE sugerir:
-  - Oferecer aula experimental grátis
-  - Sugerir upgrade de plano
-  
-  VOCÊ NÃO PODE sugerir:
-  - Desconto acima de 10%
-  - Parcelamento em mais de 12x
-  
-  IMPORTANTE: Nunca sugira estratégias fora desta política.
-  Se não houver diretrizes cadastradas, use apenas dicas genéricas de abordagem sem mencionar ofertas específicas.
-  ```
+**Novo arquivo:** `src/hooks/useDashboardVisibilidade.ts`
+- Busca registros de `dashboard_visibilidade` para a empresa do usuário
+- Retorna função `isComponenteVisivel(chave): boolean`
+- Se não houver registro para um componente, usa o padrão definido no código
 
-#### 4. Fluxo
+#### 4. Dashboard: condicionar exibição
+
+**Arquivo:** `src/pages/Dashboard.tsx`
+- Quando `!isAdmin`, usar o hook para verificar cada seção antes de renderizar
+- Envolver cada bloco de gráfico/seção com `{(isAdmin || isComponenteVisivel('chave')) && ...}`
+
+#### 5. Fluxo
 
 ```text
-Admin abre Configuração → aba "Coach IA"
+Admin abre Configuração → aba "Perm. Consultora"
   ↓
-Define diretrizes (pode/não pode)
+Seção "Visibilidade do Dashboard" com switches
   ↓
-Consultora usa Coach IA → pergunta "Dicas de abordagem"
+Admin desliga "Histograma de Ticket" e "Vendas por Plano"
   ↓
-Edge function busca diretrizes da empresa
-  ↓
-Injeta no prompt como restrições
-  ↓
-IA responde apenas dentro da política comercial
+Consultora abre Dashboard → esses gráficos não aparecem
 ```
-
-Nenhuma alteração na interface do Coach IA para a consultora — a mudança é transparente, apenas as respostas passam a respeitar as regras configuradas.
 
