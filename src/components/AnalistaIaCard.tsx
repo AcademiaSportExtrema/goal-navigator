@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BrainCircuit, RefreshCw, Loader2 } from 'lucide-react';
+import { BrainCircuit, RefreshCw, Loader2, Mail } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { parseRankingTable, RankingCards } from './RankingCards';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ export function AnalistaIaCard() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [sendingEmail, setSendingEmail] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const autoTriggered = useRef(false);
   const mesAtual = format(new Date(), 'yyyy-MM');
@@ -123,6 +124,42 @@ export function AnalistaIaCard() {
     }
   }, []);
 
+  const sendEmail = useCallback(async () => {
+    setSendingEmail(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Você precisa estar logado');
+        return;
+      }
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-analise-email`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({}),
+        },
+      );
+
+      const data = await resp.json();
+      if (!resp.ok) {
+        toast.error(data.error || 'Erro ao enviar email');
+      } else {
+        toast.success(data.message || 'Email enviado com sucesso!');
+      }
+    } catch (e: any) {
+      console.error('Send email error:', e);
+      toast.error('Erro ao enviar email');
+    } finally {
+      setSendingEmail(false);
+    }
+  }, []);
+
   // Load saved analysis and auto-generate if not from today
   useEffect(() => {
     if (!empresaId) return;
@@ -179,16 +216,28 @@ export function AnalistaIaCard() {
           Analista IA — Relatório do Mês
         </CardTitle>
         {text && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={fetchAnalise}
-            disabled={loading}
-            className="gap-1.5"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Atualizar análise
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={sendEmail}
+              disabled={sendingEmail || loading}
+              className="gap-1.5"
+            >
+              <Mail className={`h-3.5 w-3.5 ${sendingEmail ? 'animate-pulse' : ''}`} />
+              {sendingEmail ? 'Enviando...' : 'Enviar por email'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={fetchAnalise}
+              disabled={loading}
+              className="gap-1.5"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+              Atualizar análise
+            </Button>
+          </div>
         )}
       </CardHeader>
       <CardContent>
