@@ -1,53 +1,59 @@
 
 
-## Configuração do Resend para disparo de email da análise IA
+## Configuração Global do Resend (Super Admin → Integrações)
 
-### Situação atual
-- A tabela `analise_email_config` já existe com os emails destinatários configuráveis por empresa
-- A tela de configuração (`AnalistaIaConfigTab`) já permite adicionar/remover emails
-- **Não existe** nenhuma edge function para enviar os emails
-- **Não existe** o secret `RESEND_API_KEY` configurado
+### Contexto
+Atualmente a `RESEND_API_KEY` é um secret fixo e o domínio remetente está hardcoded como `relatorios@metashub.com.br` na edge function `send-analise-email`. O usuário quer poder alterar tanto a API key quanto o domínio remetente pela interface, em nível global (não por empresa).
 
-### O que precisa ser feito
+A página de **Integrações** do super admin (`/super-admin/integracoes`) já existe e usa o componente `IntegracoesTab`, que já tem um card de AbacatePay (com TODO para salvar). Este é o local ideal para adicionar a configuração do Resend.
 
-#### 1. Configurar o secret `RESEND_API_KEY`
-- Será solicitado que você informe sua chave da API do Resend
-- Obtenha em [resend.com/api-keys](https://resend.com/api-keys)
-- Também será necessário verificar um domínio no painel do Resend para enviar de um endereço próprio (ex: `relatorios@seudominio.com`)
+### Solução
 
-#### 2. Criar edge function `send-analise-email`
-Nova função que:
-- Recebe `empresa_id` como parâmetro
-- Busca a análise mais recente da tabela `analise_ia`
-- Busca os destinatários ativos da tabela `analise_email_config`
-- Converte o conteúdo markdown para HTML
-- Envia via API do Resend para cada destinatário
-- Valida que o chamador é admin ou super_admin
+Adicionar um card "Resend — Envio de Emails" na tela de Integrações do super admin, com campos para API Key e domínio remetente. Os valores são salvos numa tabela `system_settings` (chave-valor global). A edge function `send-analise-email` lê dessas configurações ao invés de usar o secret fixo.
 
-#### 3. Integrar o disparo no fluxo existente
-Duas opções de trigger:
-- **Automático**: após a análise diária ser gerada (no `AnalistaIaCard` ou no `ai-analista`), disparar o envio
-- **Manual**: botão "Enviar por email" no card do Analista IA
+### Detalhes técnicos
 
-Recomendação: disparar automaticamente após a geração da análise diária (dentro da edge function `ai-analista`), chamando `send-analise-email` ao final do processo.
+#### 1. Nova tabela `system_settings`
 
-#### 4. Tela de configuração do remetente (opcional)
-Adicionar na aba "Analista IA" da Configuração um campo para definir o email remetente (ex: `relatorios@seudominio.com`), ou usar um valor fixo configurado no secret.
+```sql
+CREATE TABLE public.system_settings (
+  key text PRIMARY KEY,
+  value text NOT NULL,
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+-- Apenas super_admin pode ler e escrever
+CREATE POLICY "Super admins full access" ON public.system_settings
+  FOR ALL USING (has_role(auth.uid(), 'super_admin'::app_role));
+```
 
-### Arquivos a serem criados/alterados
+Chaves previstas:
+- `resend_api_key` — chave da API do Resend
+- `resend_from_domain` — domínio remetente (ex: `sportextrema.com.br`)
+- `resend_from_name` — nome do remetente (ex: `MetasHub`)
+
+#### 2. UI — Card Resend em `IntegracoesTab.tsx`
+
+Adicionar abaixo do card AbacatePay um novo card com:
+- Campo "Chave API Resend" (type password, toggle mostrar/ocultar)
+- Campo "Domínio remetente" (text, placeholder: `sportextrema.com.br`)
+- Campo "Nome do remetente" (text, placeholder: `MetasHub`)
+- Botão "Salvar"
+- Badge "Configurado" (verde) ou "Pendente" (vermelho) baseado na existência dos valores
+- Os dados são lidos/salvos diretamente na tabela `system_settings` via client (protegida por RLS super_admin)
+
+#### 3. Atualizar `send-analise-email/index.ts`
+
+- Antes de enviar, buscar `resend_api_key`, `resend_from_domain` e `resend_from_name` da tabela `system_settings` usando service_role
+- Se encontrar na tabela, usar esses valores
+- Fallback para o secret `RESEND_API_KEY` e domínio padrão `metashub.com.br` se a tabela estiver vazia
+- Remetente: `{from_name} <relatorios@{from_domain}>`
+
+### Arquivos
 
 | Arquivo | Mudança |
 |---------|---------|
-| Secret `RESEND_API_KEY` | Novo secret com a chave da API |
-| `supabase/functions/send-analise-email/index.ts` | Nova função para envio via Resend |
-| `supabase/functions/ai-analista/index.ts` | Chamar `send-analise-email` após gerar análise |
-| `src/components/AnalistaIaCard.tsx` | Botão opcional "Enviar por email" |
-
-### Pré-requisito
-Antes de implementar, você precisa:
-1. Criar uma conta no [resend.com](https://resend.com) (tem plano gratuito com 100 emails/dia)
-2. Verificar seu domínio no painel do Resend
-3. Gerar uma API Key
-
-Quer prosseguir? O primeiro passo será solicitar sua chave da API do Resend.
+| Migration SQL | Criar tabela `system_settings` com RLS |
+| `src/components/configuracao/IntegracoesTab.tsx` | Adicionar card Resend com campos API key, domínio e nome |
+| `supabase/functions/send-analise-email/index.ts` | Ler config da `system_settings` antes de enviar, com fallback para secret |
 
