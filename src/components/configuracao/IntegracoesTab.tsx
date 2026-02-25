@@ -1,16 +1,61 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Eye, EyeOff, Save, ExternalLink } from 'lucide-react';
+import { Eye, EyeOff, Save, ExternalLink, Mail } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 export function IntegracoesTab() {
+  // AbacatePay state
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Resend state
+  const [resendApiKey, setResendApiKey] = useState('');
+  const [resendDomain, setResendDomain] = useState('');
+  const [resendName, setResendName] = useState('');
+  const [showResendKey, setShowResendKey] = useState(false);
+  const [isSavingResend, setIsSavingResend] = useState(false);
+  const [resendConfigured, setResendConfigured] = useState(false);
+  const [loadingResend, setLoadingResend] = useState(true);
+
+  useEffect(() => {
+    loadResendSettings();
+  }, []);
+
+  const loadResendSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('system_settings' as any)
+        .select('key, value')
+        .in('key', ['resend_api_key', 'resend_from_domain', 'resend_from_name']);
+
+      if (error) throw error;
+
+      const settings = (data as any[]) || [];
+      const map: Record<string, string> = {};
+      for (const row of settings) {
+        map[row.key] = row.value;
+      }
+
+      if (map.resend_api_key) {
+        // Show masked key
+        const key = map.resend_api_key;
+        setResendApiKey('•'.repeat(Math.max(0, key.length - 4)) + key.slice(-4));
+        setResendConfigured(true);
+      }
+      if (map.resend_from_domain) setResendDomain(map.resend_from_domain);
+      if (map.resend_from_name) setResendName(map.resend_from_name);
+    } catch (err) {
+      console.error('Erro ao carregar configurações Resend:', err);
+    } finally {
+      setLoadingResend(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!apiKey.trim()) {
@@ -25,8 +70,68 @@ export function IntegracoesTab() {
     }, 1000);
   };
 
+  const handleSaveResend = async () => {
+    if (!resendApiKey.trim() || resendApiKey.includes('•')) {
+      if (resendConfigured && !resendApiKey.includes('•')) {
+        // user cleared the field
+      } else if (resendApiKey.includes('•') && !resendDomain.trim()) {
+        toast.error('Informe pelo menos o domínio remetente');
+        return;
+      } else if (!resendConfigured) {
+        toast.error('Informe a chave da API do Resend');
+        return;
+      }
+    }
+
+    setIsSavingResend(true);
+    try {
+      const upserts: { key: string; value: string }[] = [];
+
+      // Only upsert API key if user typed a new one (not masked)
+      if (resendApiKey && !resendApiKey.includes('•')) {
+        upserts.push({ key: 'resend_api_key', value: resendApiKey });
+      }
+      if (resendDomain.trim()) {
+        upserts.push({ key: 'resend_from_domain', value: resendDomain.trim() });
+      }
+      if (resendName.trim()) {
+        upserts.push({ key: 'resend_from_name', value: resendName.trim() });
+      }
+
+      if (upserts.length === 0) {
+        toast.info('Nenhuma alteração para salvar');
+        setIsSavingResend(false);
+        return;
+      }
+
+      for (const item of upserts) {
+        const { error } = await supabase
+          .from('system_settings' as any)
+          .upsert(
+            { key: item.key, value: item.value, updated_at: new Date().toISOString() },
+            { onConflict: 'key' }
+          );
+        if (error) throw error;
+      }
+
+      toast.success('Configurações do Resend salvas com sucesso');
+      setResendConfigured(true);
+
+      // Re-mask API key if it was changed
+      if (resendApiKey && !resendApiKey.includes('•')) {
+        setResendApiKey('•'.repeat(Math.max(0, resendApiKey.length - 4)) + resendApiKey.slice(-4));
+      }
+    } catch (err: any) {
+      console.error('Erro ao salvar Resend:', err);
+      toast.error('Erro ao salvar configurações: ' + (err.message || 'Erro desconhecido'));
+    } finally {
+      setIsSavingResend(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* AbacatePay Card */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -77,6 +182,108 @@ export function IntegracoesTab() {
                 AbacatePay <ExternalLink className="h-3 w-3" />
               </a>
             </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Resend Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Mail className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Resend — Envio de Emails</CardTitle>
+                <CardDescription>
+                  Configure a API do Resend para envio de relatórios e notificações por email.
+                </CardDescription>
+              </div>
+            </div>
+            {!loadingResend && (
+              <Badge
+                variant="outline"
+                className={resendConfigured
+                  ? 'text-green-700 border-green-300 bg-green-50'
+                  : 'text-destructive border-destructive/30 bg-destructive/10'
+                }
+              >
+                {resendConfigured ? 'Configurado' : 'Pendente'}
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="resend-api-key">Chave da API Resend</Label>
+            <div className="relative">
+              <Input
+                id="resend-api-key"
+                type={showResendKey ? 'text' : 'password'}
+                placeholder="re_..."
+                value={resendApiKey}
+                onChange={(e) => setResendApiKey(e.target.value)}
+                onFocus={() => {
+                  if (resendApiKey.includes('•')) setResendApiKey('');
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowResendKey(!showResendKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showResendKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="resend-domain">Domínio remetente</Label>
+              <Input
+                id="resend-domain"
+                type="text"
+                placeholder="sportextrema.com.br"
+                value={resendDomain}
+                onChange={(e) => setResendDomain(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Ex: sportextrema.com.br → relatorios@sportextrema.com.br
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="resend-name">Nome do remetente</Label>
+              <Input
+                id="resend-name"
+                type="text"
+                placeholder="MetasHub"
+                value={resendName}
+                onChange={(e) => setResendName(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Nome que aparece no "De:" do email
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Obtenha sua chave em{' '}
+              <a
+                href="https://resend.com/api-keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-1"
+              >
+                resend.com <ExternalLink className="h-3 w-3" />
+              </a>
+            </p>
+            <Button onClick={handleSaveResend} disabled={isSavingResend}>
+              <Save className="h-4 w-4 mr-2" />
+              {isSavingResend ? 'Salvando...' : 'Salvar'}
+            </Button>
           </div>
         </CardContent>
       </Card>
