@@ -185,6 +185,41 @@ export type Database = {
           },
         ]
       }
+      dashboard_visibilidade: {
+        Row: {
+          componente: string
+          created_at: string
+          empresa_id: string
+          id: string
+          updated_at: string
+          visivel: boolean
+        }
+        Insert: {
+          componente: string
+          created_at?: string
+          empresa_id: string
+          id?: string
+          updated_at?: string
+          visivel?: boolean
+        }
+        Update: {
+          componente?: string
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          updated_at?: string
+          visivel?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dashboard_visibilidade_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       empresas: {
         Row: {
           ativo: boolean
