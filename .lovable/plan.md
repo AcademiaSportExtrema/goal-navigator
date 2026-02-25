@@ -1,43 +1,36 @@
 
 
-## Validação da conexão Resend antes de salvar
+## Gráfico de Proporção de Vendas por Consultora
 
 ### Objetivo
-Ao clicar "Salvar" no card do Resend, primeiro testar a API key fazendo uma chamada real à API do Resend. Só salvar na `system_settings` se a chave for válida.
+Adicionar um gráfico de pizza/donut no Dashboard mostrando a participação de cada consultora no total vendido do mês.
 
-### Solução
+### Dados
+Os dados já existem em `dashboardData.consultoras` (calculados no `useMemo` do Dashboard, linha 230-272). Cada item tem `nome` e `vendido`. Basta calcular o percentual de cada uma sobre o total.
 
-Criar uma edge function `validate-resend-key` que recebe a API key, faz um `GET https://api.resend.com/domains` com ela, e retorna se é válida ou não. O frontend chama essa função antes de salvar.
+### Implementação
 
-### Detalhes técnicos
+#### 1. Novo componente `ConsultoraShareChart.tsx`
+- Gráfico donut (PieChart do Recharts, igual ao `CategoryShareChart` existente)
+- Recebe array `{ nome: string; vendido: number; percentual: number }[]`
+- Top 5 consultoras + "Outras" se houver mais de 6
+- Tooltip com nome, valor e percentual
+- Título: "Participação por Consultora"
 
-#### 1. Nova edge function `validate-resend-key`
+#### 2. Atualizar `Dashboard.tsx`
+- Importar o novo componente
+- Inserir na seção do grid de gráficos por consultora (junto ao gráfico de barras e tabela existentes)
+- Usar `dashboardData.consultoras` para montar os dados do gráfico
+- Controlar visibilidade com chave `grafico_share_consultora`
 
-- Recebe `{ api_key: string }` no body
-- Valida JWT e verifica que o caller é `super_admin`
-- Faz `GET https://api.resend.com/domains` com header `Authorization: Bearer {api_key}`
-- Se status 200 → retorna `{ valid: true, domains: [...] }` (lista de domínios verificados para referência)
-- Se status 401/403 → retorna `{ valid: false, error: "Chave inválida" }`
-- Nunca persiste a chave — apenas valida
-
-#### 2. Atualizar `IntegracoesTab.tsx`
-
-- No `handleSaveResend`, antes de fazer upsert:
-  1. Se a API key foi alterada (não contém `•`), chamar `validate-resend-key`
-  2. Se inválida → `toast.error("Chave do Resend inválida")` e abortar
-  3. Se válida → prosseguir com upsert normalmente
-- Alterar o texto do botão durante validação: "Validando..." → "Salvando..."
-- Mostrar os domínios verificados retornados como informação extra no toast de sucesso
-
-#### 3. Config TOML
-
-Adicionar entrada para a nova função com `verify_jwt = false` (validação manual no código).
+#### 3. Atualizar `useDashboardVisibilidade.ts`
+- Adicionar entrada `{ chave: 'grafico_share_consultora', label: 'Participação por Consultora', padrao: true }` na lista de componentes
 
 ### Arquivos
 
 | Arquivo | Mudança |
 |---------|---------|
-| `supabase/functions/validate-resend-key/index.ts` | Nova função para testar a API key do Resend |
-| `supabase/config.toml` | Adicionar `[functions.validate-resend-key]` |
-| `src/components/configuracao/IntegracoesTab.tsx` | Chamar validação antes de salvar |
+| `src/components/dashboard/ConsultoraShareChart.tsx` | Novo componente donut chart |
+| `src/pages/Dashboard.tsx` | Importar e renderizar o gráfico |
+| `src/hooks/useDashboardVisibilidade.ts` | Registrar nova chave de visibilidade |
 
