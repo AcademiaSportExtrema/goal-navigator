@@ -138,6 +138,24 @@ export default function UploadPage() {
         description: `${processResult?.resumo?.importados || 0} linhas importadas com sucesso.`,
       });
 
+      // Trigger AI analysis in background
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.access_token) {
+          fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-analista`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ upload_id: uploadRecord.id }),
+          }).catch(() => {});
+          toast({
+            title: 'Análise IA sendo gerada...',
+            description: 'O relatório estará disponível no Dashboard em instantes.',
+          });
+        }
+      });
+
       setSelectedFile(null);
       queryClient.invalidateQueries({ queryKey: ['uploads'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-lancamentos'] });

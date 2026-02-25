@@ -29,6 +29,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { AiCoach } from '@/components/AiCoach';
+import { AnalistaIaCard } from '@/components/AnalistaIaCard';
 import { 
   Upload, 
   FileText, 
@@ -335,6 +336,9 @@ export default function Dashboard() {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Analista IA para admins */}
+        {isAdmin && <AnalistaIaCard />}
 
         {/* Cards resumo rápido */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
