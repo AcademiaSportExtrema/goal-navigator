@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.send-analise-email]
 verify_jwt = false
+
+[functions.validate-resend-key]
+verify_jwt = false
