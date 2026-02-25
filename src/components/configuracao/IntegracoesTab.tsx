@@ -20,6 +20,7 @@ export function IntegracoesTab() {
   const [resendName, setResendName] = useState('');
   const [showResendKey, setShowResendKey] = useState(false);
   const [isSavingResend, setIsSavingResend] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const [resendConfigured, setResendConfigured] = useState(false);
   const [loadingResend, setLoadingResend] = useState(true);
 
@@ -83,12 +84,43 @@ export function IntegracoesTab() {
       }
     }
 
+    const isNewKey = resendApiKey && !resendApiKey.includes('•');
+
+    // Validate the key before saving
+    if (isNewKey) {
+      setIsValidating(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('validate-resend-key', {
+          body: { api_key: resendApiKey },
+        });
+
+        if (error) throw error;
+
+        if (!data.valid) {
+          toast.error(data.error || 'Chave do Resend inválida');
+          setIsValidating(false);
+          return;
+        }
+
+        // Show verified domains info
+        if (data.domains && data.domains.length > 0) {
+          const domainNames = data.domains.map((d: any) => d.name).join(', ');
+          toast.info(`Domínios verificados: ${domainNames}`);
+        }
+      } catch (err: any) {
+        console.error('Erro ao validar chave Resend:', err);
+        toast.error('Erro ao validar chave: ' + (err.message || 'Erro desconhecido'));
+        setIsValidating(false);
+        return;
+      }
+      setIsValidating(false);
+    }
+
     setIsSavingResend(true);
     try {
       const upserts: { key: string; value: string }[] = [];
 
-      // Only upsert API key if user typed a new one (not masked)
-      if (resendApiKey && !resendApiKey.includes('•')) {
+      if (isNewKey) {
         upserts.push({ key: 'resend_api_key', value: resendApiKey });
       }
       if (resendDomain.trim()) {
@@ -117,8 +149,7 @@ export function IntegracoesTab() {
       toast.success('Configurações do Resend salvas com sucesso');
       setResendConfigured(true);
 
-      // Re-mask API key if it was changed
-      if (resendApiKey && !resendApiKey.includes('•')) {
+      if (isNewKey) {
         setResendApiKey('•'.repeat(Math.max(0, resendApiKey.length - 4)) + resendApiKey.slice(-4));
       }
     } catch (err: any) {
@@ -280,9 +311,9 @@ export function IntegracoesTab() {
                 resend.com <ExternalLink className="h-3 w-3" />
               </a>
             </p>
-            <Button onClick={handleSaveResend} disabled={isSavingResend}>
+            <Button onClick={handleSaveResend} disabled={isSavingResend || isValidating}>
               <Save className="h-4 w-4 mr-2" />
-              {isSavingResend ? 'Salvando...' : 'Salvar'}
+              {isValidating ? 'Validando...' : isSavingResend ? 'Salvando...' : 'Salvar'}
             </Button>
           </div>
         </CardContent>
