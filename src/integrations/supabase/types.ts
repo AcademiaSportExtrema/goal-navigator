@@ -14,6 +14,80 @@ export type Database = {
   }
   public: {
     Tables: {
+      analise_email_config: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          email: string
+          empresa_id: string
+          id: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          email: string
+          empresa_id: string
+          id?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          email?: string
+          empresa_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analise_email_config_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analise_ia: {
+        Row: {
+          conteudo: string
+          created_at: string
+          empresa_id: string
+          id: string
+          mes_referencia: string
+          upload_id: string | null
+        }
+        Insert: {
+          conteudo: string
+          created_at?: string
+          empresa_id: string
+          id?: string
+          mes_referencia: string
+          upload_id?: string | null
+        }
+        Update: {
+          conteudo?: string
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          mes_referencia?: string
+          upload_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analise_ia_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analise_ia_upload_id_fkey"
+            columns: ["upload_id"]
+            isOneToOne: false
+            referencedRelation: "uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string

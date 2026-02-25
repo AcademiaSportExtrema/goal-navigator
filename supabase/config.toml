@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.reprocessar-upload]
 verify_jwt = false
+
+[functions.ai-analista]
+verify_jwt = false
