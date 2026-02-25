@@ -72,16 +72,38 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceKey);
+
+    // Load Resend settings from system_settings (global config)
+    let resendApiKey = "";
+    let fromDomain = "metashub.com.br";
+    let fromName = "MetasHub";
+
+    const { data: settings } = await supabaseAdmin
+      .from("system_settings")
+      .select("key, value")
+      .in("key", ["resend_api_key", "resend_from_domain", "resend_from_name"]);
+
+    if (settings) {
+      for (const s of settings) {
+        if (s.key === "resend_api_key") resendApiKey = s.value;
+        if (s.key === "resend_from_domain") fromDomain = s.value;
+        if (s.key === "resend_from_name") fromName = s.value;
+      }
+    }
+
+    // Fallback to secret if not configured in system_settings
+    if (!resendApiKey) {
+      resendApiKey = Deno.env.get("RESEND_API_KEY") || "";
+    }
 
     if (!resendApiKey) {
-      return new Response(JSON.stringify({ error: "RESEND_API_KEY não configurada" }), {
+      return new Response(JSON.stringify({ error: "RESEND_API_KEY não configurada. Configure em Integrações." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const supabaseAdmin = createClient(supabaseUrl, serviceKey);
 
     // Auth check - accept both direct calls (with auth header) and internal calls (with empresa_id in body)
     const authHeader = req.headers.get("Authorization");
@@ -174,7 +196,7 @@ Deno.serve(async (req) => {
 </html>`;
 
     const emails = destinatarios.map(d => d.email);
-    const fromEmail = body.from_email || "relatorios@metashub.com.br";
+    const fromEmail = `relatorios@${fromDomain}`;
 
     // Send via Resend
     const resendResp = await fetch("https://api.resend.com/emails", {
@@ -184,7 +206,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: `MetasHub <${fromEmail}>`,
+        from: `${fromName} <${fromEmail}>`,
         to: emails,
         subject: `📊 Relatório de Performance — ${mesRef} | ${empresaNome}`,
         html: emailHtml,
