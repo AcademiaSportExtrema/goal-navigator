@@ -1,26 +1,43 @@
 
 
-## Correção do domínio vazio no envio de email
+## Validação da conexão Resend antes de salvar
 
-### Diagnóstico
-
-O payload enviado ao Resend mostra `"from": "MetasHub <relatorios@>"` — o domínio está vazio. Porém, a tabela `system_settings` contém os valores corretos:
-
-- `resend_from_domain` = `sportextrema.com.br`
-- `resend_from_name` = `Metashub`
-- `resend_api_key` = configurada
-
-O código da edge function `send-analise-email` está correto e lê esses valores da tabela. O problema é que a versão deployada da função é anterior à atualização que adicionou a leitura da `system_settings` — ela ainda usa os defaults hardcoded (e como o default `metashub.com.br` não está verificado no Resend, falha).
+### Objetivo
+Ao clicar "Salvar" no card do Resend, primeiro testar a API key fazendo uma chamada real à API do Resend. Só salvar na `system_settings` se a chave for válida.
 
 ### Solução
 
-Redesplotar a edge function `send-analise-email` para que a versão atualizada (que lê `system_settings`) entre em produção. Nenhuma alteração de código é necessária — o código atual já está correto.
+Criar uma edge function `validate-resend-key` que recebe a API key, faz um `GET https://api.resend.com/domains` com ela, e retorna se é válida ou não. O frontend chama essa função antes de salvar.
 
-Após o redeploy, o fluxo será:
-1. Função busca `resend_from_domain` → `sportextrema.com.br`
-2. Monta remetente: `Metashub <relatorios@sportextrema.com.br>`
-3. Envia via Resend com sucesso (domínio verificado)
+### Detalhes técnicos
 
-### Ação
-Apenas redeploy da function existente.
+#### 1. Nova edge function `validate-resend-key`
+
+- Recebe `{ api_key: string }` no body
+- Valida JWT e verifica que o caller é `super_admin`
+- Faz `GET https://api.resend.com/domains` com header `Authorization: Bearer {api_key}`
+- Se status 200 → retorna `{ valid: true, domains: [...] }` (lista de domínios verificados para referência)
+- Se status 401/403 → retorna `{ valid: false, error: "Chave inválida" }`
+- Nunca persiste a chave — apenas valida
+
+#### 2. Atualizar `IntegracoesTab.tsx`
+
+- No `handleSaveResend`, antes de fazer upsert:
+  1. Se a API key foi alterada (não contém `•`), chamar `validate-resend-key`
+  2. Se inválida → `toast.error("Chave do Resend inválida")` e abortar
+  3. Se válida → prosseguir com upsert normalmente
+- Alterar o texto do botão durante validação: "Validando..." → "Salvando..."
+- Mostrar os domínios verificados retornados como informação extra no toast de sucesso
+
+#### 3. Config TOML
+
+Adicionar entrada para a nova função com `verify_jwt = false` (validação manual no código).
+
+### Arquivos
+
+| Arquivo | Mudança |
+|---------|---------|
+| `supabase/functions/validate-resend-key/index.ts` | Nova função para testar a API key do Resend |
+| `supabase/config.toml` | Adicionar `[functions.validate-resend-key]` |
+| `src/components/configuracao/IntegracoesTab.tsx` | Chamar validação antes de salvar |
 
