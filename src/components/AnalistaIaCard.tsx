@@ -15,24 +15,8 @@ export function AnalistaIaCard() {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
+  const autoTriggered = useRef(false);
   const mesAtual = format(new Date(), 'yyyy-MM');
-
-  // Load saved analysis from DB
-  useEffect(() => {
-    if (!empresaId) return;
-    (async () => {
-      const { data } = await supabase
-        .from('analise_ia' as any)
-        .select('conteudo')
-        .eq('empresa_id', empresaId)
-        .eq('mes_referencia', mesAtual)
-        .single();
-      if (data && (data as any).conteudo) {
-        setText((data as any).conteudo);
-      }
-      setInitialLoading(false);
-    })();
-  }, [empresaId, mesAtual]);
 
   const fetchAnalise = useCallback(async () => {
     setLoading(true);
@@ -138,6 +122,34 @@ export function AnalistaIaCard() {
     }
   }, []);
 
+  // Load saved analysis and auto-generate if not from today
+  useEffect(() => {
+    if (!empresaId) return;
+    (async () => {
+      const { data } = await supabase
+        .from('analise_ia' as any)
+        .select('conteudo, created_at')
+        .eq('empresa_id', empresaId)
+        .eq('mes_referencia', mesAtual)
+        .single();
+
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const isToday = (data as any)?.created_at?.slice(0, 10) === today;
+
+      if (data && (data as any).conteudo && isToday) {
+        setText((data as any).conteudo);
+        setInitialLoading(false);
+      } else {
+        setInitialLoading(false);
+        if (!autoTriggered.current) {
+          autoTriggered.current = true;
+          fetchAnalise();
+        }
+      }
+    })();
+  }, [empresaId, mesAtual, fetchAnalise]);
+
   if (initialLoading) {
     return (
       <Card>
@@ -165,16 +177,18 @@ export function AnalistaIaCard() {
           <BrainCircuit className="h-5 w-5 text-primary" />
           Analista IA — Relatório do Mês
         </CardTitle>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={fetchAnalise}
-          disabled={loading}
-          className="gap-1.5"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          {text ? 'Atualizar análise' : 'Gerar Análise'}
-        </Button>
+        {text && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={fetchAnalise}
+            disabled={loading}
+            className="gap-1.5"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar análise
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
         {loading && !text ? (
@@ -193,9 +207,15 @@ export function AnalistaIaCard() {
             {loading && <Loader2 className="h-4 w-4 animate-spin inline-block ml-1" />}
           </div>
         ) : (
-          <p className="text-muted-foreground text-sm text-center py-4">
-            Nenhuma análise gerada ainda. Clique em "Gerar Análise" para começar.
-          </p>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-muted-foreground text-sm mb-3">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Gerando análise automaticamente...
+            </div>
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+            <Skeleton className="h-4 w-4/6" />
+          </div>
         )}
       </CardContent>
     </Card>

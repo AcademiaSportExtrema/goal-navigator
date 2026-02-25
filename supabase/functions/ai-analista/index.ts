@@ -259,6 +259,7 @@ Limite sua resposta a no máximo 500 palavras.`;
                 mes_referencia: mesAtual,
                 conteudo: fullContent,
                 upload_id: uploadId,
+                created_at: new Date().toISOString(),
               },
               { onConflict: "empresa_id,mes_referencia" }
             );
