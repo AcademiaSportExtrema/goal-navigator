@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BrainCircuit, RefreshCw, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { parseRankingTable, RankingCards } from './RankingCards';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -203,19 +204,44 @@ export function AnalistaIaCard() {
           </div>
         ) : text ? (
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown
-              components={{
-                table: ({ children }) => (
-                  <div className="overflow-x-auto my-4">
-                    <table className="w-full text-sm border-collapse border border-border rounded-lg">{children}</table>
-                  </div>
-                ),
-                thead: ({ children }) => <thead className="bg-muted/50">{children}</thead>,
-                th: ({ children }) => <th className="border border-border px-3 py-2 text-left font-medium">{children}</th>,
-                td: ({ children }) => <td className="border border-border px-3 py-2">{children}</td>,
-                tr: ({ children }) => <tr className="even:bg-muted/30">{children}</tr>,
-              }}
-            >{text}</ReactMarkdown>
+            {(() => {
+              const parsed = parseRankingTable(text);
+              if (parsed) {
+                const mdComponents = {
+                  table: ({ children }: any) => (
+                    <div className="overflow-x-auto my-4">
+                      <table className="w-full text-sm border-collapse border border-border rounded-lg">{children}</table>
+                    </div>
+                  ),
+                  thead: ({ children }: any) => <thead className="bg-muted/50">{children}</thead>,
+                  th: ({ children }: any) => <th className="border border-border px-3 py-2 text-left font-medium">{children}</th>,
+                  td: ({ children }: any) => <td className="border border-border px-3 py-2">{children}</td>,
+                  tr: ({ children }: any) => <tr className="even:bg-muted/30">{children}</tr>,
+                };
+                return (
+                  <>
+                    <ReactMarkdown components={mdComponents}>{parsed.before}</ReactMarkdown>
+                    <RankingCards items={parsed.items} />
+                    <ReactMarkdown components={mdComponents}>{parsed.after}</ReactMarkdown>
+                  </>
+                );
+              }
+              return (
+                <ReactMarkdown
+                  components={{
+                    table: ({ children }) => (
+                      <div className="overflow-x-auto my-4">
+                        <table className="w-full text-sm border-collapse border border-border rounded-lg">{children}</table>
+                      </div>
+                    ),
+                    thead: ({ children }) => <thead className="bg-muted/50">{children}</thead>,
+                    th: ({ children }) => <th className="border border-border px-3 py-2 text-left font-medium">{children}</th>,
+                    td: ({ children }) => <td className="border border-border px-3 py-2">{children}</td>,
+                    tr: ({ children }) => <tr className="even:bg-muted/30">{children}</tr>,
+                  }}
+                >{text}</ReactMarkdown>
+              );
+            })()}
             {loading && <Loader2 className="h-4 w-4 animate-spin inline-block ml-1" />}
           </div>
         ) : (
