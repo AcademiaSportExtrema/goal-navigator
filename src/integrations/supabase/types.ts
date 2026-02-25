@@ -61,6 +61,44 @@ export type Database = {
           },
         ]
       }
+      coach_diretrizes: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          empresa_id: string
+          id: string
+          texto: string
+          tipo: Database["public"]["Enums"]["coach_diretriz_tipo"]
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          empresa_id: string
+          id?: string
+          texto: string
+          tipo: Database["public"]["Enums"]["coach_diretriz_tipo"]
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          texto?: string
+          tipo?: Database["public"]["Enums"]["coach_diretriz_tipo"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_diretrizes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comissao_niveis: {
         Row: {
           ate_percent: number
@@ -776,6 +814,7 @@ export type Database = {
         | "situacao_contrato"
         | "resp_venda"
         | "resp_recebimento"
+      coach_diretriz_tipo: "permitido" | "proibido"
       operador_regra:
         | "contem"
         | "igual"
@@ -927,6 +966,7 @@ export const Constants = {
         "resp_venda",
         "resp_recebimento",
       ],
+      coach_diretriz_tipo: ["permitido", "proibido"],
       operador_regra: ["contem", "igual", "comeca_com", "termina_com", "regex"],
       regra_mes: ["DATA_LANCAMENTO", "DATA_INICIO", "HIBRIDA"],
       responsavel_campo: ["resp_venda", "resp_recebimento"],

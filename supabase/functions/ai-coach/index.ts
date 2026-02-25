@@ -129,6 +129,25 @@ serve(async (req) => {
       ? Math.max(0, Number(proximoNivel.de_percent) * metaIndividual - totalVendido)
       : null;
 
+    // Fetch commercial guidelines
+    const { data: diretrizes } = await supabase
+      .from("coach_diretrizes")
+      .select("tipo, texto")
+      .eq("empresa_id", userRole.empresa_id)
+      .eq("ativo", true);
+
+    let politicaComercial = "";
+    if (diretrizes && diretrizes.length > 0) {
+      const permitidas = diretrizes.filter((d: any) => d.tipo === "permitido").map((d: any) => `- ${d.texto}`);
+      const proibidas = diretrizes.filter((d: any) => d.tipo === "proibido").map((d: any) => `- ${d.texto}`);
+      politicaComercial = `\n\nPOLÍTICA COMERCIAL DA EMPRESA (OBRIGATÓRIO SEGUIR):`;
+      if (permitidas.length > 0) politicaComercial += `\nVOCÊ PODE sugerir:\n${permitidas.join("\n")}`;
+      if (proibidas.length > 0) politicaComercial += `\nVOCÊ NÃO PODE sugerir:\n${proibidas.join("\n")}`;
+      politicaComercial += `\nIMPORTANTE: Nunca sugira estratégias comerciais fora desta política. Siga rigorosamente as restrições acima.`;
+    } else {
+      politicaComercial = `\n\nPOLÍTICA COMERCIAL: Não há diretrizes comerciais cadastradas. Use apenas dicas genéricas de abordagem e motivação sem mencionar ofertas, descontos ou condições comerciais específicas.`;
+    }
+
     const contextPrompt = `Você é um coach de vendas especializado em academias e negócios fitness. Seu nome é Coach IA.
 Fale de forma direta, motivadora, com dados concretos. Use emojis moderadamente. Responda em português brasileiro.
 Limite sua resposta a no máximo 300 palavras.
@@ -148,7 +167,7 @@ ${faltaParaProxNivel !== null ? `- Falta R$${faltaParaProxNivel.toFixed(2)} para
 ${diasRestantes > 0 ? `- Precisa vender R$${(faltaParaMeta / diasRestantes).toFixed(2)}/dia para atingir a meta` : ""}
 
 VENDAS POR PRODUTO/PLANO:
-${produtoBreakdown || "Nenhuma venda registrada"}`;
+${produtoBreakdown || "Nenhuma venda registrada"}${politicaComercial}`;
 
     const userMessage = pergunta || "Analise minha performance e me dê dicas práticas de como atingir minha meta de vendas.";
 
