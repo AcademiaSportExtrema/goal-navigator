@@ -19,6 +19,7 @@ import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora 
 import { PaginationControls } from '@/components/PaginationControls';
 import { getNivelNome } from '@/lib/utils';
 import { useSalesMetrics } from '@/hooks/useSalesMetrics';
+import { useDashboardVisibilidade } from '@/hooks/useDashboardVisibilidade';
 import { RevenueTrendChart } from '@/components/dashboard/RevenueTrendChart';
 import { RevenueByPaymentChart } from '@/components/dashboard/RevenueByPaymentChart';
 import { PlanSalesTable } from '@/components/dashboard/PlanSalesTable';
@@ -29,6 +30,7 @@ const ITEMS_PER_PAGE = 20;
 
 export default function VisaoConsultora() {
   const { empresaId } = useAuth();
+  const { isComponenteVisivel } = useDashboardVisibilidade();
   const [selectedConsultoraId, setSelectedConsultoraId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const mesAtual = format(new Date(), 'yyyy-MM');
@@ -327,21 +329,30 @@ export default function VisaoConsultora() {
             </Card>
 
             {/* Gráficos de Performance */}
-            {lancamentos && lancamentos.length > 0 && (
-              <>
-                <div className="grid gap-4 lg:grid-cols-3">
-                  <div className="lg:col-span-2">
-                    <RevenueTrendChart data={salesMetrics.revenueByDay} />
-                  </div>
-                  <RevenueByPaymentChart data={salesMetrics.revenueByPayment} />
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <PlanSalesTable data={salesMetrics.salesByPlan} />
-                  <CategoryShareChart data={salesMetrics.salesByPlan} />
-                </div>
-                <TicketHistogram data={salesMetrics.ticketDistribution} ticketMedio={salesMetrics.ticketMedioGlobal} />
-              </>
-            )}
+            {lancamentos && lancamentos.length > 0 && (() => {
+              const showTrend = isComponenteVisivel('grafico_tendencia_receita');
+              const showPayment = isComponenteVisivel('grafico_forma_pagamento');
+              const showPlan = isComponenteVisivel('tabela_vendas_plano');
+              const showCategory = isComponenteVisivel('grafico_categoria');
+              const showTicket = isComponenteVisivel('histograma_ticket');
+              return (
+                <>
+                  {(showTrend || showPayment) && (
+                    <div className="grid gap-4 lg:grid-cols-3">
+                      {showTrend && <div className="lg:col-span-2"><RevenueTrendChart data={salesMetrics.revenueByDay} /></div>}
+                      {showPayment && <RevenueByPaymentChart data={salesMetrics.revenueByPayment} />}
+                    </div>
+                  )}
+                  {(showPlan || showCategory) && (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {showPlan && <PlanSalesTable data={salesMetrics.salesByPlan} />}
+                      {showCategory && <CategoryShareChart data={salesMetrics.salesByPlan} />}
+                    </div>
+                  )}
+                  {showTicket && <TicketHistogram data={salesMetrics.ticketDistribution} ticketMedio={salesMetrics.ticketMedioGlobal} />}
+                </>
+              );
+            })()}
 
             {/* Lançamentos */}
             <Card>
