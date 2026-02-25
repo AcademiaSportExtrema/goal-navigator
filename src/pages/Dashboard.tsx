@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSalesMetrics } from '@/hooks/useSalesMetrics';
+import { useDashboardVisibilidade } from '@/hooks/useDashboardVisibilidade';
 import { RevenueTrendChart } from '@/components/dashboard/RevenueTrendChart';
 import { RevenueByPaymentChart } from '@/components/dashboard/RevenueByPaymentChart';
 import { PlanSalesTable } from '@/components/dashboard/PlanSalesTable';
@@ -48,9 +49,12 @@ import { getNivelNome } from '@/lib/utils';
 
 export default function Dashboard() {
   const { isAdmin } = useAuth();
+  const { isComponenteVisivel } = useDashboardVisibilidade();
   const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
   const [selectedConsultoraId, setSelectedConsultoraId] = useState<string | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
+
+  const show = (chave: string) => isAdmin || isComponenteVisivel(chave);
 
   // Gerar lista de meses
   const meses = Array.from({ length: 12 }, (_, i) => {
@@ -334,6 +338,7 @@ export default function Dashboard() {
 
         {/* Cards resumo rápido */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          {show('card_total_vendido') && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Vendido</CardTitle>
@@ -360,7 +365,9 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
+          )}
 
+          {show('card_total_faturado') && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Faturado</CardTitle>
@@ -373,7 +380,7 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground">Faturado no mês</p>
             </CardContent>
           </Card>
-
+          )}
           {isAdmin && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -572,27 +579,39 @@ export default function Dashboard() {
         {/* Gráficos de Performance */}
         {lancamentos && lancamentos.length > 0 && (
           <>
+            {(show('grafico_tendencia_receita') || show('grafico_forma_pagamento')) && (
             <div className="grid gap-4 lg:grid-cols-3">
+              {show('grafico_tendencia_receita') && (
               <div className="lg:col-span-2">
                 <RevenueTrendChart data={salesMetrics.revenueByDay} />
               </div>
+              )}
+              {show('grafico_forma_pagamento') && (
               <RevenueByPaymentChart data={salesMetrics.revenueByPayment} />
+              )}
             </div>
+            )}
 
+            {(show('tabela_vendas_plano') || show('grafico_categoria')) && (
             <div className="grid gap-4 md:grid-cols-2">
-              <PlanSalesTable data={salesMetrics.salesByPlan} />
-              <CategoryShareChart data={salesMetrics.salesByPlan} />
+              {show('tabela_vendas_plano') && <PlanSalesTable data={salesMetrics.salesByPlan} />}
+              {show('grafico_categoria') && <CategoryShareChart data={salesMetrics.salesByPlan} />}
             </div>
+            )}
 
+            {show('histograma_ticket') && (
             <TicketHistogram
               data={salesMetrics.ticketDistribution}
               ticketMedio={salesMetrics.ticketMedioGlobal}
             />
+            )}
           </>
         )}
 
         {/* Últimos uploads + Equipe */}
+        {(show('ultimos_uploads') || show('card_equipe')) && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {show('ultimos_uploads') && (
           <Card className="col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -641,7 +660,9 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
+          )}
 
+          {show('card_equipe') && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -662,9 +683,12 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
+          )}
         </div>
+        )}
 
         {/* Ações rápidas */}
+        {show('acoes_rapidas') && (
         <Card>
           <CardHeader>
             <CardTitle>Ações Rápidas</CardTitle>
@@ -695,8 +719,8 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+        )}
       </div>
-
       {selectedConsultoraId && (
         <AiCoach
           consultoraId={selectedConsultoraId}
