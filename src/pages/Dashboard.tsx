@@ -217,10 +217,13 @@ export default function Dashboard() {
 
     let nivelAtual = 1;
     let comissaoPercent = 0;
-    if (niveisComissao) {
-      for (const nivel of niveisComissao) {
-        if (percentualAtingido >= Number(nivel.de_percent) * 100 && 
-            percentualAtingido <= Number(nivel.ate_percent) * 100) {
+    if (niveisComissao && niveisComissao.length > 0) {
+      // Percorre do nível mais alto ao mais baixo: o primeiro onde o percentual
+      // atinge o mínimo (de_percent) é o nível correto. Isso elimina problemas
+      // com lacunas entre faixas (ex.: ate=100% e de=101%).
+      const sorted = [...niveisComissao].sort((a, b) => b.nivel - a.nivel);
+      for (const nivel of sorted) {
+        if (percentualAtingido >= Number(nivel.de_percent) * 100) {
           nivelAtual = nivel.nivel;
           comissaoPercent = Number(nivel.comissao_percent);
           break;
@@ -248,10 +251,10 @@ export default function Dashboard() {
 
       let nivelConsultora = 1;
       let comissaoPercentConsultora = 0;
-      if (niveisComissao) {
-        for (const nivel of niveisComissao) {
-          if (percentual >= Number(nivel.de_percent) * 100 && 
-              percentual <= Number(nivel.ate_percent) * 100) {
+      if (niveisComissao && niveisComissao.length > 0) {
+        const sorted = [...niveisComissao].sort((a, b) => b.nivel - a.nivel);
+        for (const nivel of sorted) {
+          if (percentual >= Number(nivel.de_percent) * 100) {
             nivelConsultora = nivel.nivel;
             comissaoPercentConsultora = Number(nivel.comissao_percent);
             break;

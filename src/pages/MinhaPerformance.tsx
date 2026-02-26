@@ -115,14 +115,14 @@ export default function MinhaPerformance() {
       : 0;
     const percentualAtingido = metaIndividual > 0 ? (totalVendido / metaIndividual) * 100 : 0;
 
-    // Determinar nível
+    // Determinar nível (busca reversa para evitar lacunas entre faixas)
     let nivelAtual = 1;
     let comissaoPercent = 0;
     
-    if (niveisComissao) {
-      for (const nivel of niveisComissao) {
-        if (percentualAtingido >= Number(nivel.de_percent) * 100 && 
-            percentualAtingido <= Number(nivel.ate_percent) * 100) {
+    if (niveisComissao && niveisComissao.length > 0) {
+      const sorted = [...niveisComissao].sort((a, b) => b.nivel - a.nivel);
+      for (const nivel of sorted) {
+        if (percentualAtingido >= Number(nivel.de_percent) * 100) {
           nivelAtual = nivel.nivel;
           comissaoPercent = Number(nivel.comissao_percent);
           break;
