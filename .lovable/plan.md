@@ -1,36 +1,31 @@
 
 
-## Corrigir exibição dos níveis de comissão nos dashboards das consultoras
+## Herdar níveis de comissão do mês anterior
 
 ### Problema
-Com a adição de casas decimais nas faixas (ex: 0–79.99%, 80–99.99%), os cards de "Níveis de Comissão" nas páginas **Minha Performance** e **Visão Consultora** ainda exibem os percentuais com `.toFixed(0)`, ou seja, arredondando para inteiro. Isso mostra "0% - 80%" ao invés de "0% - 79.99%", mantendo visualmente os gaps que foram corrigidos no backend. O mesmo ocorre com os valores em R$ calculados.
+Ao configurar um novo mês que ainda não tem dados salvos, o sistema usa defaults hardcoded. O esperado é que os percentuais dos níveis sejam copiados do último mês configurado.
 
-### Alterações
+### Solução
 
-#### 1. `src/pages/MinhaPerformance.tsx` (linha 284)
-- Trocar `.toFixed(0)` por formatação inteligente: mostrar decimais apenas quando necessário
-  - `79.99%` → exibe "79.99%"
-  - `80%` → exibe "80%" (sem decimais desnecessários)
-- Mesma lógica para os valores em R$ (linhas 286-291): garantir que `valorMin` e `valorMax` reflitam as faixas com precisão decimal
+#### `src/pages/ConfiguracaoMes.tsx`
+1. Adicionar uma query para buscar os níveis de comissão do mês anterior mais recente (qualquer mês com `comissao_niveis` salvo, ordenado por `mes_referencia DESC`, limitado a 1)
+2. No `useEffect` que popula `niveis` (linha 140-151), quando `niveisComissao` está vazio (mês novo), usar os níveis do mês anterior em vez de `defaultNiveis`
+3. Manter `defaultNiveis` como fallback final caso não exista nenhum mês anterior configurado
 
-#### 2. `src/pages/VisaoConsultora.tsx` (linha 305)
-- Mesma correção de formatação nos cards de níveis de comissão
-
-### Implementação
-Criar helper inline ou reutilizável:
-```typescript
-const fmtPct = (v: number) => {
-  const pct = v * 100;
-  return pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(2)}%`;
-};
+#### Lógica da query
+```sql
+-- Buscar a meta mensal mais recente que NÃO seja o mês selecionado
+SELECT cn.* FROM comissao_niveis cn
+JOIN metas_mensais mm ON cn.meta_mensal_id = mm.id
+WHERE mm.mes_referencia < mesSelecionado
+ORDER BY mm.mes_referencia DESC, cn.nivel ASC
 ```
 
-Substituir `{(deP * 100).toFixed(0)}%` por `{fmtPct(deP)}` nos dois arquivos.
+Na prática: buscar `metas_mensais` com `mes_referencia` diferente do selecionado, ordenado DESC, pegar o primeiro, e então buscar seus `comissao_niveis`.
 
-### Arquivos afetados
+### Arquivo afetado
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/pages/MinhaPerformance.tsx` | Formatação decimal nos cards de níveis |
-| `src/pages/VisaoConsultora.tsx` | Mesma formatação decimal |
+| `src/pages/ConfiguracaoMes.tsx` | Nova query para último mês configurado + fallback no useEffect |
 
