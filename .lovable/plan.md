@@ -1,36 +1,29 @@
 
 
-## Gráfico de Proporção de Vendas por Consultora
+## Corrigir gaps entre níveis de comissão
 
-### Objetivo
-Adicionar um gráfico de pizza/donut no Dashboard mostrando a participação de cada consultora no total vendido do mês.
+### Problema
+Os inputs de "De %" e "Até %" na configuração do mês aceitam apenas inteiros (sem `step`), criando gaps como 70→71 onde valores como 70.5% não se encaixam em nenhum nível.
 
-### Dados
-Os dados já existem em `dashboardData.consultoras` (calculados no `useMemo` do Dashboard, linha 230-272). Cada item tem `nome` e `vendido`. Basta calcular o percentual de cada uma sobre o total.
+### Solução
 
-### Implementação
+#### 1. `src/pages/ConfiguracaoMes.tsx` — Inputs com duas casas decimais
+- Adicionar `step="0.01"` nos inputs de `de_percent` e `ate_percent` (linhas 388-406)
+- Isso permite configurar faixas como 0–70.00 / 70.01–85.00 / etc.
 
-#### 1. Novo componente `ConsultoraShareChart.tsx`
-- Gráfico donut (PieChart do Recharts, igual ao `CategoryShareChart` existente)
-- Recebe array `{ nome: string; vendido: number; percentual: number }[]`
-- Top 5 consultoras + "Outras" se houver mais de 6
-- Tooltip com nome, valor e percentual
-- Título: "Participação por Consultora"
+#### 2. `src/pages/ConfiguracaoMes.tsx` — Parsing com vírgula
+- No `salvarConfig`, usar `parseFloat(n.de_percent.replace(',', '.'))` para suportar entrada com vírgula (pt-BR)
+- Mesmo tratamento para `ate_percent` e `comissao_percent`
 
-#### 2. Atualizar `Dashboard.tsx`
-- Importar o novo componente
-- Inserir na seção do grid de gráficos por consultora (junto ao gráfico de barras e tabela existentes)
-- Usar `dashboardData.consultoras` para montar os dados do gráfico
-- Controlar visibilidade com chave `grafico_share_consultora`
+#### 3. Defaults sem gap
+- Atualizar `defaultNiveis` para eliminar gaps nos valores padrão (ex: 0–79.99, 80–99.99, etc.)
 
-#### 3. Atualizar `useDashboardVisibilidade.ts`
-- Adicionar entrada `{ chave: 'grafico_share_consultora', label: 'Participação por Consultora', padrao: true }` na lista de componentes
+#### 4. Já corrigido nos dashboards
+A lógica descendente já implementada no Dashboard, MinhaPerformance, Metas e VisaoConsultora usa `>=` no `de_percent`, então com faixas contíguas (70.00 / 70.01) o cálculo funciona corretamente. Nenhuma mudança necessária nos dashboards — o problema é apenas na interface de configuração que não permite decimais.
 
 ### Arquivos
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/components/dashboard/ConsultoraShareChart.tsx` | Novo componente donut chart |
-| `src/pages/Dashboard.tsx` | Importar e renderizar o gráfico |
-| `src/hooks/useDashboardVisibilidade.ts` | Registrar nova chave de visibilidade |
+| `src/pages/ConfiguracaoMes.tsx` | `step="0.01"` nos inputs de faixa, parsing com vírgula, defaults sem gap |
 
