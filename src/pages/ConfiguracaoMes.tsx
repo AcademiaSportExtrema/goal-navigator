@@ -116,6 +116,41 @@ export default function ConfiguracaoMes() {
     },
   });
 
+  // Buscar níveis do mês anterior mais recente (fallback para meses novos)
+  const { data: niveisAnteriores } = useQuery({
+    queryKey: ['comissao-niveis-anterior', mesSelecionado, empresaId],
+    enabled: !!empresaId,
+    queryFn: async () => {
+      const { data: metaAnterior, error: metaErr } = await supabase
+        .from('metas_mensais')
+        .select('id')
+        .eq('empresa_id', empresaId!)
+        .lt('mes_referencia', mesSelecionado)
+        .order('mes_referencia', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (metaErr || !metaAnterior) return null;
+
+      const { data, error } = await supabase
+        .from('comissao_niveis')
+        .select('*')
+        .eq('meta_mensal_id', metaAnterior.id)
+        .order('nivel');
+
+      if (error) throw error;
+      return data as ComissaoNivel[];
+    },
+  });
+
+  const mapNiveisToConfig = (data: ComissaoNivel[]): NivelConfig[] =>
+    data.map(n => ({
+      nivel: n.nivel,
+      de_percent: String(parseFloat((Number(n.de_percent) * 100).toFixed(10))),
+      ate_percent: String(parseFloat((Number(n.ate_percent) * 100).toFixed(10))),
+      comissao_percent: String(parseFloat((Number(n.comissao_percent) * 100).toFixed(10))),
+    }));
+
   // Preencher dados quando carregar
   useEffect(() => {
     if (metaMensal) {
@@ -139,16 +174,13 @@ export default function ConfiguracaoMes() {
 
    useEffect(() => {
     if (niveisComissao && niveisComissao.length > 0) {
-      setNiveis(niveisComissao.map(n => ({
-        nivel: n.nivel,
-        de_percent: String(parseFloat((Number(n.de_percent) * 100).toFixed(10))),
-        ate_percent: String(parseFloat((Number(n.ate_percent) * 100).toFixed(10))),
-        comissao_percent: String(parseFloat((Number(n.comissao_percent) * 100).toFixed(10))),
-      })));
+      setNiveis(mapNiveisToConfig(niveisComissao));
+    } else if (niveisAnteriores && niveisAnteriores.length > 0) {
+      setNiveis(mapNiveisToConfig(niveisAnteriores));
     } else {
       setNiveis(defaultNiveis);
     }
-  }, [niveisComissao]);
+  }, [niveisComissao, niveisAnteriores]);
 
   // Salvar configurações
   const salvarConfig = useMutation({
