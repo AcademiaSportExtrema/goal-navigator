@@ -110,14 +110,14 @@ export default function Metas() {
     const totalVendido = lancamentos.reduce((acc, l) => acc + (Number(l.valor) || 0), 0);
     const percentualAtingido = (totalVendido / Number(metaMensal.meta_total)) * 100;
 
-    // Determinar nível atual
+    // Determinar nível atual (busca reversa para evitar lacunas entre faixas)
     let nivelAtual = 1;
     let comissaoPercent = 0;
     
-    if (niveisComissao) {
-      for (const nivel of niveisComissao) {
-        if (percentualAtingido >= Number(nivel.de_percent) * 100 && 
-            percentualAtingido <= Number(nivel.ate_percent) * 100) {
+    if (niveisComissao && niveisComissao.length > 0) {
+      const sorted = [...niveisComissao].sort((a, b) => b.nivel - a.nivel);
+      for (const nivel of sorted) {
+        if (percentualAtingido >= Number(nivel.de_percent) * 100) {
           nivelAtual = nivel.nivel;
           comissaoPercent = Number(nivel.comissao_percent);
           break;
@@ -145,13 +145,13 @@ export default function Metas() {
         : 0;
       const percentual = metaIndividual > 0 ? (c.valor / metaIndividual) * 100 : 0;
 
-      // Determinar nível da consultora
+      // Determinar nível da consultora (busca reversa)
       let nivelConsultora = 1;
       let comissaoPercentConsultora = 0;
-      if (niveisComissao) {
-        for (const nivel of niveisComissao) {
-          if (percentual >= Number(nivel.de_percent) * 100 && 
-              percentual <= Number(nivel.ate_percent) * 100) {
+      if (niveisComissao && niveisComissao.length > 0) {
+        const sorted = [...niveisComissao].sort((a, b) => b.nivel - a.nivel);
+        for (const nivel of sorted) {
+          if (percentual >= Number(nivel.de_percent) * 100) {
             nivelConsultora = nivel.nivel;
             comissaoPercentConsultora = Number(nivel.comissao_percent);
             break;
