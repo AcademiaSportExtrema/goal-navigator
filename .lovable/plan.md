@@ -1,29 +1,36 @@
 
 
-## Corrigir gaps entre níveis de comissão
+## Corrigir exibição dos níveis de comissão nos dashboards das consultoras
 
 ### Problema
-Os inputs de "De %" e "Até %" na configuração do mês aceitam apenas inteiros (sem `step`), criando gaps como 70→71 onde valores como 70.5% não se encaixam em nenhum nível.
+Com a adição de casas decimais nas faixas (ex: 0–79.99%, 80–99.99%), os cards de "Níveis de Comissão" nas páginas **Minha Performance** e **Visão Consultora** ainda exibem os percentuais com `.toFixed(0)`, ou seja, arredondando para inteiro. Isso mostra "0% - 80%" ao invés de "0% - 79.99%", mantendo visualmente os gaps que foram corrigidos no backend. O mesmo ocorre com os valores em R$ calculados.
 
-### Solução
+### Alterações
 
-#### 1. `src/pages/ConfiguracaoMes.tsx` — Inputs com duas casas decimais
-- Adicionar `step="0.01"` nos inputs de `de_percent` e `ate_percent` (linhas 388-406)
-- Isso permite configurar faixas como 0–70.00 / 70.01–85.00 / etc.
+#### 1. `src/pages/MinhaPerformance.tsx` (linha 284)
+- Trocar `.toFixed(0)` por formatação inteligente: mostrar decimais apenas quando necessário
+  - `79.99%` → exibe "79.99%"
+  - `80%` → exibe "80%" (sem decimais desnecessários)
+- Mesma lógica para os valores em R$ (linhas 286-291): garantir que `valorMin` e `valorMax` reflitam as faixas com precisão decimal
 
-#### 2. `src/pages/ConfiguracaoMes.tsx` — Parsing com vírgula
-- No `salvarConfig`, usar `parseFloat(n.de_percent.replace(',', '.'))` para suportar entrada com vírgula (pt-BR)
-- Mesmo tratamento para `ate_percent` e `comissao_percent`
+#### 2. `src/pages/VisaoConsultora.tsx` (linha 305)
+- Mesma correção de formatação nos cards de níveis de comissão
 
-#### 3. Defaults sem gap
-- Atualizar `defaultNiveis` para eliminar gaps nos valores padrão (ex: 0–79.99, 80–99.99, etc.)
+### Implementação
+Criar helper inline ou reutilizável:
+```typescript
+const fmtPct = (v: number) => {
+  const pct = v * 100;
+  return pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(2)}%`;
+};
+```
 
-#### 4. Já corrigido nos dashboards
-A lógica descendente já implementada no Dashboard, MinhaPerformance, Metas e VisaoConsultora usa `>=` no `de_percent`, então com faixas contíguas (70.00 / 70.01) o cálculo funciona corretamente. Nenhuma mudança necessária nos dashboards — o problema é apenas na interface de configuração que não permite decimais.
+Substituir `{(deP * 100).toFixed(0)}%` por `{fmtPct(deP)}` nos dois arquivos.
 
-### Arquivos
+### Arquivos afetados
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/pages/ConfiguracaoMes.tsx` | `step="0.01"` nos inputs de faixa, parsing com vírgula, defaults sem gap |
+| `src/pages/MinhaPerformance.tsx` | Formatação decimal nos cards de níveis |
+| `src/pages/VisaoConsultora.tsx` | Mesma formatação decimal |
 
