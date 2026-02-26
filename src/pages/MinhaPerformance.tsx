@@ -281,7 +281,7 @@ export default function MinhaPerformance() {
                       >
                         <div className="font-bold">{getNivelNome(nivel.nivel)}</div>
                         <div className="text-sm opacity-80">
-                          {(deP * 100).toFixed(0)}% - {(ateP * 100).toFixed(0)}%
+                          {((deP * 100) % 1 === 0 ? (deP * 100).toFixed(0) : (deP * 100).toFixed(2))}% - {((ateP * 100) % 1 === 0 ? (ateP * 100).toFixed(0) : (ateP * 100).toFixed(2))}%
                         </div>
                         <div className="text-xs opacity-70 mt-0.5">
                           {mi > 0
