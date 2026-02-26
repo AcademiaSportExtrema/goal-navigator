@@ -30,10 +30,10 @@ interface NivelConfig {
 }
 
 const defaultNiveis: NivelConfig[] = [
-  { nivel: 1, de_percent: '0', ate_percent: '79', comissao_percent: '2' },
-  { nivel: 2, de_percent: '80', ate_percent: '99', comissao_percent: '3' },
-  { nivel: 3, de_percent: '100', ate_percent: '119', comissao_percent: '4' },
-  { nivel: 4, de_percent: '120', ate_percent: '149', comissao_percent: '5' },
+  { nivel: 1, de_percent: '0', ate_percent: '79.99', comissao_percent: '2' },
+  { nivel: 2, de_percent: '80', ate_percent: '99.99', comissao_percent: '3' },
+  { nivel: 3, de_percent: '100', ate_percent: '119.99', comissao_percent: '4' },
+  { nivel: 4, de_percent: '120', ate_percent: '149.99', comissao_percent: '5' },
   { nivel: 5, de_percent: '150', ate_percent: '999', comissao_percent: '6' },
 ];
 
@@ -202,9 +202,9 @@ export default function ConfiguracaoMes() {
       const niveisInsert = niveis.map(n => ({
         meta_mensal_id: metaId,
         nivel: n.nivel,
-        de_percent: parseFloat(n.de_percent) / 100,
-        ate_percent: parseFloat(n.ate_percent) / 100,
-        comissao_percent: parseFloat(n.comissao_percent) / 100,
+        de_percent: parseFloat(String(n.de_percent).replace(',', '.')) / 100,
+        ate_percent: parseFloat(String(n.ate_percent).replace(',', '.')) / 100,
+        comissao_percent: parseFloat(String(n.comissao_percent).replace(',', '.')) / 100,
         empresa_id: empresaId!,
       }));
       
@@ -387,6 +387,7 @@ export default function ConfiguracaoMes() {
                     </div>
                     <Input
                       type="number"
+                      step="0.01"
                       value={nivel.de_percent}
                       onChange={(e) => {
                         const newNiveis = [...niveis];
@@ -397,6 +398,7 @@ export default function ConfiguracaoMes() {
                     />
                     <Input
                       type="number"
+                      step="0.01"
                       value={nivel.ate_percent}
                       onChange={(e) => {
                         const newNiveis = [...niveis];
