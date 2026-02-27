@@ -50,7 +50,7 @@ import type { Lancamento, MetaMensal, MetaConsultora, ComissaoNivel, Consultora 
 import { getNivelNome } from '@/lib/utils';
 
 export default function Dashboard() {
-  const { isAdmin, role } = useAuth();
+  const { isAdmin, role, consultoraId } = useAuth();
   const isConsultora = role === 'consultora';
   const { isComponenteVisivel } = useDashboardVisibilidade();
   const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
@@ -158,6 +158,22 @@ export default function Dashboard() {
         .order('nivel');
       if (error) throw error;
       return data as ComissaoNivel[];
+    },
+  });
+
+  // Meta individual da consultora logada
+  const { data: metaIndividual } = useQuery({
+    queryKey: ['meta-consultora-individual', metaMensal?.id, consultoraId],
+    enabled: isConsultora && !!metaMensal?.id && !!consultoraId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('metas_consultoras')
+        .select('*')
+        .eq('meta_mensal_id', metaMensal!.id)
+        .eq('consultora_id', consultoraId!)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      return data as MetaConsultora | null;
     },
   });
 
@@ -447,7 +463,114 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Cards de meta detalhados (nível e comissão) - apenas admin */}
+        {/* Cards de meta individual para consultora */}
+        {isConsultora && metaMensal && (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Minha Meta</CardTitle>
+                <Target className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {metaIndividual
+                    ? formatCurrency(Number(metaMensal.meta_total) * Number(metaIndividual.percentual))
+                    : 'Não definida'}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {metaIndividual
+                    ? `${(Number(metaIndividual.percentual) * 100).toFixed(0)}% da meta total`
+                    : 'Fale com o administrador'}
+                </p>
+              </CardContent>
+            </Card>
+
+            {metaIndividual && dashboardData && (() => {
+              const minhaMetaValor = Number(metaMensal.meta_total) * Number(metaIndividual.percentual);
+              const meusDados = dashboardData.consultoras.find(c => c.consultoraId === consultoraId);
+              const meuVendido = meusDados?.vendido || 0;
+              const meuPercentual = minhaMetaValor > 0 ? (meuVendido / minhaMetaValor) * 100 : 0;
+              
+              let meuNivel = 1;
+              if (niveisComissao && niveisComissao.length > 0) {
+                const sorted = [...niveisComissao].sort((a, b) => b.nivel - a.nivel);
+                for (const nivel of sorted) {
+                  if (meuPercentual >= Number(nivel.de_percent) * 100) {
+                    meuNivel = nivel.nivel;
+                    break;
+                  }
+                }
+              }
+
+              return (
+                <>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Meu Atingimento</CardTitle>
+                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className={`text-2xl font-bold ${
+                        meuPercentual >= 100 ? 'text-success' :
+                        meuPercentual >= 80 ? 'text-warning' : ''
+                      }`}>
+                        {meuPercentual.toFixed(1)}%
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {formatCurrency(meuVendido)} vendido
+                      </p>
+                      <Progress value={Math.min(meuPercentual, 100)} className="mt-2" />
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Meu Nível</CardTitle>
+                      <Award className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{getNivelNome(meuNivel)}</div>
+                      <p className="text-xs text-muted-foreground">Ferro → Diamante</p>
+                    </CardContent>
+                  </Card>
+                </>
+              );
+            })()}
+
+            {/* Níveis de Comissão */}
+            {niveisComissao && niveisComissao.length > 0 && (
+              <Card className="md:col-span-2 lg:col-span-3">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Níveis de Comissão</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    {niveisComissao.map(n => {
+                      const minhaMetaValor = metaIndividual ? Number(metaMensal.meta_total) * Number(metaIndividual.percentual) : 0;
+                      return (
+                        <div key={n.id} className="rounded-lg border p-3 text-center space-y-1">
+                          <p className="text-xs font-semibold">{getNivelNome(n.nivel)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(Number(n.de_percent) * 100).toFixed(0)}% – {(Number(n.ate_percent) * 100).toFixed(0)}%
+                          </p>
+                          <p className="text-sm font-bold text-primary">
+                            {(Number(n.comissao_percent) * 100).toFixed(1)}%
+                          </p>
+                          {minhaMetaValor > 0 && (
+                            <p className="text-[10px] text-muted-foreground">
+                              {formatCurrencyCompact(minhaMetaValor * Number(n.de_percent))} – {formatCurrencyCompact(minhaMetaValor * Number(n.ate_percent))}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
         {isAdmin && metaMensal && dashboardData && (
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
