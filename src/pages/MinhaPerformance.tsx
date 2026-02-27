@@ -25,6 +25,7 @@ export default function MinhaPerformance() {
   const mesAtual = format(new Date(), 'yyyy-MM');
   const proximoMes = format(addMonths(new Date(), 1), 'yyyy-MM');
   const [mesSelecionado, setMesSelecionado] = useState(mesAtual);
+  const isProximoMes = mesSelecionado !== mesAtual;
 
   // Buscar dados da consultora
   const { data: consultora } = useQuery({
@@ -93,7 +94,7 @@ export default function MinhaPerformance() {
   // Buscar meus lançamentos
   const { data: meusLancamentos } = useQuery({
     queryKey: ['meus-lancamentos', mesSelecionado, consultora?.nome],
-    enabled: !!consultora?.nome,
+    enabled: !!consultora?.nome && !isProximoMes,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('lancamentos')
@@ -200,7 +201,7 @@ export default function MinhaPerformance() {
         ) : (
           <>
             {/* Cards de resumo */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className={`grid gap-4 ${isProximoMes ? 'md:grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-4'}`}>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Minha Meta</CardTitle>
@@ -219,61 +220,65 @@ export default function MinhaPerformance() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Vendido</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {new Intl.NumberFormat('pt-BR', { 
-                      style: 'currency', 
-                      currency: 'BRL' 
-                    }).format(metricas?.totalVendido || 0)}
-                  </div>
-                  <Progress 
-                    value={Math.min(metricas?.percentualAtingido || 0, 100)} 
-                    className="mt-2"
-                  />
-                </CardContent>
-              </Card>
+              {!isProximoMes && (
+                <>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Vendido</CardTitle>
+                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">
+                        {new Intl.NumberFormat('pt-BR', { 
+                          style: 'currency', 
+                          currency: 'BRL' 
+                        }).format(metricas?.totalVendido || 0)}
+                      </div>
+                      <Progress 
+                        value={Math.min(metricas?.percentualAtingido || 0, 100)} 
+                        className="mt-2"
+                      />
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">% Atingido</CardTitle>
-                  <Award className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className={`text-2xl font-bold ${
-                    (metricas?.percentualAtingido || 0) >= 100 ? 'text-success' :
-                    (metricas?.percentualAtingido || 0) >= 80 ? 'text-warning' : ''
-                  }`}>
-                    {(metricas?.percentualAtingido || 0).toFixed(1)}%
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {getNivelNome(metricas?.nivelAtual || 1)}
-                  </p>
-                </CardContent>
-              </Card>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">% Atingido</CardTitle>
+                      <Award className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className={`text-2xl font-bold ${
+                        (metricas?.percentualAtingido || 0) >= 100 ? 'text-success' :
+                        (metricas?.percentualAtingido || 0) >= 80 ? 'text-warning' : ''
+                      }`}>
+                        {(metricas?.percentualAtingido || 0).toFixed(1)}%
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {getNivelNome(metricas?.nivelAtual || 1)}
+                      </p>
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Comissão Estimada</CardTitle>
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-success">
-                    {new Intl.NumberFormat('pt-BR', { 
-                      style: 'currency', 
-                      currency: 'BRL' 
-                    }).format(metricas?.comissaoEstimada || 0)}
-                  </div>
-                </CardContent>
-              </Card>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Comissão Estimada</CardTitle>
+                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-success">
+                        {new Intl.NumberFormat('pt-BR', { 
+                          style: 'currency', 
+                          currency: 'BRL' 
+                        }).format(metricas?.comissaoEstimada || 0)}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </div>
 
             {/* Dica do Dia */}
-            {consultoraId && <CoachDicaDoDia consultoraId={consultoraId} />}
+            {!isProximoMes && consultoraId && <CoachDicaDoDia consultoraId={consultoraId} />}
 
             {/* Níveis de comissão */}
             <Card>
@@ -331,50 +336,52 @@ export default function MinhaPerformance() {
             </Card>
 
             {/* Meus lançamentos */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Minhas Vendas do Mês ({meusLancamentos?.length || 0})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {meusLancamentos && meusLancamentos.length > 0 ? (
-                  <div className="overflow-x-auto scrollbar-thin">
-                    <Table className="table-dense">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Data</TableHead>
-                          <TableHead>Produto</TableHead>
-                          <TableHead>Cliente</TableHead>
-                          <TableHead>Plano</TableHead>
-                          <TableHead className="text-right">Valor</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {meusLancamentos.map((l) => (
-                          <TableRow key={l.id}>
-                            <TableCell>
-                              {l.data_lancamento ? format(new Date(l.data_lancamento), 'dd/MM') : '-'}
-                            </TableCell>
-                            <TableCell>{l.produto || '-'}</TableCell>
-                            <TableCell>{l.nome_cliente || '-'}</TableCell>
-                            <TableCell>{l.plano || '-'}</TableCell>
-                            <TableCell className="text-right font-medium">
-                              {new Intl.NumberFormat('pt-BR', { 
-                                style: 'currency', 
-                                currency: 'BRL' 
-                              }).format(Number(l.valor))}
-                            </TableCell>
+            {!isProximoMes && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Minhas Vendas do Mês ({meusLancamentos?.length || 0})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {meusLancamentos && meusLancamentos.length > 0 ? (
+                    <div className="overflow-x-auto scrollbar-thin">
+                      <Table className="table-dense">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Data</TableHead>
+                            <TableHead>Produto</TableHead>
+                            <TableHead>Cliente</TableHead>
+                            <TableHead>Plano</TableHead>
+                            <TableHead className="text-right">Valor</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <p className="text-center py-8 text-muted-foreground">
-                    Nenhuma venda encontrada para este mês
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+                        </TableHeader>
+                        <TableBody>
+                          {meusLancamentos.map((l) => (
+                            <TableRow key={l.id}>
+                              <TableCell>
+                                {l.data_lancamento ? format(new Date(l.data_lancamento), 'dd/MM') : '-'}
+                              </TableCell>
+                              <TableCell>{l.produto || '-'}</TableCell>
+                              <TableCell>{l.nome_cliente || '-'}</TableCell>
+                              <TableCell>{l.plano || '-'}</TableCell>
+                              <TableCell className="text-right font-medium">
+                                {new Intl.NumberFormat('pt-BR', { 
+                                  style: 'currency', 
+                                  currency: 'BRL' 
+                                }).format(Number(l.valor))}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <p className="text-center py-8 text-muted-foreground">
+                      Nenhuma venda encontrada para este mês
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </>
         )}
       </div>
