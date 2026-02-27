@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -27,6 +28,8 @@ import type { Lancamento, MetaMensal, MetaConsultora, ComissaoNivel, Consultora 
 import { getNivelNome } from '@/lib/utils';
 
 export default function Metas() {
+  const { role } = useAuth();
+  const isConsultora = role === 'consultora';
   const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
 
   // Buscar meta do mês
@@ -184,13 +187,18 @@ export default function Metas() {
     };
   }, [lancamentos, metaMensal, metasConsultoras, niveisComissao]);
 
-  const meses = Array.from({ length: 12 }, (_, i) => {
-    const date = subMonths(addMonths(new Date(), 2), 11 - i);
-    return {
-      value: format(date, 'yyyy-MM'),
-      label: format(date, 'MMMM yyyy', { locale: ptBR }),
-    };
-  });
+  const meses = isConsultora
+    ? [
+        { value: format(new Date(), 'yyyy-MM'), label: format(new Date(), 'MMMM yyyy', { locale: ptBR }) },
+        { value: format(addMonths(new Date(), 1), 'yyyy-MM'), label: format(addMonths(new Date(), 1), 'MMMM yyyy', { locale: ptBR }) },
+      ]
+    : Array.from({ length: 12 }, (_, i) => {
+        const date = subMonths(addMonths(new Date(), 2), 11 - i);
+        return {
+          value: format(date, 'yyyy-MM'),
+          label: format(date, 'MMMM yyyy', { locale: ptBR }),
+        };
+      });
 
   const chartData = dashboardData?.consultoras.slice(0, 10).map(c => ({
     name: c.nome.length > 15 ? c.nome.substring(0, 15) + '...' : c.nome,
