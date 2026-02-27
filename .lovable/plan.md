@@ -1,20 +1,34 @@
-## Ocultar dados de performance no próximo mês
+
+
+## Restringir seletor de meses para consultora (apenas mês atual + próximo)
 
 ### Problema
-
-Quando a consultora seleciona o próximo mês, aparecem cards de vendas, % atingido, comissão estimada (todos zerados), tabela de lançamentos vazia e CoachDicaDoDia. Devem aparecer apenas a meta e os níveis de comissão do mes atual e do proximo mes 
+O Dashboard mostra um dropdown com 12 meses de histórico para todos os perfis, incluindo consultoras. A consultora deveria ver apenas o mês atual e o próximo mês.
 
 ### Alterações
 
-#### `src/pages/MinhaPerformance.tsx`
+#### `src/pages/Dashboard.tsx`
+1. Importar `useAuth` para obter o `role` (já importa `isAdmin`)
+2. Condicionar a lista `meses`: se for consultora, gerar apenas 2 itens (mês atual e próximo); caso contrário, manter os 12 meses atuais
+3. Usar `role` do `useAuth` para detectar consultora
 
-1. Criar flag `const isProximoMes = mesSelecionado !== mesAtual`
-2. Desabilitar a query `meus-lancamentos` com `enabled: !!consultora?.nome && !isProximoMes`
-3. Renderização condicional:
-  - **Sempre visível**: card "Minha Meta" e card "Níveis de Comissão"
-  - **Ocultar quando `isProximoMes**`: cards "Vendido", "% Atingido", "Comissão Estimada", tabela "Minhas Vendas do Mês", `CoachDicaDoDia`
+```
+const { isAdmin, role } = useAuth();
+const isConsultora = role === 'consultora';
 
+const meses = isConsultora
+  ? [
+      { value: format(new Date(), 'yyyy-MM'), label: format(new Date(), 'MMMM yyyy', { locale: ptBR }) },
+      { value: format(addMonths(new Date(), 1), 'yyyy-MM'), label: format(addMonths(new Date(), 1), 'MMMM yyyy', { locale: ptBR }) },
+    ]
+  : Array.from({ length: 12 }, (_, i) => { ... });
+```
 
-| Arquivo                          | Mudança                                                    |
-| -------------------------------- | ---------------------------------------------------------- |
-| `src/pages/MinhaPerformance.tsx` | Flag + query condicional + hide de 3 cards, tabela e coach |
+#### `src/pages/Metas.tsx` (se consultora tiver acesso)
+Aplicar a mesma lógica de restrição de meses, caso consultoras acessem essa rota.
+
+| Arquivo | Mudança |
+|---------|---------|
+| `src/pages/Dashboard.tsx` | Condicionar lista de meses por role |
+| `src/pages/Metas.tsx` | Mesma restrição (segurança) |
+
