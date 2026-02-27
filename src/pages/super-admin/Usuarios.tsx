@@ -22,11 +22,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Search, Users, KeyRound, Building, UserCheck } from 'lucide-react';
+import { Search, Users, KeyRound, Building, UserCheck, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useImpersonation } from '@/hooks/useImpersonation';
 import { Textarea } from '@/components/ui/textarea';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface UserEntry {
   id: string;
@@ -49,6 +50,15 @@ export default function Usuarios() {
   const [impersonateMotivo, setImpersonateMotivo] = useState('');
   const [impersonating, setImpersonating] = useState(false);
   const { startImpersonation } = useImpersonation();
+  const queryClient = useQueryClient();
+
+  // Create user state
+  const [createDialog, setCreateDialog] = useState(false);
+  const [createEmail, setCreateEmail] = useState('');
+  const [createPassword, setCreatePassword] = useState('');
+  const [createRole, setCreateRole] = useState<string>('admin');
+  const [createEmpresaId, setCreateEmpresaId] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-users', search, empresaFilter],
@@ -103,6 +113,44 @@ export default function Usuarios() {
     }
   };
 
+  const handleCreateUser = async () => {
+    if (!createEmail || !createPassword || !createRole || !createEmpresaId) return;
+    setCreating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user-admin`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: createEmail,
+            password: createPassword,
+            role: createRole,
+            empresa_id: createEmpresaId,
+          }),
+        }
+      );
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Erro ao criar usuário');
+      toast.success(`Usuário ${createEmail} criado com sucesso`);
+      setCreateDialog(false);
+      setCreateEmail('');
+      setCreatePassword('');
+      setCreateRole('admin');
+      setCreateEmpresaId('');
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao criar usuário');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const formatDate = (d: string | null) => {
     if (!d) return '-';
     return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -117,9 +165,15 @@ export default function Usuarios() {
   return (
     <AppLayout title="Usuários">
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
-          <p className="text-muted-foreground">Busca global de usuários da plataforma</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
+            <p className="text-muted-foreground">Busca global de usuários da plataforma</p>
+          </div>
+          <Button onClick={() => setCreateDialog(true)}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Novo Usuário
+          </Button>
         </div>
 
         {/* Filters */}
@@ -308,6 +362,69 @@ export default function Usuarios() {
               disabled={impersonateMotivo.trim().length < 5 || impersonating}
             >
               {impersonating ? 'Impersonando...' : 'Confirmar Impersonação'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create User Dialog */}
+      <Dialog open={createDialog} onOpenChange={setCreateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo Usuário</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={createEmail}
+                onChange={(e) => setCreateEmail(e.target.value)}
+                placeholder="usuario@email.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Senha</Label>
+              <Input
+                type="password"
+                value={createPassword}
+                onChange={(e) => setCreatePassword(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={createRole} onValueChange={setCreateRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="consultora">Consultora</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Empresa</Label>
+              <Select value={createEmpresaId} onValueChange={setCreateEmpresaId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {empresas?.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialog(false)}>Cancelar</Button>
+            <Button
+              onClick={handleCreateUser}
+              disabled={!createEmail || !createPassword || createPassword.length < 6 || !createEmpresaId || creating}
+            >
+              {creating ? 'Criando...' : 'Criar Usuário'}
             </Button>
           </DialogFooter>
         </DialogContent>
