@@ -33,7 +33,8 @@ Deno.serve(async (req) => {
     }
 
     const { data: isAdmin } = await supabase.rpc('has_role', { _user_id: caller.id, _role: 'admin' });
-    if (!isAdmin) {
+    const { data: isSuperAdmin } = await supabase.rpc('has_role', { _user_id: caller.id, _role: 'super_admin' });
+    if (!isAdmin && !isSuperAdmin) {
       return new Response(JSON.stringify({ error: 'Apenas administradores podem redefinir senhas' }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -55,6 +56,22 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Usuário com este email não encontrado' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
+    }
+
+    // Enforce empresa isolation: admin can only reset passwords within their own empresa
+    if (!isSuperAdmin) {
+      const { data: callerEmpresaId } = await supabase.rpc('get_user_empresa_id', { _user_id: caller.id });
+      const { data: targetRole } = await supabase
+        .from('user_roles')
+        .select('empresa_id')
+        .eq('user_id', targetUser.id)
+        .single();
+
+      if (!targetRole || targetRole.empresa_id !== callerEmpresaId) {
+        return new Response(JSON.stringify({ error: 'Você só pode redefinir senhas de usuários da sua empresa' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     // Update password
