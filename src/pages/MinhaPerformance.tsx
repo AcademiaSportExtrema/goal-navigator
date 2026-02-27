@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/table';
 import { Target, TrendingUp, DollarSign, Award, Calendar } from 'lucide-react';
 import { CoachDicaDoDia } from '@/components/CoachDicaDoDia';
-import { format } from 'date-fns';
+import { format, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
 import { getNivelNome } from '@/lib/utils';
@@ -23,6 +23,8 @@ import { getNivelNome } from '@/lib/utils';
 export default function MinhaPerformance() {
   const { consultoraId } = useAuth();
   const mesAtual = format(new Date(), 'yyyy-MM');
+  const proximoMes = format(addMonths(new Date(), 1), 'yyyy-MM');
+  const [mesSelecionado, setMesSelecionado] = useState(mesAtual);
 
   // Buscar dados da consultora
   const { data: consultora } = useQuery({
@@ -42,12 +44,12 @@ export default function MinhaPerformance() {
 
   // Buscar meta do mês
   const { data: metaMensal } = useQuery({
-    queryKey: ['meta-mensal-consultora', mesAtual],
+    queryKey: ['meta-mensal-consultora', mesSelecionado],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('metas_mensais')
         .select('*')
-        .eq('mes_referencia', mesAtual)
+        .eq('mes_referencia', mesSelecionado)
         .single();
       
       if (error && error.code !== 'PGRST116') throw error;
@@ -90,14 +92,14 @@ export default function MinhaPerformance() {
 
   // Buscar meus lançamentos
   const { data: meusLancamentos } = useQuery({
-    queryKey: ['meus-lancamentos', mesAtual, consultora?.nome],
+    queryKey: ['meus-lancamentos', mesSelecionado, consultora?.nome],
     enabled: !!consultora?.nome,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('lancamentos')
         .select('*')
         .eq('entra_meta', true)
-        .eq('mes_competencia', mesAtual)
+        .eq('mes_competencia', mesSelecionado)
         .eq('consultora_chave', consultora!.nome);
       
       if (error) throw error;
@@ -157,11 +159,32 @@ export default function MinhaPerformance() {
               <h2 className="text-2xl font-bold">{consultora?.nome || 'Carregando...'}</h2>
               <p className="text-muted-foreground flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
-                {format(new Date(), 'MMMM yyyy', { locale: ptBR })}
+                {format(new Date(mesSelecionado + '-01'), 'MMMM yyyy', { locale: ptBR })}
               </p>
             </div>
           </div>
-          
+          <div className="flex gap-2">
+            <button
+              onClick={() => setMesSelecionado(mesAtual)}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                mesSelecionado === mesAtual
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-accent'
+              }`}
+            >
+              {format(new Date(mesAtual + '-01'), 'MMM yyyy', { locale: ptBR })}
+            </button>
+            <button
+              onClick={() => setMesSelecionado(proximoMes)}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                mesSelecionado === proximoMes
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-accent'
+              }`}
+            >
+              {format(new Date(proximoMes + '-01'), 'MMM yyyy', { locale: ptBR })}
+            </button>
+          </div>
         </div>
 
         {!metaMensal ? (
