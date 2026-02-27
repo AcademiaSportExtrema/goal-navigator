@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Settings, Plus, Trash2, Edit, GripVertical, Play, Pause, Download, Upload } from 'lucide-react';
+import { Settings, Plus, Trash2, Edit, GripVertical, Play, Pause, Download, Upload, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { exportToCSV, parseCSV } from '@/lib/csv';
 import type { RegraMeta, CampoAlvo, OperadorRegra, ResponsavelCampo, RegraMes } from '@/types/database';
 
@@ -142,6 +142,10 @@ export default function Regras() {
   const [parsedRows, setParsedRows] = useState<ParsedRegraRow[]>([]);
   const [reprocessAfterImport, setReprocessAfterImport] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCampo, setFilterCampo] = useState('todos');
+  const [sortField, setSortField] = useState<'prioridade' | 'campo_alvo' | 'valor' | 'entra_meta'>('prioridade');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { toast } = useToast();
@@ -327,6 +331,41 @@ export default function Regras() {
 
   const validRows = parsedRows.filter(r => r.errors.length === 0);
   const invalidRows = parsedRows.filter(r => r.errors.length > 0);
+
+  const regrasFiltradas = useMemo(() => {
+    if (!regras) return [];
+    let filtered = regras.filter(r => {
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = !searchTerm || 
+        r.valor.toLowerCase().includes(searchLower) ||
+        (r.observacao && r.observacao.toLowerCase().includes(searchLower)) ||
+        (campoAlvoOptions.find(o => o.value === r.campo_alvo)?.label.toLowerCase().includes(searchLower));
+      const matchesCampo = filterCampo === 'todos' || r.campo_alvo === filterCampo;
+      return matchesSearch && matchesCampo;
+    });
+
+    filtered.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case 'prioridade': cmp = a.prioridade - b.prioridade; break;
+        case 'campo_alvo': cmp = a.campo_alvo.localeCompare(b.campo_alvo); break;
+        case 'valor': cmp = a.valor.localeCompare(b.valor); break;
+        case 'entra_meta': cmp = (a.entra_meta === b.entra_meta ? 0 : a.entra_meta ? -1 : 1); break;
+      }
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+
+    return filtered;
+  }, [regras, searchTerm, filterCampo, sortField, sortDirection]);
+
+  const toggleSort = (field: typeof sortField) => {
+    if (sortField === field) {
+      setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   const handleImportConfirm = async () => {
     if (validRows.length === 0) return;
@@ -531,15 +570,69 @@ export default function Regras() {
             </div>
           </CardHeader>
           <CardContent>
+            {/* Barra de filtros */}
+            {regras && regras.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
+                <div className="relative flex-1 w-full sm:max-w-xs">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Pesquisar por valor, campo ou observação..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={filterCampo} onValueChange={setFilterCampo}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Filtrar por campo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os campos</SelectItem>
+                    {campoAlvoOptions.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-1">
+                  {([
+                    { field: 'prioridade' as const, label: 'Prioridade' },
+                    { field: 'campo_alvo' as const, label: 'Campo' },
+                    { field: 'valor' as const, label: 'Valor' },
+                    { field: 'entra_meta' as const, label: 'Meta' },
+                  ]).map(({ field, label }) => (
+                    <Button
+                      key={field}
+                      variant={sortField === field ? 'secondary' : 'ghost'}
+                      size="sm"
+                      onClick={() => toggleSort(field)}
+                      className="text-xs"
+                    >
+                      {label}
+                      {sortField === field ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />
+                      ) : (
+                        <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />
+                      )}
+                    </Button>
+                  ))}
+                </div>
+                {(searchTerm || filterCampo !== 'todos') && (
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {regrasFiltradas.length} de {regras.length}
+                  </span>
+                )}
+              </div>
+            )}
+
             {isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map(i => (
                   <div key={i} className="h-20 rounded-lg bg-muted animate-pulse" />
                 ))}
               </div>
-            ) : regras && regras.length > 0 ? (
+            ) : regrasFiltradas.length > 0 ? (
               <div className="space-y-2">
-                {regras.map((regra) => (
+                {regrasFiltradas.map((regra) => (
                   <div
                     key={regra.id}
                     className={`flex items-center gap-4 p-4 rounded-lg border ${
@@ -605,8 +698,14 @@ export default function Regras() {
             ) : (
               <div className="text-center py-12 text-muted-foreground">
                 <Settings className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                <p className="font-medium">Nenhuma regra configurada</p>
-                <p className="text-sm">Crie sua primeira regra para classificar os lançamentos automaticamente</p>
+                <p className="font-medium">
+                  {regras && regras.length > 0 ? 'Nenhuma regra encontrada com os filtros atuais' : 'Nenhuma regra configurada'}
+                </p>
+                <p className="text-sm">
+                  {regras && regras.length > 0 
+                    ? 'Tente alterar os termos de pesquisa ou filtros'
+                    : 'Crie sua primeira regra para classificar os lançamentos automaticamente'}
+                </p>
               </div>
             )}
           </CardContent>
