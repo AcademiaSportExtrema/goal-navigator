@@ -50,7 +50,8 @@ import type { Lancamento, MetaMensal, MetaConsultora, ComissaoNivel, Consultora 
 import { getNivelNome } from '@/lib/utils';
 
 export default function Dashboard() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, role } = useAuth();
+  const isConsultora = role === 'consultora';
   const { isComponenteVisivel } = useDashboardVisibilidade();
   const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
   const [selectedConsultoraId, setSelectedConsultoraId] = useState<string | null>(null);
@@ -59,13 +60,18 @@ export default function Dashboard() {
   const show = (chave: string) => isAdmin || isComponenteVisivel(chave);
 
   // Gerar lista de meses
-  const meses = Array.from({ length: 12 }, (_, i) => {
-    const date = subMonths(addMonths(new Date(), 2), 11 - i);
-    return {
-      value: format(date, 'yyyy-MM'),
-      label: format(date, 'MMMM yyyy', { locale: ptBR }),
-    };
-  });
+  const meses = isConsultora
+    ? [
+        { value: format(new Date(), 'yyyy-MM'), label: format(new Date(), 'MMMM yyyy', { locale: ptBR }) },
+        { value: format(addMonths(new Date(), 1), 'yyyy-MM'), label: format(addMonths(new Date(), 1), 'MMMM yyyy', { locale: ptBR }) },
+      ]
+    : Array.from({ length: 12 }, (_, i) => {
+        const date = subMonths(addMonths(new Date(), 2), 11 - i);
+        return {
+          value: format(date, 'yyyy-MM'),
+          label: format(date, 'MMMM yyyy', { locale: ptBR }),
+        };
+      });
 
   // === Queries existentes do Dashboard ===
   const { data: totalLancamentos } = useQuery({
