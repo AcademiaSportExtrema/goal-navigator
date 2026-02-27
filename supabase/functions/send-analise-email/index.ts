@@ -151,6 +151,27 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Deduplication: prevent sending the same analysis email within 5 minutes
+    const dedupKey = `email_sent_${empresaId}_${analise.mes_referencia}`;
+    const { data: lastSent } = await supabaseAdmin
+      .from("system_settings")
+      .select("value")
+      .eq("key", dedupKey)
+      .single();
+
+    if (lastSent) {
+      const lastSentAt = new Date(lastSent.value).getTime();
+      const now = Date.now();
+      if (now - lastSentAt < 5 * 60 * 1000) {
+        return new Response(JSON.stringify({
+          error: "Email já enviado recentemente para esta análise. Aguarde 5 minutos.",
+          skipped: true,
+        }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Fetch active recipients
     const { data: destinatarios } = await supabaseAdmin
       .from("analise_email_config")
@@ -222,6 +243,12 @@ Deno.serve(async (req) => {
     }
 
     const resendData = await resendResp.json();
+
+    // Record send timestamp for deduplication
+    await supabaseAdmin.from("system_settings").upsert(
+      { key: dedupKey, value: new Date().toISOString() },
+      { onConflict: "key" }
+    );
 
     return new Response(JSON.stringify({
       success: true,

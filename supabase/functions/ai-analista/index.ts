@@ -264,28 +264,7 @@ Limite sua resposta a no máximo 500 palavras.`;
               { onConflict: "empresa_id,mes_referencia" }
             );
 
-            // Auto-send email after analysis is saved
-            try {
-              const emailResp = await fetch(
-                `${supabaseUrl}/functions/v1/send-analise-email`,
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${serviceKey}`,
-                  },
-                  body: JSON.stringify({ empresa_id: empresaId, _internal: true }),
-                }
-              );
-              if (!emailResp.ok) {
-                const errData = await emailResp.text();
-                console.log("Auto email send skipped or failed:", errData);
-              } else {
-                console.log("Auto email sent successfully for empresa:", empresaId);
-              }
-            } catch (emailErr) {
-              console.error("Auto email send error:", emailErr);
-            }
+            // Email sending removed – gestor controls dispatch via UI button
           }
 
           controller.close();
