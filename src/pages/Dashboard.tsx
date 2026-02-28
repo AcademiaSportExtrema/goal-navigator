@@ -29,18 +29,19 @@ import {
 } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { AiCoach } from '@/components/AiCoach';
 import { AnalistaIaCard } from '@/components/AnalistaIaCard';
 import { 
-  Upload, 
   FileText, 
   AlertCircle, 
   Target, 
   TrendingUp,
-  Users,
   Award,
   DollarSign,
   Lightbulb,
+  Calendar,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format, subMonths, addMonths } from 'date-fns';
@@ -48,6 +49,26 @@ import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import type { Lancamento, MetaMensal, MetaConsultora, ComissaoNivel, Consultora } from '@/types/database';
 import { getNivelNome } from '@/lib/utils';
+
+// Badge color map for commission levels
+const nivelBadgeClass: Record<string, string> = {
+  Ferro: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  Bronze: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+  Prata: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
+  Ouro: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+  Diamante: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
+};
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 pt-2">
+      <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground whitespace-nowrap">
+        {children}
+      </span>
+      <Separator className="flex-1" />
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { isAdmin, role, consultoraId } = useAuth();
@@ -73,7 +94,7 @@ export default function Dashboard() {
         };
       });
 
-  // === Queries existentes do Dashboard ===
+  // === Queries ===
   const { data: totalLancamentos } = useQuery({
     queryKey: ['dashboard-lancamentos', mesSelecionado],
     queryFn: async () => {
@@ -97,30 +118,6 @@ export default function Dashboard() {
     },
   });
 
-  const { data: ultimosUploads } = useQuery({
-    queryKey: ['dashboard-uploads'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('uploads')
-        .select('*')
-        .order('criado_em', { ascending: false })
-        .limit(5);
-      return data || [];
-    },
-  });
-
-  const { data: consultorasCount } = useQuery({
-    queryKey: ['dashboard-consultoras'],
-    queryFn: async () => {
-      const { count } = await supabase
-        .from('consultoras')
-        .select('*', { count: 'exact', head: true })
-        .eq('ativo', true);
-      return count || 0;
-    },
-  });
-
-  // === Queries vindas de Metas ===
   const { data: metaMensal } = useQuery({
     queryKey: ['meta-mensal-dashboard', mesSelecionado],
     queryFn: async () => {
@@ -161,7 +158,6 @@ export default function Dashboard() {
     },
   });
 
-  // Meta individual da consultora logada
   const { data: metaIndividual } = useQuery({
     queryKey: ['meta-consultora-individual', metaMensal?.id, consultoraId],
     enabled: isConsultora && !!metaMensal?.id && !!consultoraId,
@@ -190,41 +186,35 @@ export default function Dashboard() {
     },
   });
 
-  // Total Vendido: entra_meta=true + data_inicio no mês selecionado
   const { data: totalVendidoInicio } = useQuery({
     queryKey: ['dashboard-vendido-inicio', mesSelecionado],
     queryFn: async () => {
       const [ano, mes] = mesSelecionado.split('-').map(Number);
       const inicioMes = `${mesSelecionado}-01`;
       const fimMes = new Date(ano, mes, 0).toISOString().split('T')[0];
-
       const { data, error } = await supabase
         .from('lancamentos')
         .select('valor')
         .eq('entra_meta', true)
         .gte('data_inicio', inicioMes)
         .lte('data_inicio', fimMes);
-
       if (error) throw error;
       return (data || []).reduce((acc, l) => acc + (Number(l.valor) || 0), 0);
     },
   });
 
-  // Total Faturado: entra_meta=true + data_lancamento no mês selecionado
   const { data: totalFaturado } = useQuery({
     queryKey: ['dashboard-faturado', mesSelecionado],
     queryFn: async () => {
       const [ano, mes] = mesSelecionado.split('-').map(Number);
       const inicioMes = `${mesSelecionado}-01`;
       const fimMes = new Date(ano, mes, 0).toISOString().split('T')[0];
-
       const { data, error } = await supabase
         .from('lancamentos')
         .select('valor')
         .eq('entra_meta', true)
         .gte('data_lancamento', inicioMes)
         .lte('data_lancamento', fimMes);
-
       if (error) throw error;
       return (data || []).reduce((acc, l) => acc + (Number(l.valor) || 0), 0);
     },
@@ -240,9 +230,6 @@ export default function Dashboard() {
     let nivelAtual = 1;
     let comissaoPercent = 0;
     if (niveisComissao && niveisComissao.length > 0) {
-      // Percorre do nível mais alto ao mais baixo: o primeiro onde o percentual
-      // atinge o mínimo (de_percent) é o nível correto. Isso elimina problemas
-      // com lacunas entre faixas (ex.: ate=100% e de=101%).
       const sorted = [...niveisComissao].sort((a, b) => b.nivel - a.nivel);
       for (const nivel of sorted) {
         if (percentualAtingido >= Number(nivel.de_percent) * 100) {
@@ -297,7 +284,6 @@ export default function Dashboard() {
       };
     }).sort((a, b) => b.vendido - a.vendido);
 
-    // Comissão total = soma das comissões individuais de cada consultora
     const comissaoTotal = consultoraDados.reduce((acc, c) => acc + c.comissao, 0);
 
     return {
@@ -346,13 +332,17 @@ export default function Dashboard() {
   return (
     <AppLayout title="Dashboard">
       <div className="space-y-6">
-        {/* Seletor de mês */}
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold">
-            {format(new Date(Number(mesSelecionado.split('-')[0]), Number(mesSelecionado.split('-')[1]) - 1, 1), 'MMMM yyyy', { locale: ptBR })}
-          </h2>
+        {/* Header do mês — redesenhado */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <h2 className="text-2xl font-bold capitalize">
+              {format(new Date(Number(mesSelecionado.split('-')[0]), Number(mesSelecionado.split('-')[1]) - 1, 1), 'MMMM yyyy', { locale: ptBR })}
+            </h2>
+            <p className="text-sm text-muted-foreground">Resumo de performance e vendas</p>
+          </div>
           <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-52">
+              <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -366,13 +356,13 @@ export default function Dashboard() {
         {/* Analista IA para admins */}
         {isAdmin && <AnalistaIaCard />}
 
-        {/* Cards resumo rápido */}
+        {/* Cards resumo rápido — com bordas coloridas */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           {show('card_total_vendido') && (
-          <Card>
+          <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-all">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Vendido</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <TrendingUp className="h-4 w-4 text-blue-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
@@ -398,10 +388,10 @@ export default function Dashboard() {
           )}
 
           {show('card_total_faturado') && (
-          <Card>
+          <Card className="border-l-4 border-l-green-500 hover:shadow-md transition-all">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Faturado</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <DollarSign className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
@@ -412,10 +402,10 @@ export default function Dashboard() {
           </Card>
           )}
           {isAdmin && (
-            <Card>
+            <Card className="border-l-4 border-l-purple-500 hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Meta do Mês</CardTitle>
-                <Target className="h-4 w-4 text-muted-foreground" />
+                <Target className="h-4 w-4 text-purple-500" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
@@ -429,10 +419,10 @@ export default function Dashboard() {
           )}
 
           {isAdmin && (
-            <Card>
+            <Card className="border-l-4 border-l-slate-400 hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Lançamentos</CardTitle>
-                <FileText className="h-4 w-4 text-muted-foreground" />
+                <FileText className="h-4 w-4 text-slate-400" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalLancamentos}</div>
@@ -444,10 +434,10 @@ export default function Dashboard() {
           )}
 
           {isAdmin && (
-            <Card>
+            <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Pendentes de Regra</CardTitle>
-                <AlertCircle className="h-4 w-4 text-warning" />
+                <AlertCircle className="h-4 w-4 text-amber-500" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{pendentesRegra}</div>
@@ -466,10 +456,10 @@ export default function Dashboard() {
         {/* Cards de meta individual para consultora */}
         {isConsultora && metaMensal && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Card>
+            <Card className="border-l-4 border-l-purple-500 hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Minha Meta</CardTitle>
-                <Target className="h-4 w-4 text-muted-foreground" />
+                <Target className="h-4 w-4 text-purple-500" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
@@ -504,10 +494,10 @@ export default function Dashboard() {
 
               return (
                 <>
-                  <Card>
+                  <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-all">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Meu Atingimento</CardTitle>
-                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                      <TrendingUp className="h-4 w-4 text-blue-500" />
                     </CardHeader>
                     <CardContent>
                       <div className={`text-2xl font-bold ${
@@ -523,10 +513,10 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-all">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Meu Nível</CardTitle>
-                      <Award className="h-4 w-4 text-muted-foreground" />
+                      <Award className="h-4 w-4 text-amber-500" />
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">{getNivelNome(meuNivel)}</div>
@@ -571,58 +561,63 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Cards de meta admin — com bordas coloridas */}
         {isAdmin && metaMensal && dashboardData && (
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">% Atingimento</CardTitle>
-                <Target className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold ${
-                  dashboardData.percentualAtingido >= 100 ? 'text-success' :
-                  dashboardData.percentualAtingido >= 80 ? 'text-warning' : ''
-                }`}>
-                  {dashboardData.percentualAtingido.toFixed(1)}%
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Meta: {formatCurrency(Number(metaMensal.meta_total))}
-                </p>
-              </CardContent>
-            </Card>
+          <>
+            <SectionTitle>Atingimento da Meta</SectionTitle>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-all">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">% Atingimento</CardTitle>
+                  <Target className="h-4 w-4 text-blue-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${
+                    dashboardData.percentualAtingido >= 100 ? 'text-success' :
+                    dashboardData.percentualAtingido >= 80 ? 'text-warning' : ''
+                  }`}>
+                    {dashboardData.percentualAtingido.toFixed(1)}%
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Meta: {formatCurrency(Number(metaMensal.meta_total))}
+                  </p>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Nível Atual</CardTitle>
-                <Award className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{getNivelNome(dashboardData.nivelAtual)}</div>
-                <p className="text-xs text-muted-foreground">Ferro → Diamante</p>
-              </CardContent>
-            </Card>
+              <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-all">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Nível Atual</CardTitle>
+                  <Award className="h-4 w-4 text-amber-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{getNivelNome(dashboardData.nivelAtual)}</div>
+                  <p className="text-xs text-muted-foreground">Ferro → Diamante</p>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Comissão Estimada</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-success">
-                  {formatCurrency(dashboardData.comissaoTotal)}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              <Card className="border-l-4 border-l-green-500 hover:shadow-md transition-all">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Comissão Estimada</CardTitle>
+                  <DollarSign className="h-4 w-4 text-green-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-success">
+                    {formatCurrency(dashboardData.comissaoTotal)}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </>
         )}
 
         {/* Gráfico + Tabela por consultora */}
         {metaMensal && dashboardData && dashboardData.consultoras.length > 0 && (
           <>
+          <SectionTitle>Performance por Consultora</SectionTitle>
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
+            <Card className="hover:shadow-md transition-all">
               <CardHeader>
-                <CardTitle>Progresso da Meta por Consultora</CardTitle>
+                <CardTitle className="text-base">Progresso da Meta por Consultora</CardTitle>
               </CardHeader>
               <CardContent>
                 {chartData.length > 0 ? (
@@ -648,67 +643,77 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="hover:shadow-md transition-all">
               <CardHeader>
-                <CardTitle>Detalhamento por Consultora</CardTitle>
+                <CardTitle className="text-base">Detalhamento por Consultora</CardTitle>
               </CardHeader>
               <CardContent>
-                <Table className="table-dense">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Consultora</TableHead>
-                      <TableHead className="text-right">Meta</TableHead>
-                      <TableHead className="text-right">Vendido</TableHead>
-                      <TableHead className="text-right">%</TableHead>
-                      <TableHead className="text-right">Falta</TableHead>
-                      <TableHead className="text-right">Nível</TableHead>
-                      <TableHead className="text-right">Comissão</TableHead>
-                      <TableHead className="text-center w-12">Coach</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dashboardData.consultoras.map((c, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="font-medium">{c.nome}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {c.meta > 0 ? formatCurrencyCompact(c.meta) : '-'}
-                        </TableCell>
-                        <TableCell className="text-right">{formatCurrencyCompact(c.vendido)}</TableCell>
-                        <TableCell className={`text-right font-medium ${
-                          c.percentual >= 100 ? 'text-success' :
-                          c.percentual >= 80 ? 'text-warning' : ''
-                        }`}>
-                          {c.percentual.toFixed(0)}%
-                        </TableCell>
-                        <TableCell className={`text-right font-medium ${
-                          c.falta === 0 ? 'text-success' : 'text-destructive'
-                        }`}>
-                          {c.falta === 0 ? 'Atingida ✓' : formatCurrencyCompact(c.falta)}
-                        </TableCell>
-                        <TableCell className="text-right">{c.nivel}</TableCell>
-                        <TableCell className="text-right text-success">
-                          {formatCurrencyCompact(c.comissao)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {c.consultoraId && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              title="Coach IA"
-                              onClick={() => {
-                                setSelectedConsultoraId(c.consultoraId!);
-                                setCoachOpen(true);
-                              }}
-                            >
-                              <Lightbulb className="h-4 w-4 text-primary" />
-                            </Button>
-                          )}
-                        </TableCell>
+                <div className="overflow-hidden rounded-lg border">
+                  <Table className="table-dense">
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead>Consultora</TableHead>
+                        <TableHead className="text-right">Meta</TableHead>
+                        <TableHead className="text-right">Vendido</TableHead>
+                        <TableHead className="text-right">%</TableHead>
+                        <TableHead className="text-right">Falta</TableHead>
+                        <TableHead className="text-right">Nível</TableHead>
+                        <TableHead className="text-right">Comissão</TableHead>
+                        <TableHead className="text-center w-12">Coach</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {dashboardData.consultoras.map((c, i) => {
+                        const nivelNome = getNivelNome(c.nivel);
+                        const badgeClass = nivelBadgeClass[nivelNome] || '';
+                        return (
+                          <TableRow key={i} className="even:bg-muted/30">
+                            <TableCell className="font-medium">{c.nome}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {c.meta > 0 ? formatCurrencyCompact(c.meta) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right">{formatCurrencyCompact(c.vendido)}</TableCell>
+                            <TableCell className={`text-right font-medium ${
+                              c.percentual >= 100 ? 'text-success' :
+                              c.percentual >= 80 ? 'text-warning' : ''
+                            }`}>
+                              {c.percentual.toFixed(0)}%
+                            </TableCell>
+                            <TableCell className={`text-right font-medium ${
+                              c.falta === 0 ? 'text-success' : 'text-destructive'
+                            }`}>
+                              {c.falta === 0 ? 'Atingida ✓' : formatCurrencyCompact(c.falta)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
+                                {nivelNome}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right text-success">
+                              {formatCurrencyCompact(c.comissao)}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {c.consultoraId && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  title="Coach IA"
+                                  onClick={() => {
+                                    setSelectedConsultoraId(c.consultoraId!);
+                                    setCoachOpen(true);
+                                  }}
+                                >
+                                  <Lightbulb className="h-4 w-4 text-primary" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -728,6 +733,7 @@ export default function Dashboard() {
         {/* Gráficos de Performance */}
         {lancamentos && lancamentos.length > 0 && (
           <>
+            <SectionTitle>Análise de Vendas</SectionTitle>
             {(show('grafico_tendencia_receita') || show('grafico_forma_pagamento')) && (
             <div className="grid gap-4 lg:grid-cols-3">
               {show('grafico_tendencia_receita') && (
@@ -755,119 +761,6 @@ export default function Dashboard() {
             />
             )}
           </>
-        )}
-
-        {/* Últimos uploads + Equipe */}
-        {(show('ultimos_uploads') || show('card_equipe')) && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {show('ultimos_uploads') && (
-          <Card className="col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5" />
-                Últimos Uploads
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {ultimosUploads && ultimosUploads.length > 0 ? (
-                <div className="space-y-3">
-                  {ultimosUploads.map((upload) => (
-                    <div 
-                      key={upload.id} 
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">{upload.arquivo_nome}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(upload.criado_em), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                          </p>
-                        </div>
-                      </div>
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        upload.status === 'concluido' ? 'bg-success/10 text-success' :
-                        upload.status === 'erro' ? 'bg-destructive/10 text-destructive' :
-                        upload.status === 'importando' ? 'bg-info/10 text-info' :
-                        'bg-muted text-muted-foreground'
-                      }`}>
-                        {upload.status === 'concluido' ? 'Concluído' :
-                         upload.status === 'erro' ? 'Erro' :
-                         upload.status === 'importando' ? 'Importando...' : 'Enviado'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Upload className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>Nenhum upload realizado ainda</p>
-                  <Link to="/upload" className="text-sm text-primary hover:underline">
-                    Fazer primeiro upload →
-                  </Link>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          )}
-
-          {show('card_equipe') && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Equipe
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-4">
-                <div className="text-4xl font-bold mb-2">{consultorasCount}</div>
-                <p className="text-sm text-muted-foreground">Consultoras ativas</p>
-                <Link 
-                  to="/consultoras" 
-                  className="inline-block mt-4 text-sm text-primary hover:underline"
-                >
-                  Gerenciar equipe →
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-          )}
-        </div>
-        )}
-
-        {/* Ações rápidas */}
-        {show('acoes_rapidas') && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Ações Rápidas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-3">
-              <Link 
-                to="/upload" 
-                className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
-              >
-                <Upload className="h-5 w-5 text-primary" />
-                <span className="font-medium">Upload Diário</span>
-              </Link>
-              <Link 
-                to="/regras" 
-                className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
-              >
-                <Target className="h-5 w-5 text-primary" />
-                <span className="font-medium">Regras da Meta</span>
-              </Link>
-              <Link 
-                to="/gerencial" 
-                className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
-              >
-                <FileText className="h-5 w-5 text-primary" />
-                <span className="font-medium">Gerencial</span>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
         )}
       </div>
       {selectedConsultoraId && (
