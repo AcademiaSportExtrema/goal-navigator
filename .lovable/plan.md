@@ -1,20 +1,26 @@
 
 
-## Correção: Entuspass deve usar `data_lancamento` como mês de referência
+## Tabela 3 — Ticket Médio por Duração
 
-### Problema
-Na linha 237, o Entuspass usa `mes_competencia` como prioridade, mas `mes_competencia` é calculado pela regra de classificação e pode estar baseado em `data_inicio`. Como Entuspass é recorrente, o correto é usar **sempre** `data_lancamento`.
+### O que será feito
+Adicionar uma nova tabela (renumerando as existentes) entre a Tabela 2 (Receita) e as tabelas de Recorrência, mostrando o **ticket médio** de cada categoria de duração por mês. O cálculo é simples: `valor / quantidade` para cada célula.
 
-### Alteração em `src/pages/Relatorios.tsx`
+### Alterações em `src/pages/Relatorios.tsx`
 
-Linha 237: trocar de:
-```typescript
-const mc = l.mes_competencia || l.data_lancamento?.slice(0, 7);
+| Mudança | Detalhe |
+|---------|---------|
+| Nova tabela | "Tabela 3 — Ticket Médio por Duração" com mesmas colunas de duração + Wellhub, Total Pass, Entuspass |
+| Cálculo | Para cada mês e coluna: `durationValByMonth[mc][key] / durationByMonth[mc][key]`. Se qty = 0, mostra "-" |
+| Linha Total | Ticket médio global por coluna: soma total valor / soma total qty |
+| Renumeração | Recorrência qty passa a ser Tabela 4, Receita recorrência = Tabela 5, Detalhamento mensal = Tabela 6 |
+
+### Layout atualizado
+
+```text
+Tabela 1 — Quantidade por Duração (full width)
+Tabela 2 — Receita por Duração (full width)
+Tabela 3 — Ticket Médio por Duração (full width) ← NOVA
+Tabela 4 — Recorrência Detalhada (qty)  |  Tabela 5 — Receita Recorrência
+Tabela 6 — Detalhamento Mensal por Plano
 ```
-Para:
-```typescript
-const mc = l.data_lancamento?.slice(0, 7);
-```
-
-Isso garante que os lançamentos Entuspass sejam agrupados pelo mês de processamento (data do lançamento), não pelo início do plano.
 
