@@ -1,30 +1,39 @@
 
 
-## Wellhub: agrupar por data de pagamento + permitir edição
+## Problema: Limite de 1000 linhas no Supabase
 
-### Problema
-Atualmente o Wellhub é agrupado por `mes_referencia` (mês de venda). O correto é agrupar pela `data_recebimento` (data de pagamento), extraindo o mês/ano dessa data.
+A consulta que busca os lançamentos para calcular o "Realizado" na Meta Anual está limitada a 1000 registros (limite padrão do Supabase). O banco tem **1160 registros** com `entra_meta = true` em 2026, então ~160 registros são silenciosamente ignorados, resultando em valores incorretos.
 
-### Alterações em `src/pages/Relatorios.tsx`
+- Receita real de Fevereiro no banco: **R$ 211.912,45**
+- Receita mostrada na tela: **R$ 211.605,55** (faltando dados)
 
-**1. Agrupamento por data de pagamento (wellhubByMonth e totalpassByMonth)**
+### Solução: Criar função RPC para agregar no banco
 
-Nas funções `wellhubByMonth` e `totalpassByMonth` (linhas 227-251), trocar a chave de agrupamento de `a.mes_referencia` para o mês extraído de `a.data_recebimento`:
+**1. Migração SQL** — criar função `get_realizado_por_mes`
 
-```typescript
-// Extrair YYYY-MM de data_recebimento ao invés de usar mes_referencia
-const mesKey = a.data_recebimento ? a.data_recebimento.slice(0, 7) : a.mes_referencia;
+```sql
+CREATE OR REPLACE FUNCTION get_realizado_por_mes(p_empresa_id uuid, p_ano integer)
+RETURNS TABLE(mes integer, total numeric)
+LANGUAGE sql SECURITY DEFINER SET search_path = ''
+AS $$
+  SELECT 
+    extract(month from data_lancamento::date)::integer as mes,
+    coalesce(sum(valor), 0) as total
+  FROM public.lancamentos
+  WHERE empresa_id = p_empresa_id
+    AND entra_meta = true
+    AND data_lancamento >= (p_ano || '-01-01')::date
+    AND data_lancamento <= (p_ano || '-12-31')::date
+  GROUP BY mes
+  ORDER BY mes;
+$$;
 ```
 
-Isso garante que o valor aparece no mês em que o pagamento foi recebido.
+**2. Alterar `MetaAnualTable.tsx`** — substituir a query de lançamentos pela chamada RPC
 
-**2. Edição de registros existentes**
+- Remover a query que busca lançamentos individuais (linhas 67-83)
+- Substituir por `supabase.rpc('get_realizado_por_mes', { p_empresa_id, p_ano })`
+- Ajustar o `useMemo` de `realizadoPorMes` para mapear o resultado da RPC diretamente
 
-Na listagem de registros existentes no dialog (linhas 908-928), adicionar um botão de edição ao lado do botão de excluir. Ao clicar, preenche o formulário com os dados do registro para que o usuário possa alterar e salvar (upsert por id).
-
-- Adicionar estado `editingId` para controlar qual registro está sendo editado
-- Adicionar botão de edição (ícone lápis) em cada linha
-- Ao clicar em editar, preencher o formulário com os valores do registro
-- Ao salvar, se `editingId` estiver preenchido, fazer UPDATE ao invés de INSERT
-- Adicionar mutation `updateAgregador` para o UPDATE
+Isso garante que **todos** os registros sejam somados no servidor, sem limite de linhas.
 
