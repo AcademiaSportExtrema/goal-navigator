@@ -135,7 +135,7 @@ export default function Relatorios() {
       const cat = classifyDuration(l);
 
       // Parcelados: só conta venda original (data_inicio == data_lancamento no mesmo mês)
-      if (['quatro', 'seis', 'doze', 'dezoito'].includes(cat)) {
+      if (['mensal', 'quatro', 'seis', 'doze', 'dezoito'].includes(cat)) {
         const diM = l.data_inicio?.slice(0, 7);
         const dlM = l.data_lancamento?.slice(0, 7);
         if (diM && dlM && diM !== dlM) continue;
