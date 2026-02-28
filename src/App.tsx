@@ -25,6 +25,7 @@ import MinhaPerformance from "./pages/MinhaPerformance";
 import SolicitarAjuste from "./pages/SolicitarAjuste";
 import Ajustes from "./pages/Ajustes";
 import VisaoConsultora from "./pages/VisaoConsultora";
+import Relatorios from "./pages/Relatorios";
 import EmpresaBloqueada from "./pages/EmpresaBloqueada";
 import NotFound from "./pages/NotFound";
 
@@ -137,6 +138,11 @@ const App = () => (
             } />
             <Route path="/consultoras" element={<Navigate to="/configuracao" replace />} />
             <Route path="/metas" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/relatorios" element={
+              <ProtectedRoute requiredRole="admin">
+                <Relatorios />
+              </ProtectedRoute>
+            } />
 
             <Route path="/ajustes" element={
               <ProtectedRoute requiredRole="admin">

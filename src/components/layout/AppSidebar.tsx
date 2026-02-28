@@ -48,6 +48,7 @@ const adminMenuGroups = [
     items: [
       { title: 'Upload Diário', icon: Upload, href: '/upload' },
       { title: 'Gerencial', icon: FileText, href: '/gerencial' },
+      { title: 'Relatórios', icon: TrendingUp, href: '/relatorios' },
       { title: 'Pendências', icon: AlertCircle, href: '/pendencias' },
       { title: 'Ajustes', icon: GitPullRequest, href: '/ajustes' },
       { title: 'Visão Consultora', icon: Eye, href: '/visao-consultora' },
