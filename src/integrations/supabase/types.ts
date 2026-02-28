@@ -330,6 +330,41 @@ export type Database = {
         }
         Relationships: []
       }
+      fechamento_caixa_f360: {
+        Row: {
+          created_at: string
+          data: string
+          empresa_id: string
+          id: string
+          valor_f360: number
+          valor_pix_f360: number
+        }
+        Insert: {
+          created_at?: string
+          data: string
+          empresa_id: string
+          id?: string
+          valor_f360?: number
+          valor_pix_f360?: number
+        }
+        Update: {
+          created_at?: string
+          data?: string
+          empresa_id?: string
+          id?: string
+          valor_f360?: number
+          valor_pix_f360?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fechamento_caixa_f360_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lancamentos: {
         Row: {
           categoria: string | null
