@@ -20,6 +20,11 @@ function parseBRL(val: string): number {
   return parseFloat(val.replace(/\./g, '').replace(',', '.')) || 0;
 }
 
+function formatInputBRL(v: number | string): string {
+  const num = typeof v === 'string' ? parseFloat(v) || 0 : v;
+  return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 interface Props {
   empresaId: string;
   ano: number;
@@ -90,9 +95,9 @@ export function MetaAnualTable({ empresaId, ano }: Props) {
   // Sync state from DB
   useEffect(() => {
     if (metaAnual) {
-      setMetaTotal(String(metaAnual.meta_total || 0));
+      setMetaTotal(formatInputBRL(metaAnual.meta_total || 0));
     } else {
-      setMetaTotal('0');
+      setMetaTotal('0,00');
     }
     setDirty(false);
   }, [metaAnual]);
@@ -192,7 +197,7 @@ export function MetaAnualTable({ empresaId, ano }: Props) {
             <Input
               className="h-8 text-lg font-bold tabular-nums bg-transparent border-amber-300 dark:border-amber-700"
               value={metaTotal}
-              onChange={e => { setMetaTotal(e.target.value); setDirty(true); }}
+              onChange={e => { const v = e.target.value.replace(/[^\d.,]/g, ''); setMetaTotal(v); setDirty(true); }}
               placeholder="2.160.000,00"
             />
           </div>
