@@ -489,6 +489,80 @@ export type Database = {
           },
         ]
       }
+      meta_anual: {
+        Row: {
+          ano: number
+          created_at: string
+          empresa_id: string
+          id: string
+          meta_total: number
+          updated_at: string
+        }
+        Insert: {
+          ano: number
+          created_at?: string
+          empresa_id: string
+          id?: string
+          meta_total?: number
+          updated_at?: string
+        }
+        Update: {
+          ano?: number
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          meta_total?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_anual_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meta_anual_meses: {
+        Row: {
+          empresa_id: string
+          id: string
+          mes: number
+          meta_anual_id: string
+          peso_percent: number
+        }
+        Insert: {
+          empresa_id: string
+          id?: string
+          mes: number
+          meta_anual_id: string
+          peso_percent?: number
+        }
+        Update: {
+          empresa_id?: string
+          id?: string
+          mes?: number
+          meta_anual_id?: string
+          peso_percent?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_anual_meses_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_anual_meses_meta_anual_id_fkey"
+            columns: ["meta_anual_id"]
+            isOneToOne: false
+            referencedRelation: "meta_anual"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       metas_consultoras: {
         Row: {
           consultora_id: string
