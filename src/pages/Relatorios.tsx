@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { BarChart3, RefreshCw, Layers, Download, Plus } from 'lucide-react';
+import { BarChart3, RefreshCw, Layers, Download, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -189,7 +189,7 @@ export default function Relatorios() {
         agregador: formAgregador,
         mes_referencia: formMesRef,
         data_recebimento: formDataReceb || null,
-        valor: parseFloat(formValor.replace(',', '.')),
+        valor: parseFloat(formValor.replace(/\./g, '').replace(',', '.')),
         quantidade_clientes: parseInt(formQtdClientes, 10) || 0,
         observacao: formObs || null,
       } as any);
@@ -202,6 +202,18 @@ export default function Relatorios() {
       setFormMesRef(''); setFormDataReceb(''); setFormValor(''); setFormQtdClientes(''); setFormObs('');
     },
     onError: (e: any) => toast.error(e.message || 'Erro ao salvar'),
+  });
+
+  const deleteAgregador = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('pagamentos_agregadores' as any).delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Registro excluído!');
+      queryClient.invalidateQueries({ queryKey: ['pagamentos-agregadores'] });
+    },
+    onError: (e: any) => toast.error(e.message || 'Erro ao excluir'),
   });
 
   // Aggregate Wellhub & Total Pass separately by month
@@ -835,43 +847,88 @@ export default function Relatorios() {
 
       {/* Formulário Lançar Agregador */}
       <Dialog open={showAgregadorForm} onOpenChange={setShowAgregadorForm}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Lançar Pagamento Agregador</DialogTitle>
             <DialogDescription>Registre o recebimento mensal do agregador.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Agregador</Label>
-              <Select value={formAgregador} onValueChange={setFormAgregador}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Wellhub">Wellhub</SelectItem>
-                  <SelectItem value="Total Pass">Total Pass</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Mês Referência</Label>
-              <Input type="month" value={formMesRef} onChange={e => setFormMesRef(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Data Recebimento</Label>
-              <Input type="date" value={formDataReceb} onChange={e => setFormDataReceb(e.target.value)} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+          <div className="overflow-auto flex-1 space-y-6">
+            {/* Registros existentes */}
+            {agregadores && agregadores.length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Registros existentes</h4>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-xs font-semibold">Agregador</TableHead>
+                      <TableHead className="text-xs font-semibold">Mês</TableHead>
+                      <TableHead className="text-xs font-semibold text-right">Valor</TableHead>
+                      <TableHead className="text-xs font-semibold text-center">Clientes</TableHead>
+                      <TableHead className="text-xs font-semibold w-10"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {agregadores.map(a => (
+                      <TableRow key={a.id} className="hover:bg-muted/30">
+                        <TableCell className="text-xs">{a.agregador}</TableCell>
+                        <TableCell className="text-xs">{formatMonth(a.mes_referencia)}</TableCell>
+                        <TableCell className="text-xs text-right tabular-nums">{formatCurrency(a.valor)}</TableCell>
+                        <TableCell className="text-xs text-center">{a.quantidade_clientes}</TableCell>
+                        <TableCell className="text-xs p-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            onClick={() => {
+                              if (confirm('Excluir este registro?')) deleteAgregador.mutate(a.id);
+                            }}
+                            disabled={deleteAgregador.isPending}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {/* Formulário novo registro */}
+            <div className="space-y-4 border-t pt-4">
+              <h4 className="text-sm font-semibold text-muted-foreground">Novo registro</h4>
               <div className="space-y-2">
-                <Label>Valor (R$)</Label>
-                <Input placeholder="0,00" value={formValor} onChange={e => setFormValor(e.target.value)} />
+                <Label>Agregador</Label>
+                <Select value={formAgregador} onValueChange={setFormAgregador}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Wellhub">Wellhub</SelectItem>
+                    <SelectItem value="Total Pass">Total Pass</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
-                <Label>Qtd Clientes</Label>
-                <Input type="number" min="0" placeholder="0" value={formQtdClientes} onChange={e => setFormQtdClientes(e.target.value)} />
+                <Label>Mês Referência</Label>
+                <Input type="month" value={formMesRef} onChange={e => setFormMesRef(e.target.value)} />
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Observação (opcional)</Label>
-              <Textarea value={formObs} onChange={e => setFormObs(e.target.value)} rows={2} />
+              <div className="space-y-2">
+                <Label>Data Recebimento</Label>
+                <Input type="date" value={formDataReceb} onChange={e => setFormDataReceb(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Valor (R$)</Label>
+                  <Input placeholder="18.902,50" value={formValor} onChange={e => setFormValor(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Qtd Clientes</Label>
+                  <Input type="number" min="0" placeholder="0" value={formQtdClientes} onChange={e => setFormQtdClientes(e.target.value)} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Observação (opcional)</Label>
+                <Textarea value={formObs} onChange={e => setFormObs(e.target.value)} rows={2} />
+              </div>
             </div>
           </div>
           <DialogFooter>
