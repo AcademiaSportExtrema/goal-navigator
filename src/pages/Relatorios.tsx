@@ -48,6 +48,7 @@ interface Lancamento {
   produto: string | null;
   valor: number | null;
   numero_contrato: string | null;
+  entra_meta?: boolean | null;
 }
 
 interface AgregadorRow {
@@ -106,6 +107,12 @@ function formatCurrency(v: number | null) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function isEntuspass(plano: string | null): boolean {
+  if (!plano) return false;
+  const upper = plano.toUpperCase();
+  return upper.includes('ENTUSPASS') || upper.includes('SPORT PASS');
+}
+
 // ── Drill-down types ──
 interface DrillDownState {
   title: string;
@@ -124,6 +131,7 @@ export default function Relatorios() {
   const [formQtdClientes, setFormQtdClientes] = useState('');
   const [formObs, setFormObs] = useState('');
 
+  // Query 1: lancamentos entra_meta = true (vendas normais)
   const { data: lancamentos, isLoading } = useQuery({
     queryKey: ['relatorios-lancamentos', empresaId],
     queryFn: async () => {
@@ -139,6 +147,24 @@ export default function Relatorios() {
     enabled: !!empresaId,
   });
 
+  // Query 2: lancamentos Entuspass (entra_meta = false, plano ILIKE '%ENTUSPASS%' ou '%SPORT PASS%')
+  const { data: entuspassLancamentos } = useQuery({
+    queryKey: ['relatorios-entuspass', empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase
+        .from('lancamentos')
+        .select('condicao_pagamento, forma_pagamento, mes_competencia, data_inicio, data_lancamento, plano, duracao, nome_cliente, produto, valor, numero_contrato, entra_meta')
+        .eq('empresa_id', empresaId)
+        .eq('entra_meta', false);
+      if (error) throw error;
+      // Filter only entuspass/sport pass plans
+      return ((data || []) as Lancamento[]).filter(l => isEntuspass(l.plano));
+    },
+    enabled: !!empresaId,
+  });
+
+  // Query 3: pagamentos_agregadores (Wellhub, Total Pass - manual)
   const { data: agregadores } = useQuery({
     queryKey: ['pagamentos-agregadores', empresaId],
     queryFn: async () => {
@@ -176,17 +202,47 @@ export default function Relatorios() {
     onError: (e: any) => toast.error(e.message || 'Erro ao salvar'),
   });
 
-  // Aggregate agregadores by mes_referencia
-  const agregadorByMonth = useMemo(() => {
+  // Aggregate Wellhub & Total Pass separately by month
+  const wellhubByMonth = useMemo(() => {
     const map: Record<string, { qty: number; val: number }> = {};
     if (!agregadores?.length) return map;
     for (const a of agregadores) {
-      if (!map[a.mes_referencia]) map[a.mes_referencia] = { qty: 0, val: 0 };
-      map[a.mes_referencia].qty += a.quantidade_clientes;
-      map[a.mes_referencia].val += a.valor;
+      if (a.agregador.toLowerCase().includes('wellhub')) {
+        if (!map[a.mes_referencia]) map[a.mes_referencia] = { qty: 0, val: 0 };
+        map[a.mes_referencia].qty += a.quantidade_clientes;
+        map[a.mes_referencia].val += a.valor;
+      }
     }
     return map;
   }, [agregadores]);
+
+  const totalpassByMonth = useMemo(() => {
+    const map: Record<string, { qty: number; val: number }> = {};
+    if (!agregadores?.length) return map;
+    for (const a of agregadores) {
+      if (a.agregador.toLowerCase().includes('total pass')) {
+        if (!map[a.mes_referencia]) map[a.mes_referencia] = { qty: 0, val: 0 };
+        map[a.mes_referencia].qty += a.quantidade_clientes;
+        map[a.mes_referencia].val += a.valor;
+      }
+    }
+    return map;
+  }, [agregadores]);
+
+  // Aggregate Entuspass by month (from lancamentos entra_meta=false)
+  const entuspassByMonth = useMemo(() => {
+    const map: Record<string, { qty: number; val: number; items: Lancamento[] }> = {};
+    if (!entuspassLancamentos?.length) return map;
+    for (const l of entuspassLancamentos) {
+      const mc = l.mes_competencia || l.data_lancamento?.slice(0, 7);
+      if (!mc) continue;
+      if (!map[mc]) map[mc] = { qty: 0, val: 0, items: [] };
+      map[mc].qty++;
+      map[mc].val += l.valor || 0;
+      map[mc].items.push(l);
+    }
+    return map;
+  }, [entuspassLancamentos]);
 
   const { durationByMonth, recurrenceByMonth, durationMonths, recurrenceMonths, durationTotals, recurrenceTotals, lancamentosByMonthDuration, lancamentosByMonthRecurrence, durationValByMonth, recurrenceValByMonth, durationValTotals, recurrenceValTotals, mensalPlanByMonth, mensalPlanMonths, allMensalPlans } = useMemo(() => {
     const empty = {
@@ -224,14 +280,12 @@ export default function Relatorios() {
       const cat = classifyDuration(l);
       const valor = l.valor || 0;
 
-      // Parcelados: só conta venda original (data_inicio == data_lancamento no mesmo mês)
       if (['mensal', 'quatro', 'seis', 'doze', 'dezoito'].includes(cat)) {
         const diM = l.data_inicio?.slice(0, 7);
         const dlM = l.data_lancamento?.slice(0, 7);
         if (diM && dlM && diM !== dlM) continue;
       }
 
-      // Recorrente: indexa pelo mês de processamento (data_lancamento)
       const durMonth = (cat === 'recorrente')
         ? (l.data_lancamento?.slice(0, 7) || mc)
         : mc;
@@ -245,7 +299,6 @@ export default function Relatorios() {
       durValMap[durMonth][cat] += valor;
       ldMap[durMonth][cat].push(l);
 
-      // ── Tabela 5: Detalhamento Mensal por Plano ──
       if (cat === 'mensal') {
         const planKey = l.plano || 'Sem Plano';
         if (!mensalMap[durMonth]) mensalMap[durMonth] = {};
@@ -255,7 +308,6 @@ export default function Relatorios() {
         mensalPlanSet.add(planKey);
       }
 
-      // ── Tabela 2: Recorrência Detalhada ──
       if (isRecorrente(l)) {
         const recMonth = l.data_lancamento?.slice(0, 7) || mc;
         if (!recMap[recMonth]) {
@@ -276,7 +328,13 @@ export default function Relatorios() {
       }
     }
 
-    const durationMonths = Object.keys(durMap).sort();
+    // Collect all months including entuspass & agregadores months
+    const allMonthSet = new Set<string>(Object.keys(durMap));
+    for (const mc of Object.keys(entuspassByMonth)) allMonthSet.add(mc);
+    for (const mc of Object.keys(wellhubByMonth)) allMonthSet.add(mc);
+    for (const mc of Object.keys(totalpassByMonth)) allMonthSet.add(mc);
+
+    const durationMonths = Array.from(allMonthSet).sort();
     const recurrenceMonths = Object.keys(recMap).sort();
     const mensalPlanMonths = Object.keys(mensalMap).sort();
     const allMensalPlans = Array.from(mensalPlanSet).sort();
@@ -285,7 +343,7 @@ export default function Relatorios() {
     const durationValTotals = emptyDurationRow();
     for (const m of durationMonths) {
       for (const k of DURATION_COLUMNS) {
-        durationTotals[k.key] += durMap[m][k.key];
+        durationTotals[k.key] += (durMap[m]?.[k.key] || 0);
         durationValTotals[k.key] += (durValMap[m]?.[k.key] || 0);
       }
     }
@@ -316,7 +374,7 @@ export default function Relatorios() {
       mensalPlanMonths,
       allMensalPlans,
     };
-  }, [lancamentos]);
+  }, [lancamentos, entuspassByMonth, wellhubByMonth, totalpassByMonth]);
 
   const durTotal = (row: Record<DurationKey, number>) =>
     DURATION_COLUMNS.reduce((sum, c) => sum + row[c.key], 0);
@@ -357,8 +415,12 @@ export default function Relatorios() {
     DURATION_COLUMNS.reduce((sum, c) => sum + row[c.key], 0);
 
   // Aggregator totals
-  const agregadorTotalQty = Object.values(agregadorByMonth).reduce((s, a) => s + a.qty, 0);
-  const agregadorTotalVal = Object.values(agregadorByMonth).reduce((s, a) => s + a.val, 0);
+  const wellhubTotalQty = Object.values(wellhubByMonth).reduce((s, a) => s + a.qty, 0);
+  const wellhubTotalVal = Object.values(wellhubByMonth).reduce((s, a) => s + a.val, 0);
+  const totalpassTotalQty = Object.values(totalpassByMonth).reduce((s, a) => s + a.qty, 0);
+  const totalpassTotalVal = Object.values(totalpassByMonth).reduce((s, a) => s + a.val, 0);
+  const entuspassTotalQty = Object.values(entuspassByMonth).reduce((s, a) => s + a.qty, 0);
+  const entuspassTotalVal = Object.values(entuspassByMonth).reduce((s, a) => s + a.val, 0);
 
   return (
     <AppLayout title="Relatórios">
@@ -380,67 +442,152 @@ export default function Relatorios() {
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Tabela 1 - Planos por Duração + Agregadores */}
-              <Card className="xl:col-span-2 overflow-hidden">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold">Planos por Duração</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="font-semibold text-xs whitespace-nowrap">Mês</TableHead>
-                          {DURATION_COLUMNS.map(c => (
-                            <TableHead key={c.key} className="text-center font-semibold text-xs whitespace-nowrap">{c.label}</TableHead>
-                          ))}
-                          <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Agregadores</TableHead>
-                          <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {durationMonths.map(mc => {
-                          const row = durationByMonth[mc];
-                          const agQty = agregadorByMonth[mc]?.qty || 0;
-                          return (
-                            <TableRow key={mc} className="hover:bg-muted/30">
-                              <TableCell className="font-medium text-xs whitespace-nowrap">{formatMonth(mc)}</TableCell>
-                              {DURATION_COLUMNS.map(c => (
-                                <ClickableCell
-                                  key={c.key}
-                                  value={row[c.key]}
-                                  title={`${c.label} — ${formatMonth(mc)}`}
-                                  items={lancamentosByMonthDuration[mc]?.[c.key] || []}
-                                />
-                              ))}
-                              <TableCell className="text-center text-xs tabular-nums">{agQty || '-'}</TableCell>
-                              <TableCell className="text-center font-semibold text-xs tabular-nums">{durTotal(row) + agQty}</TableCell>
-                            </TableRow>
-                          );
-                        })}
-                        <TableRow className="bg-muted/50 font-bold border-t-2">
-                          <TableCell className="text-xs font-bold">Total</TableCell>
-                          {DURATION_COLUMNS.map(c => (
-                            <TableCell key={c.key} className="text-center text-xs font-bold tabular-nums">
-                              {durationTotals[c.key] || '-'}
-                            </TableCell>
-                          ))}
-                          <TableCell className="text-center text-xs font-bold tabular-nums">{agregadorTotalQty || '-'}</TableCell>
-                          <TableCell className="text-center text-xs font-bold tabular-nums">{durTotal(durationTotals) + agregadorTotalQty}</TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* ── Tabela 1 — Quantidade por Duração (full width) ── */}
+            <Card className="overflow-hidden">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold">Tabela 1 — Quantidade por Duração</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="font-semibold text-xs whitespace-nowrap">Mês</TableHead>
+                        {DURATION_COLUMNS.map(c => (
+                          <TableHead key={c.key} className="text-center font-semibold text-xs whitespace-nowrap">{c.label}</TableHead>
+                        ))}
+                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Wellhub</TableHead>
+                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total Pass</TableHead>
+                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Entuspass</TableHead>
+                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {durationMonths.map(mc => {
+                        const row = durationByMonth[mc] || emptyDurationRow();
+                        const wQty = wellhubByMonth[mc]?.qty || 0;
+                        const tpQty = totalpassByMonth[mc]?.qty || 0;
+                        const epQty = entuspassByMonth[mc]?.qty || 0;
+                        const rowTotal = durTotal(row) + wQty + tpQty + epQty;
+                        return (
+                          <TableRow key={mc} className="hover:bg-muted/30">
+                            <TableCell className="font-medium text-xs whitespace-nowrap">{formatMonth(mc)}</TableCell>
+                            {DURATION_COLUMNS.map(c => (
+                              <ClickableCell
+                                key={c.key}
+                                value={row[c.key]}
+                                title={`${c.label} — ${formatMonth(mc)}`}
+                                items={lancamentosByMonthDuration[mc]?.[c.key] || []}
+                              />
+                            ))}
+                            <TableCell className="text-center text-xs tabular-nums">{wQty || '-'}</TableCell>
+                            <TableCell className="text-center text-xs tabular-nums">{tpQty || '-'}</TableCell>
+                            <ClickableCell
+                              value={epQty}
+                              title={`Entuspass — ${formatMonth(mc)}`}
+                              items={entuspassByMonth[mc]?.items || []}
+                            />
+                            <TableCell className="text-center font-semibold text-xs tabular-nums">{rowTotal}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      <TableRow className="bg-muted/50 font-bold border-t-2">
+                        <TableCell className="text-xs font-bold">Total</TableCell>
+                        {DURATION_COLUMNS.map(c => (
+                          <TableCell key={c.key} className="text-center text-xs font-bold tabular-nums">
+                            {durationTotals[c.key] || '-'}
+                          </TableCell>
+                        ))}
+                        <TableCell className="text-center text-xs font-bold tabular-nums">{wellhubTotalQty || '-'}</TableCell>
+                        <TableCell className="text-center text-xs font-bold tabular-nums">{totalpassTotalQty || '-'}</TableCell>
+                        <TableCell className="text-center text-xs font-bold tabular-nums">{entuspassTotalQty || '-'}</TableCell>
+                        <TableCell className="text-center text-xs font-bold tabular-nums">{durTotal(durationTotals) + wellhubTotalQty + totalpassTotalQty + entuspassTotalQty}</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
 
-              {/* Tabela 2 - Recorrência Detalhada */}
+            {/* ── Tabela 2 — Receita por Duração (full width) ── */}
+            <Card className="overflow-hidden">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold">Tabela 2 — Receita por Duração</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="font-semibold text-xs whitespace-nowrap">Mês</TableHead>
+                        {DURATION_COLUMNS.map(c => (
+                          <TableHead key={c.key} className="text-center font-semibold text-xs whitespace-nowrap">{c.label}</TableHead>
+                        ))}
+                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Wellhub</TableHead>
+                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total Pass</TableHead>
+                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Entuspass</TableHead>
+                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {durationMonths.map(mc => {
+                        const row = durationValByMonth[mc] || emptyDurationRow();
+                        const wVal = wellhubByMonth[mc]?.val || 0;
+                        const tpVal = totalpassByMonth[mc]?.val || 0;
+                        const epVal = entuspassByMonth[mc]?.val || 0;
+                        const rowTotal = durValTotal(row) + wVal + tpVal + epVal;
+                        return (
+                          <TableRow key={mc} className="hover:bg-muted/30">
+                            <TableCell className="font-medium text-xs whitespace-nowrap">{formatMonth(mc)}</TableCell>
+                            {DURATION_COLUMNS.map(c => (
+                              <ClickableCurrencyCell
+                                key={c.key}
+                                value={row[c.key]}
+                                title={`${c.label} — ${formatMonth(mc)}`}
+                                items={lancamentosByMonthDuration[mc]?.[c.key] || []}
+                              />
+                            ))}
+                            <TableCell className="text-center text-xs tabular-nums">
+                              {wVal > 0 ? formatCurrency(wVal) : '-'}
+                            </TableCell>
+                            <TableCell className="text-center text-xs tabular-nums">
+                              {tpVal > 0 ? formatCurrency(tpVal) : '-'}
+                            </TableCell>
+                            <ClickableCurrencyCell
+                              value={epVal}
+                              title={`Entuspass — ${formatMonth(mc)}`}
+                              items={entuspassByMonth[mc]?.items || []}
+                            />
+                            <TableCell className="text-center font-semibold text-xs tabular-nums">{formatCurrency(rowTotal)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      <TableRow className="bg-muted/50 font-bold border-t-2">
+                        <TableCell className="text-xs font-bold">Total</TableCell>
+                        {DURATION_COLUMNS.map(c => (
+                          <TableCell key={c.key} className="text-center text-xs font-bold tabular-nums">
+                            {durationValTotals[c.key] ? formatCurrency(durationValTotals[c.key]) : '-'}
+                          </TableCell>
+                        ))}
+                        <TableCell className="text-center text-xs font-bold tabular-nums">{wellhubTotalVal > 0 ? formatCurrency(wellhubTotalVal) : '-'}</TableCell>
+                        <TableCell className="text-center text-xs font-bold tabular-nums">{totalpassTotalVal > 0 ? formatCurrency(totalpassTotalVal) : '-'}</TableCell>
+                        <TableCell className="text-center text-xs font-bold tabular-nums">{entuspassTotalVal > 0 ? formatCurrency(entuspassTotalVal) : '-'}</TableCell>
+                        <TableCell className="text-center text-xs font-bold tabular-nums">{formatCurrency(durValTotal(durationValTotals) + wellhubTotalVal + totalpassTotalVal + entuspassTotalVal)}</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* ── Tabelas 3 e 4 — Recorrência (lado a lado) ── */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {/* Tabela 3 — Recorrência Detalhada (qty) */}
               <Card className="overflow-hidden">
                 <CardHeader className="pb-3">
                   <div className="flex items-center gap-2">
                     <RefreshCw className="h-4 w-4 text-muted-foreground" />
-                    <CardTitle className="text-base font-semibold">Recorrência Detalhada</CardTitle>
+                    <CardTitle className="text-base font-semibold">Tabela 3 — Recorrência Detalhada</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -485,81 +632,13 @@ export default function Relatorios() {
                   </div>
                 </CardContent>
               </Card>
-            </div>
 
-            {/* ── Tabelas de Valores ── */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Tabela 3 - Receita por Duração + Agregadores */}
-              <Card className="xl:col-span-2 overflow-hidden">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold">Receita por Duração</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="font-semibold text-xs whitespace-nowrap">Mês</TableHead>
-                          {DURATION_COLUMNS.map(c => (
-                            <TableHead key={c.key} className="text-center font-semibold text-xs whitespace-nowrap">{c.label}</TableHead>
-                          ))}
-                          <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Agregadores</TableHead>
-                          <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {durationMonths.map(mc => {
-                          const row = durationValByMonth[mc] || emptyDurationRow();
-                          const agData = agregadorByMonth[mc];
-                          const agVal = agData?.val || 0;
-                          const agQty = agData?.qty || 0;
-                          const ticketMedio = agQty > 0 ? agVal / agQty : 0;
-                          return (
-                            <TableRow key={mc} className="hover:bg-muted/30">
-                              <TableCell className="font-medium text-xs whitespace-nowrap">{formatMonth(mc)}</TableCell>
-                              {DURATION_COLUMNS.map(c => (
-                                <ClickableCurrencyCell
-                                  key={c.key}
-                                  value={row[c.key]}
-                                  title={`${c.label} — ${formatMonth(mc)}`}
-                                  items={lancamentosByMonthDuration[mc]?.[c.key] || []}
-                                />
-                              ))}
-                              <TableCell className="text-center text-xs tabular-nums">
-                                {agVal > 0 ? (
-                                  <span>{formatCurrency(agVal)}{ticketMedio > 0 && <span className="text-muted-foreground ml-1">({formatCurrency(ticketMedio)})</span>}</span>
-                                ) : '-'}
-                              </TableCell>
-                              <TableCell className="text-center font-semibold text-xs tabular-nums">{formatCurrency(durValTotal(row) + agVal)}</TableCell>
-                            </TableRow>
-                          );
-                        })}
-                        <TableRow className="bg-muted/50 font-bold border-t-2">
-                          <TableCell className="text-xs font-bold">Total</TableCell>
-                          {DURATION_COLUMNS.map(c => (
-                            <TableCell key={c.key} className="text-center text-xs font-bold tabular-nums">
-                              {durationValTotals[c.key] ? formatCurrency(durationValTotals[c.key]) : '-'}
-                            </TableCell>
-                          ))}
-                          <TableCell className="text-center text-xs font-bold tabular-nums">
-                            {agregadorTotalVal > 0 ? (
-                              <span>{formatCurrency(agregadorTotalVal)}{agregadorTotalQty > 0 && <span className="text-muted-foreground ml-1">({formatCurrency(agregadorTotalVal / agregadorTotalQty)})</span>}</span>
-                            ) : '-'}
-                          </TableCell>
-                          <TableCell className="text-center text-xs font-bold tabular-nums">{formatCurrency(durValTotal(durationValTotals) + agregadorTotalVal)}</TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Tabela 4 - Receita Recorrência Detalhada */}
+              {/* Tabela 4 — Receita Recorrência (R$) */}
               <Card className="overflow-hidden">
                 <CardHeader className="pb-3">
                   <div className="flex items-center gap-2">
                     <RefreshCw className="h-4 w-4 text-muted-foreground" />
-                    <CardTitle className="text-base font-semibold">Receita Recorrência</CardTitle>
+                    <CardTitle className="text-base font-semibold">Tabela 4 — Receita Recorrência</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -606,13 +685,13 @@ export default function Relatorios() {
               </Card>
             </div>
 
-            {/* Tabela 5 - Detalhamento Mensal por Plano */}
+            {/* Tabela 5 — Detalhamento Mensal por Plano */}
             {allMensalPlans.length > 0 && (
               <Card className="overflow-hidden">
                 <CardHeader className="pb-3">
                   <div className="flex items-center gap-2">
                     <Layers className="h-4 w-4 text-muted-foreground" />
-                    <CardTitle className="text-base font-semibold">Detalhamento Mensal por Plano</CardTitle>
+                    <CardTitle className="text-base font-semibold">Tabela 5 — Detalhamento Mensal por Plano</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
