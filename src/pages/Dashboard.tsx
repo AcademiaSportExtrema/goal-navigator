@@ -45,6 +45,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format, subMonths, addMonths } from 'date-fns';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import type { Lancamento, MetaMensal, MetaConsultora, ComissaoNivel, Consultora } from '@/types/database';
@@ -409,466 +410,536 @@ export default function Dashboard() {
           </Select>
         </div>
 
-        {/* Cards resumo rápido — com bordas coloridas */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-          {show('card_total_vendido') && (
-          <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-all">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Vendido</CardTitle>
-              <TrendingUp className="h-4 w-4 text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(totalVendidoInicio || 0)}
-              </div>
-              {metaMensal ? (
-                <>
-                  <p className="text-xs text-muted-foreground">
-                    <span className={(() => {
-                      const pct = metaMensal ? ((totalVendidoInicio || 0) / Number(metaMensal.meta_total)) * 100 : 0;
-                      return pct >= 100 ? 'text-success' : 'text-warning';
-                    })()}>
-                      {(metaMensal ? ((totalVendidoInicio || 0) / Number(metaMensal.meta_total)) * 100 : 0).toFixed(1)}% da meta
-                    </span>
-                  </p>
-                  <Progress value={Math.min(metaMensal ? ((totalVendidoInicio || 0) / Number(metaMensal.meta_total)) * 100 : 0, 100)} className="mt-2" />
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">Vendas com início no mês</p>
-              )}
-            </CardContent>
-          </Card>
-          )}
-
-          {show('card_total_faturado') && (
-          <Card className="border-l-4 border-l-green-500 hover:shadow-md transition-all">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Faturado</CardTitle>
-              <DollarSign className="h-4 w-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(totalFaturado || 0)}
-              </div>
-              <p className="text-xs text-muted-foreground">Faturado no mês</p>
-            </CardContent>
-          </Card>
-          )}
-          {isAdmin && (
-            <Card className="border-l-4 border-l-purple-500 hover:shadow-md transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Meta do Mês</CardTitle>
-                <Target className="h-4 w-4 text-purple-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {metaMensal ? formatCurrency(Number(metaMensal.meta_total)) : 'R$ 0,00'}
-                </div>
-                <Link to="/configuracao-mes" className="text-xs text-primary hover:underline">
-                  Configurar meta →
-                </Link>
-              </CardContent>
-            </Card>
-          )}
-
-          {isAdmin && (
-            <Card className="border-l-4 border-l-slate-400 hover:shadow-md transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Lançamentos</CardTitle>
-                <FileText className="h-4 w-4 text-slate-400" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalLancamentos}</div>
-                <Link to="/gerencial" className="text-xs text-primary hover:underline">
-                  Ver todos →
-                </Link>
-              </CardContent>
-            </Card>
-          )}
-
-          {isAdmin && (
-            <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pendentes de Regra</CardTitle>
-                <AlertCircle className="h-4 w-4 text-amber-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{pendentesRegra}</div>
-                {pendentesRegra && pendentesRegra > 0 ? (
-                  <Link to="/pendencias" className="text-xs text-warning hover:underline">
-                    Classificar →
-                  </Link>
-                ) : (
-                  <p className="text-xs text-success">Tudo classificado!</p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Cards de meta individual para consultora */}
-        {isConsultora && metaMensal && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Card className="border-l-4 border-l-purple-500 hover:shadow-md transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Minha Meta</CardTitle>
-                <Target className="h-4 w-4 text-purple-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {metaIndividual
-                    ? formatCurrency(Number(metaMensal.meta_total) * Number(metaIndividual.percentual))
-                    : 'Não definida'}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {metaIndividual
-                    ? `${(Number(metaIndividual.percentual) * 100).toFixed(0)}% da meta total`
-                    : 'Fale com o administrador'}
-                </p>
-              </CardContent>
-            </Card>
-
-            {metaIndividual && dashboardData && (() => {
-              const minhaMetaValor = Number(metaMensal.meta_total) * Number(metaIndividual.percentual);
-              const meusDados = dashboardData.consultoras.find(c => c.consultoraId === consultoraId);
-              const meuVendido = meusDados?.vendido || 0;
-              const meuPercentual = minhaMetaValor > 0 ? (meuVendido / minhaMetaValor) * 100 : 0;
-              
-              let meuNivel = 1;
-              if (niveisComissao && niveisComissao.length > 0) {
-                const sorted = [...niveisComissao].sort((a, b) => b.nivel - a.nivel);
-                for (const nivel of sorted) {
-                  if (meuPercentual >= Number(nivel.de_percent) * 100) {
-                    meuNivel = nivel.nivel;
-                    break;
-                  }
-                }
-              }
-
-              return (
-                <>
-                  <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-all">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Meu Atingimento</CardTitle>
-                      <TrendingUp className="h-4 w-4 text-blue-500" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className={`text-2xl font-bold ${
-                        meuPercentual >= 100 ? 'text-success' :
-                        meuPercentual >= 80 ? 'text-warning' : ''
-                      }`}>
-                        {meuPercentual.toFixed(1)}%
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {formatCurrency(meuVendido)} vendido
-                      </p>
-                      <Progress value={Math.min(meuPercentual, 100)} className="mt-2" />
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-all">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Meu Nível</CardTitle>
-                      <Award className="h-4 w-4 text-amber-500" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{getNivelNome(meuNivel)}</div>
-                      <p className="text-xs text-muted-foreground">Ferro → Diamante</p>
-                    </CardContent>
-                  </Card>
-                </>
-              );
-            })()}
-
-            {/* Níveis de Comissão */}
-            {niveisComissao && niveisComissao.length > 0 && (
-              <Card className="md:col-span-2 lg:col-span-3">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Níveis de Comissão</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    {niveisComissao.map(n => {
-                      const minhaMetaValor = metaIndividual ? Number(metaMensal.meta_total) * Number(metaIndividual.percentual) : 0;
-                      return (
-                        <div key={n.id} className="rounded-lg border p-3 text-center space-y-1">
-                          <p className="text-xs font-semibold">{getNivelNome(n.nivel)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {(Number(n.de_percent) * 100).toFixed(0)}% – {(Number(n.ate_percent) * 100).toFixed(0)}%
-                          </p>
-                          <p className="text-sm font-bold text-primary">
-                            {(Number(n.comissao_percent) * 100).toFixed(1)}%
-                          </p>
-                          {minhaMetaValor > 0 && (
-                            <p className="text-[10px] text-muted-foreground">
-                              {formatCurrencyCompact(minhaMetaValor * Number(n.de_percent))} – {formatCurrencyCompact(minhaMetaValor * Number(n.ate_percent))}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
-
-        {/* Cards de meta admin — com bordas coloridas */}
-        {isAdmin && metaMensal && dashboardData && (
+        {/* Consultora view — sem tabs */}
+        {isConsultora && (
           <>
-            <SectionTitle>Atingimento da Meta</SectionTitle>
-            <div className="grid gap-4 md:grid-cols-3">
+            {/* Cards resumo rápido */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+              {show('card_total_vendido') && (
               <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-all">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">% Atingimento</CardTitle>
-                  <Target className="h-4 w-4 text-blue-500" />
+                  <CardTitle className="text-sm font-medium">Total Vendido</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-blue-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className={`text-2xl font-bold ${
-                    dashboardData.percentualAtingido >= 100 ? 'text-success' :
-                    dashboardData.percentualAtingido >= 80 ? 'text-warning' : ''
-                  }`}>
-                    {dashboardData.percentualAtingido.toFixed(1)}%
+                  <div className="text-2xl font-bold">
+                    {formatCurrency(totalVendidoInicio || 0)}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Meta: {formatCurrency(Number(metaMensal.meta_total))}
-                  </p>
+                  {metaMensal ? (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        <span className={(() => {
+                          const pct = metaMensal ? ((totalVendidoInicio || 0) / Number(metaMensal.meta_total)) * 100 : 0;
+                          return pct >= 100 ? 'text-success' : 'text-warning';
+                        })()}>
+                          {(metaMensal ? ((totalVendidoInicio || 0) / Number(metaMensal.meta_total)) * 100 : 0).toFixed(1)}% da meta
+                        </span>
+                      </p>
+                      <Progress value={Math.min(metaMensal ? ((totalVendidoInicio || 0) / Number(metaMensal.meta_total)) * 100 : 0, 100)} className="mt-2" />
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Vendas com início no mês</p>
+                  )}
                 </CardContent>
               </Card>
+              )}
 
-              <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-all">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Nível Atual</CardTitle>
-                  <Award className="h-4 w-4 text-amber-500" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{getNivelNome(dashboardData.nivelAtual)}</div>
-                  <p className="text-xs text-muted-foreground">Ferro → Diamante</p>
-                </CardContent>
-              </Card>
-
+              {show('card_total_faturado') && (
               <Card className="border-l-4 border-l-green-500 hover:shadow-md transition-all">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Comissão Estimada</CardTitle>
+                  <CardTitle className="text-sm font-medium">Total Faturado</CardTitle>
                   <DollarSign className="h-4 w-4 text-green-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-success">
-                    {formatCurrency(dashboardData.comissaoTotal)}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </>
-        )}
-
-        {/* Visão Gerencial — admin only */}
-        {isAdmin && metaAnual && (
-          <>
-            <SectionTitle>Visão Gerencial</SectionTitle>
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card className="border-l-4 border-l-indigo-500 hover:shadow-md transition-all">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Gerencial</CardTitle>
-                  <DollarSign className="h-4 w-4 text-indigo-500" />
-                </CardHeader>
-                <CardContent>
                   <div className="text-2xl font-bold">
-                    {formatCurrency(realizadoGerencial || 0)}
+                    {formatCurrency(totalFaturado || 0)}
                   </div>
-                  <p className="text-xs text-muted-foreground">Inclui agregadores e Entuspass</p>
+                  <p className="text-xs text-muted-foreground">Faturado no mês</p>
                 </CardContent>
               </Card>
-
-              <Card className="border-l-4 border-l-indigo-400 hover:shadow-md transition-all">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Meta Gerencial</CardTitle>
-                  <Target className="h-4 w-4 text-indigo-400" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {formatCurrency(metaGerencialMes)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Meta anual: {formatCurrency(Number(metaAnual.meta_total))}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="border-l-4 border-l-indigo-600 hover:shadow-md transition-all">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">% Atingimento Gerencial</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-indigo-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className={`text-2xl font-bold ${
-                    atingimentoGerencial >= 100 ? 'text-success' :
-                    atingimentoGerencial >= 80 ? 'text-warning' : ''
-                  }`}>
-                    {atingimentoGerencial.toFixed(1)}%
-                  </div>
-                  <Progress value={Math.min(atingimentoGerencial, 100)} className="mt-2" />
-                </CardContent>
-              </Card>
+              )}
             </div>
-          </>
-        )}
 
-        {/* Gráfico + Tabela por consultora */}
-        {metaMensal && dashboardData && dashboardData.consultoras.length > 0 && (
-          <>
-          <SectionTitle>Performance por Consultora</SectionTitle>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="hover:shadow-md transition-all">
-              <CardHeader>
-                <CardTitle className="text-base">Progresso da Meta por Consultora</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 45)}>
-                    <BarChart data={chartData} layout="vertical" stackOffset="none">
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                      <XAxis type="number" tickFormatter={(v) => `R$ ${(v/1000).toFixed(0)}k`} />
-                      <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12 }} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="vendido" stackId="a" name="Vendido" radius={[0, 0, 0, 0]}>
-                        {chartData.map((entry, index) => (
-                          <Cell key={`vendido-${index}`} fill={getVendidoColor(entry.percentual)} />
-                        ))}
-                      </Bar>
-                      <Bar dataKey="falta" stackId="a" name="Falta" fill="hsl(var(--destructive) / 0.3)" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                    Nenhum dado disponível
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {/* Cards de meta individual para consultora */}
+            {metaMensal && (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <Card className="border-l-4 border-l-purple-500 hover:shadow-md transition-all">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Minha Meta</CardTitle>
+                    <Target className="h-4 w-4 text-purple-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {metaIndividual
+                        ? formatCurrency(Number(metaMensal.meta_total) * Number(metaIndividual.percentual))
+                        : 'Não definida'}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {metaIndividual
+                        ? `${(Number(metaIndividual.percentual) * 100).toFixed(0)}% da meta total`
+                        : 'Fale com o administrador'}
+                    </p>
+                  </CardContent>
+                </Card>
 
-            <Card className="hover:shadow-md transition-all">
-              <CardHeader>
-                <CardTitle className="text-base">Detalhamento por Consultora</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-hidden rounded-lg border">
-                  <Table className="table-dense">
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="text-xs uppercase tracking-wide">Consultora</TableHead>
-                        <TableHead className="text-right text-xs uppercase tracking-wide">Meta</TableHead>
-                        <TableHead className="text-right text-xs uppercase tracking-wide">Vendido</TableHead>
-                        <TableHead className="text-right text-xs uppercase tracking-wide">%</TableHead>
-                        <TableHead className="text-right text-xs uppercase tracking-wide">Falta</TableHead>
-                        <TableHead className="text-right text-xs uppercase tracking-wide">Nível</TableHead>
-                        <TableHead className="text-right text-xs uppercase tracking-wide">Comissão</TableHead>
-                        <TableHead className="text-center w-12 text-xs uppercase tracking-wide">Coach</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {dashboardData.consultoras.map((c, i) => {
-                        const nivelNome = getNivelNome(c.nivel);
-                        const badgeClass = nivelBadgeClass[nivelNome] || '';
-                        return (
-                          <TableRow key={i} className="even:bg-muted/30">
-                            <TableCell className="font-medium">{c.nome}</TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {c.meta > 0 ? formatCurrencyCompact(c.meta) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right">{formatCurrencyCompact(c.vendido)}</TableCell>
-                            <TableCell className={`text-right font-medium ${
-                              c.percentual >= 100 ? 'text-success' :
-                              c.percentual >= 80 ? 'text-warning' : ''
-                            }`}>
-                              {c.percentual.toFixed(0)}%
-                            </TableCell>
-                            <TableCell className={`text-right font-medium ${
-                              c.falta === 0 ? 'text-success' : 'text-destructive'
-                            }`}>
-                              {c.falta === 0 ? 'Atingida ✓' : formatCurrencyCompact(c.falta)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
-                                {nivelNome}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right text-success">
-                              {formatCurrencyCompact(c.comissao)}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {c.consultoraId && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  title="Coach IA"
-                                  onClick={() => {
-                                    setSelectedConsultoraId(c.consultoraId!);
-                                    setCoachOpen(true);
-                                  }}
-                                >
-                                  <Lightbulb className="h-4 w-4 text-primary" />
-                                </Button>
+                {metaIndividual && dashboardData && (() => {
+                  const minhaMetaValor = Number(metaMensal.meta_total) * Number(metaIndividual.percentual);
+                  const meusDados = dashboardData.consultoras.find(c => c.consultoraId === consultoraId);
+                  const meuVendido = meusDados?.vendido || 0;
+                  const meuPercentual = minhaMetaValor > 0 ? (meuVendido / minhaMetaValor) * 100 : 0;
+                  
+                  let meuNivel = 1;
+                  if (niveisComissao && niveisComissao.length > 0) {
+                    const sorted = [...niveisComissao].sort((a, b) => b.nivel - a.nivel);
+                    for (const nivel of sorted) {
+                      if (meuPercentual >= Number(nivel.de_percent) * 100) {
+                        meuNivel = nivel.nivel;
+                        break;
+                      }
+                    }
+                  }
+
+                  return (
+                    <>
+                      <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-all">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                          <CardTitle className="text-sm font-medium">Meu Atingimento</CardTitle>
+                          <TrendingUp className="h-4 w-4 text-blue-500" />
+                        </CardHeader>
+                        <CardContent>
+                          <div className={`text-2xl font-bold ${
+                            meuPercentual >= 100 ? 'text-success' :
+                            meuPercentual >= 80 ? 'text-warning' : ''
+                          }`}>
+                            {meuPercentual.toFixed(1)}%
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {formatCurrency(meuVendido)} vendido
+                          </p>
+                          <Progress value={Math.min(meuPercentual, 100)} className="mt-2" />
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-all">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                          <CardTitle className="text-sm font-medium">Meu Nível</CardTitle>
+                          <Award className="h-4 w-4 text-amber-500" />
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{getNivelNome(meuNivel)}</div>
+                          <p className="text-xs text-muted-foreground">Ferro → Diamante</p>
+                        </CardContent>
+                      </Card>
+                    </>
+                  );
+                })()}
+
+                {/* Níveis de Comissão */}
+                {niveisComissao && niveisComissao.length > 0 && (
+                  <Card className="md:col-span-2 lg:col-span-3">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium">Níveis de Comissão</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        {niveisComissao.map(n => {
+                          const minhaMetaValor = metaIndividual ? Number(metaMensal.meta_total) * Number(metaIndividual.percentual) : 0;
+                          return (
+                            <div key={n.id} className="rounded-lg border p-3 text-center space-y-1">
+                              <p className="text-xs font-semibold">{getNivelNome(n.nivel)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {(Number(n.de_percent) * 100).toFixed(0)}% – {(Number(n.ate_percent) * 100).toFixed(0)}%
+                              </p>
+                              <p className="text-sm font-bold text-primary">
+                                {(Number(n.comissao_percent) * 100).toFixed(1)}%
+                              </p>
+                              {minhaMetaValor > 0 && (
+                                <p className="text-[10px] text-muted-foreground">
+                                  {formatCurrencyCompact(minhaMetaValor * Number(n.de_percent))} – {formatCurrencyCompact(minhaMetaValor * Number(n.ate_percent))}
+                                </p>
                               )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {show('grafico_share_consultora') && (() => {
-            const totalVendidoConsultoras = dashboardData.consultoras.reduce((acc, c) => acc + c.vendido, 0);
-            const shareData = dashboardData.consultoras.map(c => ({
-              nome: c.nome,
-              vendido: c.vendido,
-              percentual: totalVendidoConsultoras > 0 ? (c.vendido / totalVendidoConsultoras) * 100 : 0,
-            }));
-            return <ConsultoraShareChart data={shareData} />;
-          })()}
-          </>
-        )}
-
-        {/* Gráficos de Performance */}
-        {lancamentos && lancamentos.length > 0 && (
-          <>
-            <SectionTitle>Análise de Vendas</SectionTitle>
-            {(show('grafico_tendencia_receita') || show('grafico_forma_pagamento')) && (
-            <div className="grid gap-4 lg:grid-cols-3">
-              {show('grafico_tendencia_receita') && (
-              <div className="lg:col-span-2">
-                <RevenueTrendChart data={salesMetrics.revenueByDay} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
-              )}
-              {show('grafico_forma_pagamento') && (
-              <RevenueByPaymentChart data={salesMetrics.revenueByPayment} />
-              )}
-            </div>
-            )}
-
-            {(show('tabela_vendas_plano') || show('grafico_categoria')) && (
-            <div className="grid gap-4 md:grid-cols-2">
-              {show('tabela_vendas_plano') && <PlanSalesTable data={salesMetrics.salesByPlan} />}
-              {show('grafico_categoria') && <CategoryShareChart data={salesMetrics.salesByPlan} />}
-            </div>
-            )}
-
-            {show('histograma_ticket') && (
-            <TicketHistogram
-              data={salesMetrics.ticketDistribution}
-              ticketMedio={salesMetrics.ticketMedioGlobal}
-            />
             )}
           </>
         )}
 
-        {/* Analista IA — no final do dashboard */}
+        {/* Admin view — com tabs */}
+        {isAdmin && (
+          <Tabs defaultValue="consultoras" className="space-y-6">
+            <TabsList>
+              <TabsTrigger value="consultoras">Vendas Consultoras</TabsTrigger>
+              <TabsTrigger value="gerencial">Meta Gerencial</TabsTrigger>
+            </TabsList>
+
+            {/* Aba Vendas Consultoras */}
+            <TabsContent value="consultoras" className="space-y-8">
+              {/* Cards resumo rápido */}
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                {show('card_total_vendido') && (
+                <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-all">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Vendido</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-blue-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {formatCurrency(totalVendidoInicio || 0)}
+                    </div>
+                    {metaMensal ? (
+                      <>
+                        <p className="text-xs text-muted-foreground">
+                          <span className={(() => {
+                            const pct = metaMensal ? ((totalVendidoInicio || 0) / Number(metaMensal.meta_total)) * 100 : 0;
+                            return pct >= 100 ? 'text-success' : 'text-warning';
+                          })()}>
+                            {(metaMensal ? ((totalVendidoInicio || 0) / Number(metaMensal.meta_total)) * 100 : 0).toFixed(1)}% da meta
+                          </span>
+                        </p>
+                        <Progress value={Math.min(metaMensal ? ((totalVendidoInicio || 0) / Number(metaMensal.meta_total)) * 100 : 0, 100)} className="mt-2" />
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Vendas com início no mês</p>
+                    )}
+                  </CardContent>
+                </Card>
+                )}
+
+                {show('card_total_faturado') && (
+                <Card className="border-l-4 border-l-green-500 hover:shadow-md transition-all">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Faturado</CardTitle>
+                    <DollarSign className="h-4 w-4 text-green-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {formatCurrency(totalFaturado || 0)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Faturado no mês</p>
+                  </CardContent>
+                </Card>
+                )}
+
+                <Card className="border-l-4 border-l-purple-500 hover:shadow-md transition-all">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Meta do Mês</CardTitle>
+                    <Target className="h-4 w-4 text-purple-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {metaMensal ? formatCurrency(Number(metaMensal.meta_total)) : 'R$ 0,00'}
+                    </div>
+                    <Link to="/configuracao-mes" className="text-xs text-primary hover:underline">
+                      Configurar meta →
+                    </Link>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-slate-400 hover:shadow-md transition-all">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Lançamentos</CardTitle>
+                    <FileText className="h-4 w-4 text-slate-400" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{totalLancamentos}</div>
+                    <Link to="/gerencial" className="text-xs text-primary hover:underline">
+                      Ver todos →
+                    </Link>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-all">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Pendentes de Regra</CardTitle>
+                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{pendentesRegra}</div>
+                    {pendentesRegra && pendentesRegra > 0 ? (
+                      <Link to="/pendencias" className="text-xs text-warning hover:underline">
+                        Classificar →
+                      </Link>
+                    ) : (
+                      <p className="text-xs text-success">Tudo classificado!</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Atingimento da Meta */}
+              {metaMensal && dashboardData && (
+                <>
+                  <SectionTitle>Atingimento da Meta</SectionTitle>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-all">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">% Atingimento</CardTitle>
+                        <Target className="h-4 w-4 text-blue-500" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className={`text-2xl font-bold ${
+                          dashboardData.percentualAtingido >= 100 ? 'text-success' :
+                          dashboardData.percentualAtingido >= 80 ? 'text-warning' : ''
+                        }`}>
+                          {dashboardData.percentualAtingido.toFixed(1)}%
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Meta: {formatCurrency(Number(metaMensal.meta_total))}
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-all">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Nível Atual</CardTitle>
+                        <Award className="h-4 w-4 text-amber-500" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{getNivelNome(dashboardData.nivelAtual)}</div>
+                        <p className="text-xs text-muted-foreground">Ferro → Diamante</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-l-4 border-l-green-500 hover:shadow-md transition-all">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Comissão Estimada</CardTitle>
+                        <DollarSign className="h-4 w-4 text-green-500" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-success">
+                          {formatCurrency(dashboardData.comissaoTotal)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </>
+              )}
+
+              {/* Performance por Consultora */}
+              {metaMensal && dashboardData && dashboardData.consultoras.length > 0 && (
+                <>
+                <SectionTitle>Performance por Consultora</SectionTitle>
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <Card className="hover:shadow-md transition-all">
+                    <CardHeader>
+                      <CardTitle className="text-base">Progresso da Meta por Consultora</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {chartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 45)}>
+                          <BarChart data={chartData} layout="vertical" stackOffset="none">
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                            <XAxis type="number" tickFormatter={(v) => `R$ ${(v/1000).toFixed(0)}k`} />
+                            <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12 }} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Bar dataKey="vendido" stackId="a" name="Vendido" radius={[0, 0, 0, 0]}>
+                              {chartData.map((entry, index) => (
+                                <Cell key={`vendido-${index}`} fill={getVendidoColor(entry.percentual)} />
+                              ))}
+                            </Bar>
+                            <Bar dataKey="falta" stackId="a" name="Falta" fill="hsl(var(--destructive) / 0.3)" radius={[0, 4, 4, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                          Nenhum dado disponível
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="hover:shadow-md transition-all">
+                    <CardHeader>
+                      <CardTitle className="text-base">Detalhamento por Consultora</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-hidden rounded-lg border">
+                        <Table className="table-dense">
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="text-xs uppercase tracking-wide">Consultora</TableHead>
+                              <TableHead className="text-right text-xs uppercase tracking-wide">Meta</TableHead>
+                              <TableHead className="text-right text-xs uppercase tracking-wide">Vendido</TableHead>
+                              <TableHead className="text-right text-xs uppercase tracking-wide">%</TableHead>
+                              <TableHead className="text-right text-xs uppercase tracking-wide">Falta</TableHead>
+                              <TableHead className="text-right text-xs uppercase tracking-wide">Nível</TableHead>
+                              <TableHead className="text-right text-xs uppercase tracking-wide">Comissão</TableHead>
+                              <TableHead className="text-center w-12 text-xs uppercase tracking-wide">Coach</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {dashboardData.consultoras.map((c, i) => {
+                              const nivelNome = getNivelNome(c.nivel);
+                              const badgeClass = nivelBadgeClass[nivelNome] || '';
+                              return (
+                                <TableRow key={i} className="even:bg-muted/30">
+                                  <TableCell className="font-medium">{c.nome}</TableCell>
+                                  <TableCell className="text-right text-muted-foreground">
+                                    {c.meta > 0 ? formatCurrencyCompact(c.meta) : '-'}
+                                  </TableCell>
+                                  <TableCell className="text-right">{formatCurrencyCompact(c.vendido)}</TableCell>
+                                  <TableCell className={`text-right font-medium ${
+                                    c.percentual >= 100 ? 'text-success' :
+                                    c.percentual >= 80 ? 'text-warning' : ''
+                                  }`}>
+                                    {c.percentual.toFixed(0)}%
+                                  </TableCell>
+                                  <TableCell className={`text-right font-medium ${
+                                    c.falta === 0 ? 'text-success' : 'text-destructive'
+                                  }`}>
+                                    {c.falta === 0 ? 'Atingida ✓' : formatCurrencyCompact(c.falta)}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
+                                      {nivelNome}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right text-success">
+                                    {formatCurrencyCompact(c.comissao)}
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    {c.consultoraId && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        title="Coach IA"
+                                        onClick={() => {
+                                          setSelectedConsultoraId(c.consultoraId!);
+                                          setCoachOpen(true);
+                                        }}
+                                      >
+                                        <Lightbulb className="h-4 w-4 text-primary" />
+                                      </Button>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {show('grafico_share_consultora') && (() => {
+                  const totalVendidoConsultoras = dashboardData.consultoras.reduce((acc, c) => acc + c.vendido, 0);
+                  const shareData = dashboardData.consultoras.map(c => ({
+                    nome: c.nome,
+                    vendido: c.vendido,
+                    percentual: totalVendidoConsultoras > 0 ? (c.vendido / totalVendidoConsultoras) * 100 : 0,
+                  }));
+                  return <ConsultoraShareChart data={shareData} />;
+                })()}
+                </>
+              )}
+
+              {/* Análise de Vendas */}
+              {lancamentos && lancamentos.length > 0 && (
+                <>
+                  <SectionTitle>Análise de Vendas</SectionTitle>
+                  {(show('grafico_tendencia_receita') || show('grafico_forma_pagamento')) && (
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    {show('grafico_tendencia_receita') && (
+                    <div className="lg:col-span-2">
+                      <RevenueTrendChart data={salesMetrics.revenueByDay} />
+                    </div>
+                    )}
+                    {show('grafico_forma_pagamento') && (
+                    <RevenueByPaymentChart data={salesMetrics.revenueByPayment} />
+                    )}
+                  </div>
+                  )}
+
+                  {(show('tabela_vendas_plano') || show('grafico_categoria')) && (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {show('tabela_vendas_plano') && <PlanSalesTable data={salesMetrics.salesByPlan} />}
+                    {show('grafico_categoria') && <CategoryShareChart data={salesMetrics.salesByPlan} />}
+                  </div>
+                  )}
+
+                  {show('histograma_ticket') && (
+                  <TicketHistogram
+                    data={salesMetrics.ticketDistribution}
+                    ticketMedio={salesMetrics.ticketMedioGlobal}
+                  />
+                  )}
+                </>
+              )}
+            </TabsContent>
+
+            {/* Aba Meta Gerencial */}
+            <TabsContent value="gerencial" className="space-y-8">
+              {metaAnual ? (
+                <>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <Card className="border-l-4 border-l-indigo-500 hover:shadow-md transition-all">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Gerencial</CardTitle>
+                        <DollarSign className="h-4 w-4 text-indigo-500" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {formatCurrency(realizadoGerencial || 0)}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Inclui agregadores e Entuspass</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-l-4 border-l-indigo-400 hover:shadow-md transition-all">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Meta Gerencial</CardTitle>
+                        <Target className="h-4 w-4 text-indigo-400" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {formatCurrency(metaGerencialMes)}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Meta anual: {formatCurrency(Number(metaAnual.meta_total))}
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-l-4 border-l-indigo-600 hover:shadow-md transition-all">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">% Atingimento Gerencial</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-indigo-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className={`text-2xl font-bold ${
+                          atingimentoGerencial >= 100 ? 'text-success' :
+                          atingimentoGerencial >= 80 ? 'text-warning' : ''
+                        }`}>
+                          {atingimentoGerencial.toFixed(1)}%
+                        </div>
+                        <Progress value={Math.min(atingimentoGerencial, 100)} className="mt-2" />
+                      </CardContent>
+                    </Card>
+                  </div>
+                </>
+              ) : (
+                <Card>
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    <p>Nenhuma meta anual configurada para {anoSelecionado}.</p>
+                    <Link to="/relatorios" className="text-sm text-primary hover:underline mt-2 inline-block">
+                      Configurar Meta Anual →
+                    </Link>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          </Tabs>
+        )}
+
+        {/* Analista IA — fora das tabs, visível sempre para admin */}
         {isAdmin && (
           <>
             <SectionTitle>Inteligência Artificial</SectionTitle>
