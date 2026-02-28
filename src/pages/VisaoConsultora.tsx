@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select';
 import { Target, TrendingUp, DollarSign, Award, Calendar, Eye } from 'lucide-react';
 import { CoachDicaDoDia } from '@/components/CoachDicaDoDia';
-import { format } from 'date-fns';
+import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
 import { PaginationControls } from '@/components/PaginationControls';
@@ -33,7 +33,19 @@ export default function VisaoConsultora() {
   const { isComponenteVisivel } = useDashboardVisibilidade();
   const [selectedConsultoraId, setSelectedConsultoraId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const mesAtual = format(new Date(), 'yyyy-MM');
+  const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
+
+  // Gerar lista de 12 meses retroativos
+  const mesesDisponiveis = useMemo(() => {
+    const hoje = new Date();
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = subMonths(hoje, i);
+      return {
+        value: format(d, 'yyyy-MM'),
+        label: format(d, 'MMMM yyyy', { locale: ptBR }),
+      };
+    });
+  }, []);
 
   useEffect(() => { setCurrentPage(1); }, [selectedConsultoraId]);
 
@@ -57,13 +69,13 @@ export default function VisaoConsultora() {
 
   // Buscar meta do mês
   const { data: metaMensal } = useQuery({
-    queryKey: ['meta-mensal-visao', mesAtual, empresaId],
+    queryKey: ['meta-mensal-visao', mesSelecionado, empresaId],
     enabled: !!empresaId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('metas_mensais')
         .select('*')
-        .eq('mes_referencia', mesAtual)
+        .eq('mes_referencia', mesSelecionado)
         .eq('empresa_id', empresaId!)
         .single();
       if (error && error.code !== 'PGRST116') throw error;
@@ -104,14 +116,14 @@ export default function VisaoConsultora() {
 
   // Buscar lançamentos da consultora selecionada
   const { data: lancamentos } = useQuery({
-    queryKey: ['lancamentos-visao', mesAtual, consultoraSelecionada?.nome],
+    queryKey: ['lancamentos-visao', mesSelecionado, consultoraSelecionada?.nome],
     enabled: !!consultoraSelecionada?.nome,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('lancamentos')
         .select('*')
         .eq('entra_meta', true)
-        .eq('mes_competencia', mesAtual)
+        .eq('mes_competencia', mesSelecionado)
         .eq('consultora_chave', consultoraSelecionada!.nome);
       if (error) throw error;
       return data as Lancamento[];
@@ -158,7 +170,7 @@ export default function VisaoConsultora() {
         {/* Seletor */}
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <Eye className="h-5 w-5 text-muted-foreground" />
               <div className="flex-1 max-w-sm">
                 <Select
@@ -175,10 +187,21 @@ export default function VisaoConsultora() {
                   </SelectContent>
                 </Select>
               </div>
-              <p className="text-sm text-muted-foreground flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                {format(new Date(), 'MMMM yyyy', { locale: ptBR })}
-              </p>
+              <div className="w-48">
+                <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
+                  <SelectTrigger>
+                    <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mesesDisponiveis.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>
