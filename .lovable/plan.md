@@ -1,28 +1,14 @@
 
 
-## Reorganizar Dashboard em Tabs: Consultoras vs Gerencial
+## Mover Analista IA para dentro da aba "Vendas Consultoras"
 
-### Estrutura
+### Problema
+O Analista IA está fora das tabs (linhas 942-948), aparecendo após ambas as abas. O usuário quer que fique apenas no final da primeira aba ("Vendas Consultoras"), analisando tanto a meta de vendas das consultoras quanto a gerencial em uma única análise.
 
-Substituir as seções lineares por um componente `Tabs` no primeiro quadrante do Dashboard (admin only). Consultoras continuam vendo apenas sua visão individual sem tabs.
-
-**Aba 1 — "Vendas Consultoras"** (default):
-- Cards resumo: Total Vendido, Total Faturado, Meta do Mês, Lançamentos, Pendentes
-- Seção "Atingimento da Meta" (% atingimento, nível, comissão estimada)
-- Seção "Performance por Consultora" (gráfico + tabela + share donut)
-- Seção "Análise de Vendas" (tendência receita, forma pagamento, planos, ticket)
-
-**Aba 2 — "Meta Gerencial"** (admin only):
-- Cards gerenciais: Total Gerencial, Meta Gerencial do Mês, % Atingimento Gerencial
-- Espaço para futuros indicadores gerenciais adicionais
-
-### Alterações
+### Alteração
 
 **`src/pages/Dashboard.tsx`**:
-- Importar `Tabs, TabsList, TabsTrigger, TabsContent` de `@/components/ui/tabs`
-- Envolver todo o conteúdo admin (após header/seletor de mês) em `<Tabs defaultValue="consultoras">`
-- Mover cards resumo + atingimento + performance + análise de vendas para `<TabsContent value="consultoras">`
-- Mover cards gerenciais para `<TabsContent value="gerencial">`
-- Manter seção IA fora das tabs (visível em ambas)
-- Consultoras (não admin) continuam sem tabs, sem alteração
+- Remover a seção "Inteligência Artificial" de fora das tabs (linhas 942-948)
+- Inserir essa mesma seção no final do `<TabsContent value="consultoras">`, antes do fechamento `</TabsContent>` (após linha 875, antes de 876)
+- Manter o mesmo componente `AnalistaIaCard` — ele já recebe os dados do mês e gera a análise completa que inclui tanto métricas de consultoras quanto gerencial
 
