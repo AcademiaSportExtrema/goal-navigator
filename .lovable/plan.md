@@ -1,37 +1,37 @@
 
-Objetivo
-- Corrigir a Tabela 2 (“Recorrência Detalhada”) para contar no mês de processamento, não no mês de venda.
 
-Diagnóstico confirmado
-- Hoje a Tabela 2 agrupa por `mes_competencia` (`mc`), então parcelas processadas em fevereiro com `mes_competencia` antigo são exibidas em meses anteriores.
-- Resultado: fevereiro fica com “Recorrência = 0” mesmo havendo parcelas processadas no mês.
+## Corrigir Tabela 1: Contar todos os recorrentes processados no mês
 
-Implementação (arquivo único)
-- Arquivo: `src/pages/Relatorios.tsx`
+### Problema
+A Tabela 1 conta recorrentes por `mes_competencia`, mas deveria contar **todos os recorrentes processados no mês** (independente de `data_inicio`), já que a separação Novo vs Recorrência é feita na Tabela 2.
 
-1) Trocar a chave mensal da Tabela 2
-- No bloco `if (isRecorrente(l))`, usar `recMonth = l.data_lancamento?.slice(0, 7)` como mês da linha da Tabela 2.
-- Fallback seguro: se `data_lancamento` ausente, usar `mes_competencia`.
+Para **parcelados** (4, 6, 12, 18 meses): contar apenas vendas novas (`data_inicio` == `data_lancamento` no mesmo mês), pois parcelas processadas não devem aparecer como novas vendas.
 
-2) Manter a regra de classificação Novo vs Recorrência
-- `diMonth = data_inicio.slice(0,7)` e `dlMonth = data_lancamento.slice(0,7)`.
-- Se `diMonth === dlMonth` => `novo`.
-- Caso contrário => `recorrencia`.
-- Contadores e arrays de drill-down (`lrMap`) passam a ser indexados por `recMonth`.
+### Alteração
 
-3) Separar meses de cada tabela
-- Criar `durationMonths = Object.keys(durMap).sort()`.
-- Criar `recurrenceMonths = Object.keys(recMap).sort()`.
-- Tabela 1 renderiza com `durationMonths`.
-- Tabela 2 renderiza com `recurrenceMonths` (não usar mais `months` compartilhado).
+| Arquivo | Mudança |
+|---------|---------|
+| `src/pages/Relatorios.tsx` | Na Tabela 1 (~linhas 134-141): para itens **recorrentes**, usar `data_lancamento` como mês-chave (igual à Tabela 2). Para **parcelados** (4,6,12,18), pular se `data_inicio` e `data_lancamento` diferem no mês. Loja e mensal continuam iguais. |
 
-4) Corrigir totais da Tabela 2
-- `recurrenceTotals` deve iterar `recurrenceMonths` para não perder meses que existam só em `data_lancamento`.
+### Lógica
 
-5) Transparência no drill-down da Tabela 2
-- Adicionar coluna “Data Lançamento” no modal (e no CSV exportado) para facilitar auditoria visual dos casos processados no mês.
+```typescript
+const cat = classifyDuration(l);
 
-Detalhes técnicos
-- Não há alteração de banco, só front-end.
-- Campos já disponíveis: `data_inicio`, `data_lancamento`, `mes_competencia`, `condicao_pagamento`.
-- Resultado esperado para fevereiro: “Novos” = recorrentes com início em fevereiro; “Recorrência” = parcelas processadas em fevereiro de contratos iniciados antes.
+// Parcelados: só conta venda original
+if (['quatro','seis','doze','dezoito'].includes(cat)) {
+  const diM = l.data_inicio?.slice(0, 7);
+  const dlM = l.data_lancamento?.slice(0, 7);
+  if (diM && dlM && diM !== dlM) continue;
+}
+
+// Recorrente: indexa pelo mês de processamento
+const durMonth = (cat === 'recorrente')
+  ? (l.data_lancamento?.slice(0, 7) || mc)
+  : mc;
+
+if (!durMap[durMonth]) { /* inicializa */ }
+durMap[durMonth][cat]++;
+ldMap[durMonth][cat].push(l);
+```
+
