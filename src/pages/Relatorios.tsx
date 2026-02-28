@@ -28,6 +28,7 @@ interface Lancamento {
   forma_pagamento: string | null;
   mes_competencia: string | null;
   data_inicio: string | null;
+  data_lancamento: string | null;
   plano: string | null;
   duracao: string | null;
   nome_cliente: string | null;
@@ -99,7 +100,7 @@ export default function Relatorios() {
       if (!empresaId) return [];
       const { data, error } = await supabase
         .from('lancamentos')
-        .select('condicao_pagamento, forma_pagamento, mes_competencia, data_inicio, plano, duracao, nome_cliente, produto, valor, numero_contrato')
+        .select('condicao_pagamento, forma_pagamento, mes_competencia, data_inicio, data_lancamento, plano, duracao, nome_cliente, produto, valor, numero_contrato')
         .eq('empresa_id', empresaId)
         .eq('entra_meta', true);
       if (error) throw error;
@@ -144,17 +145,14 @@ export default function Relatorios() {
           recMap[mc] = { novo: 0, recorrencia: 0 };
           lrMap[mc] = { novo: [], recorrencia: [] };
         }
-        const dataInicioMonth = l.data_inicio ? l.data_inicio.slice(0, 7) : null;
-        if (dataInicioMonth && dataInicioMonth === mc) {
+        const diMonth = l.data_inicio ? l.data_inicio.slice(0, 7) : null;
+        const dlMonth = l.data_lancamento ? l.data_lancamento.slice(0, 7) : null;
+        if (diMonth && dlMonth && diMonth === dlMonth) {
           recMap[mc].novo++;
           lrMap[mc].novo.push(l);
-        } else if (dataInicioMonth && dataInicioMonth < mc) {
+        } else {
           recMap[mc].recorrencia++;
           lrMap[mc].recorrencia.push(l);
-        } else {
-          recMap[mc].novo++;
-          if (!lrMap[mc]) lrMap[mc] = { novo: [], recorrencia: [] };
-          lrMap[mc].novo.push(l);
         }
       }
     }
