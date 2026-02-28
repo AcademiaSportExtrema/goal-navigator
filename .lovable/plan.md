@@ -1,24 +1,23 @@
 
 
-## Remover Tabela 6 — Detalhamento Mensal por Plano
+## Corrigir valor Wellhub e melhorar formulário de agregadores
 
-### Justificativa
-A Tabela 6 detalha planos mensais individualmente (por nome), mas as Tabelas 1, 2 e 3 já cobrem quantidade, receita e ticket médio por duração. O detalhamento por nome de plano é redundante.
+### Problema
+O valor `18.902` foi salvo como `18.902` (dezoito reais) em vez de `18902` (dezoito mil e novecentos e dois). O parsing `parseFloat(formValor.replace(',', '.'))` não remove pontos de milhar do formato brasileiro.
 
-### Alterações em `src/pages/Relatorios.tsx`
+### Correções em `src/pages/Relatorios.tsx`
 
 | Mudança | Detalhe |
 |---------|---------|
-| Remover bloco da Tabela 6 | Remover todo o JSX do card "Tabela 6 — Detalhamento Mensal por Plano" (~linhas 774-860) |
-| Remover dados associados | Remover variáveis `allMensalPlans`, `mensalPlanByMonth`, `mensalPlanMonths` e sua lógica de cálculo |
-| Sem renumeração | As tabelas 1-5 permanecem como estão |
+| **Corrigir parsing do valor** | Remover pontos de milhar antes de converter: `parseFloat(formValor.replace(/\./g, '').replace(',', '.'))` |
+| **Adicionar listagem dos registros** | Exibir tabela com registros existentes dentro do dialog, com botão de excluir para cada um |
+| **Mutation de exclusão** | Adicionar `useMutation` para deletar registro por `id` da tabela `pagamentos_agregadores` |
 
-### Resultado
-Relatório final com 5 tabelas:
-```text
-Tabela 1 — Quantidade por Duração
-Tabela 2 — Receita por Duração
-Tabela 3 — Ticket Médio por Duração
-Tabela 4 — Recorrência Detalhada (qty)  |  Tabela 5 — Receita Recorrência
+### Dado errado no banco
+O registro com id `7c0b6c2e-...` tem `valor: 18.902`. Será necessário corrigir via migration SQL:
+```sql
+UPDATE pagamentos_agregadores SET valor = 18902 WHERE id = '7c0b6c2e-9c7b-4499-8522-b6b33d8aa960';
 ```
+
+Assim o usuário não precisa excluir e re-inserir manualmente.
 
