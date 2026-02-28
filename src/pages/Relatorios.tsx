@@ -246,7 +246,7 @@ export default function Relatorios() {
     return map;
   }, [entuspassLancamentos]);
 
-  const { durationByMonth, recurrenceByMonth, durationMonths, recurrenceMonths, durationTotals, recurrenceTotals, lancamentosByMonthDuration, lancamentosByMonthRecurrence, durationValByMonth, recurrenceValByMonth, durationValTotals, recurrenceValTotals, mensalPlanByMonth, mensalPlanMonths, allMensalPlans } = useMemo(() => {
+  const { durationByMonth, recurrenceByMonth, durationMonths, recurrenceMonths, durationTotals, recurrenceTotals, lancamentosByMonthDuration, lancamentosByMonthRecurrence, durationValByMonth, recurrenceValByMonth, durationValTotals, recurrenceValTotals } = useMemo(() => {
     const empty = {
       durationByMonth: {} as Record<string, Record<DurationKey, number>>,
       recurrenceByMonth: {} as Record<string, { novo: number; recorrencia: number }>,
@@ -260,9 +260,6 @@ export default function Relatorios() {
       recurrenceValByMonth: {} as Record<string, { novo: number; recorrencia: number }>,
       durationValTotals: emptyDurationRow(),
       recurrenceValTotals: { novo: 0, recorrencia: 0 },
-      mensalPlanByMonth: {} as Record<string, Record<string, { qty: number; val: number }>>,
-      mensalPlanMonths: [] as string[],
-      allMensalPlans: [] as string[],
     };
     if (!lancamentos?.length) return empty;
 
@@ -272,8 +269,6 @@ export default function Relatorios() {
     const lrMap: Record<string, Record<'novo' | 'recorrencia', Lancamento[]>> = {};
     const durValMap: Record<string, Record<DurationKey, number>> = {};
     const recValMap: Record<string, { novo: number; recorrencia: number }> = {};
-    const mensalMap: Record<string, Record<string, { qty: number; val: number }>> = {};
-    const mensalPlanSet = new Set<string>();
 
     for (const l of lancamentos) {
       const mc = l.mes_competencia;
@@ -300,15 +295,6 @@ export default function Relatorios() {
       durMap[durMonth][cat]++;
       durValMap[durMonth][cat] += valor;
       ldMap[durMonth][cat].push(l);
-
-      if (cat === 'mensal') {
-        const planKey = l.plano || 'Sem Plano';
-        if (!mensalMap[durMonth]) mensalMap[durMonth] = {};
-        if (!mensalMap[durMonth][planKey]) mensalMap[durMonth][planKey] = { qty: 0, val: 0 };
-        mensalMap[durMonth][planKey].qty++;
-        mensalMap[durMonth][planKey].val += valor;
-        mensalPlanSet.add(planKey);
-      }
 
       if (isRecorrente(l)) {
         const recMonth = l.data_lancamento?.slice(0, 7) || mc;
@@ -338,8 +324,6 @@ export default function Relatorios() {
 
     const durationMonths = Array.from(allMonthSet).sort();
     const recurrenceMonths = Object.keys(recMap).sort();
-    const mensalPlanMonths = Object.keys(mensalMap).sort();
-    const allMensalPlans = Array.from(mensalPlanSet).sort();
 
     const durationTotals = emptyDurationRow();
     const durationValTotals = emptyDurationRow();
@@ -372,9 +356,6 @@ export default function Relatorios() {
       recurrenceValByMonth: recValMap,
       durationValTotals,
       recurrenceValTotals,
-      mensalPlanByMonth: mensalMap,
-      mensalPlanMonths,
-      allMensalPlans,
     };
   }, [lancamentos, entuspassByMonth, wellhubByMonth, totalpassByMonth]);
 
@@ -771,89 +752,6 @@ export default function Relatorios() {
               </Card>
             </div>
 
-            {/* Tabela 6 — Detalhamento Mensal por Plano */}
-            {allMensalPlans.length > 0 && (
-              <Card className="overflow-hidden">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-muted-foreground" />
-                    <CardTitle className="text-base font-semibold">Tabela 6 — Detalhamento Mensal por Plano</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="font-semibold text-xs whitespace-nowrap">Mês</TableHead>
-                          {allMensalPlans.map(p => (
-                            <TableHead key={p} className="text-center font-semibold text-xs whitespace-nowrap" colSpan={2}>{p}</TableHead>
-                          ))}
-                          <TableHead className="text-center font-semibold text-xs whitespace-nowrap" colSpan={2}>Total</TableHead>
-                        </TableRow>
-                        <TableRow className="bg-muted/30">
-                          <TableHead className="text-xs"></TableHead>
-                          {allMensalPlans.map(p => (
-                            <>
-                              <TableHead key={`${p}-qty`} className="text-center text-xs whitespace-nowrap">Qty</TableHead>
-                              <TableHead key={`${p}-val`} className="text-center text-xs whitespace-nowrap">Valor</TableHead>
-                            </>
-                          ))}
-                          <TableHead className="text-center text-xs whitespace-nowrap">Qty</TableHead>
-                          <TableHead className="text-center text-xs whitespace-nowrap">Valor</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {mensalPlanMonths.map(mc => {
-                          const plans = mensalPlanByMonth[mc] || {};
-                          let totalQty = 0, totalVal = 0;
-                          return (
-                            <TableRow key={mc} className="hover:bg-muted/30">
-                              <TableCell className="font-medium text-xs whitespace-nowrap">{formatMonth(mc)}</TableCell>
-                              {allMensalPlans.map(p => {
-                                const d = plans[p] || { qty: 0, val: 0 };
-                                totalQty += d.qty;
-                                totalVal += d.val;
-                                return (
-                                  <>
-                                    <TableCell key={`${p}-qty`} className="text-center text-xs tabular-nums">{d.qty || '-'}</TableCell>
-                                    <TableCell key={`${p}-val`} className="text-center text-xs tabular-nums">{d.val > 0 ? formatCurrency(d.val) : '-'}</TableCell>
-                                  </>
-                                );
-                              })}
-                              <TableCell className="text-center font-semibold text-xs tabular-nums">{totalQty}</TableCell>
-                              <TableCell className="text-center font-semibold text-xs tabular-nums">{formatCurrency(totalVal)}</TableCell>
-                            </TableRow>
-                          );
-                        })}
-                        <TableRow className="bg-muted/50 font-bold border-t-2">
-                          <TableCell className="text-xs font-bold">Total</TableCell>
-                          {allMensalPlans.map(p => {
-                            let tq = 0, tv = 0;
-                            for (const mc of mensalPlanMonths) {
-                              const d = mensalPlanByMonth[mc]?.[p];
-                              if (d) { tq += d.qty; tv += d.val; }
-                            }
-                            return (
-                              <>
-                                <TableCell key={`${p}-tq`} className="text-center text-xs font-bold tabular-nums">{tq || '-'}</TableCell>
-                                <TableCell key={`${p}-tv`} className="text-center text-xs font-bold tabular-nums">{tv > 0 ? formatCurrency(tv) : '-'}</TableCell>
-                              </>
-                            );
-                          })}
-                          <TableCell className="text-center text-xs font-bold tabular-nums">
-                            {mensalPlanMonths.reduce((s, mc) => s + allMensalPlans.reduce((ss, p) => ss + (mensalPlanByMonth[mc]?.[p]?.qty || 0), 0), 0)}
-                          </TableCell>
-                          <TableCell className="text-center text-xs font-bold tabular-nums">
-                            {formatCurrency(mensalPlanMonths.reduce((s, mc) => s + allMensalPlans.reduce((ss, p) => ss + (mensalPlanByMonth[mc]?.[p]?.val || 0), 0), 0))}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
         )}
       </div>
