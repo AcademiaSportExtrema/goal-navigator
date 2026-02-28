@@ -132,13 +132,26 @@ export default function Relatorios() {
       if (!mc) continue;
 
       // ── Tabela 1: Duração (com separação Recorrente) ──
-      if (!durMap[mc]) {
-        durMap[mc] = emptyDurationRow();
-        ldMap[mc] = { loja: [], mensal: [], recorrente: [], quatro: [], seis: [], doze: [], dezoito: [], outros: [] };
-      }
       const cat = classifyDuration(l);
-      durMap[mc][cat]++;
-      ldMap[mc][cat].push(l);
+
+      // Parcelados: só conta venda original (data_inicio == data_lancamento no mesmo mês)
+      if (['quatro', 'seis', 'doze', 'dezoito'].includes(cat)) {
+        const diM = l.data_inicio?.slice(0, 7);
+        const dlM = l.data_lancamento?.slice(0, 7);
+        if (diM && dlM && diM !== dlM) continue;
+      }
+
+      // Recorrente: indexa pelo mês de processamento (data_lancamento)
+      const durMonth = (cat === 'recorrente')
+        ? (l.data_lancamento?.slice(0, 7) || mc)
+        : mc;
+
+      if (!durMap[durMonth]) {
+        durMap[durMonth] = emptyDurationRow();
+        ldMap[durMonth] = { loja: [], mensal: [], recorrente: [], quatro: [], seis: [], doze: [], dezoito: [], outros: [] };
+      }
+      durMap[durMonth][cat]++;
+      ldMap[durMonth][cat].push(l);
 
       // ── Tabela 2: Recorrência Detalhada (indexada por mês de processamento) ──
       if (isRecorrente(l)) {
