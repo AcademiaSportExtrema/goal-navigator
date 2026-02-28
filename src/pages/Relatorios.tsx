@@ -109,7 +109,7 @@ export default function Relatorios() {
     enabled: !!empresaId,
   });
 
-  const { durationByMonth, recurrenceByMonth, durationMonths, recurrenceMonths, durationTotals, recurrenceTotals, lancamentosByMonthDuration, lancamentosByMonthRecurrence } = useMemo(() => {
+  const { durationByMonth, recurrenceByMonth, durationMonths, recurrenceMonths, durationTotals, recurrenceTotals, lancamentosByMonthDuration, lancamentosByMonthRecurrence, durationValByMonth, recurrenceValByMonth, durationValTotals, recurrenceValTotals } = useMemo(() => {
     const empty = {
       durationByMonth: {} as Record<string, Record<DurationKey, number>>,
       recurrenceByMonth: {} as Record<string, { novo: number; recorrencia: number }>,
@@ -119,6 +119,10 @@ export default function Relatorios() {
       recurrenceTotals: { novo: 0, recorrencia: 0 },
       lancamentosByMonthDuration: {} as Record<string, Record<DurationKey, Lancamento[]>>,
       lancamentosByMonthRecurrence: {} as Record<string, Record<'novo' | 'recorrencia', Lancamento[]>>,
+      durationValByMonth: {} as Record<string, Record<DurationKey, number>>,
+      recurrenceValByMonth: {} as Record<string, { novo: number; recorrencia: number }>,
+      durationValTotals: emptyDurationRow(),
+      recurrenceValTotals: { novo: 0, recorrencia: 0 },
     };
     if (!lancamentos?.length) return empty;
 
@@ -126,13 +130,15 @@ export default function Relatorios() {
     const recMap: Record<string, { novo: number; recorrencia: number }> = {};
     const ldMap: Record<string, Record<DurationKey, Lancamento[]>> = {};
     const lrMap: Record<string, Record<'novo' | 'recorrencia', Lancamento[]>> = {};
+    const durValMap: Record<string, Record<DurationKey, number>> = {};
+    const recValMap: Record<string, { novo: number; recorrencia: number }> = {};
 
     for (const l of lancamentos) {
       const mc = l.mes_competencia;
       if (!mc) continue;
 
-      // ── Tabela 1: Duração (com separação Recorrente) ──
       const cat = classifyDuration(l);
+      const valor = l.valor || 0;
 
       // Parcelados: só conta venda original (data_inicio == data_lancamento no mesmo mês)
       if (['mensal', 'quatro', 'seis', 'doze', 'dezoito'].includes(cat)) {
@@ -149,23 +155,28 @@ export default function Relatorios() {
       if (!durMap[durMonth]) {
         durMap[durMonth] = emptyDurationRow();
         ldMap[durMonth] = { loja: [], mensal: [], recorrente: [], quatro: [], seis: [], doze: [], dezoito: [], outros: [] };
+        durValMap[durMonth] = emptyDurationRow();
       }
       durMap[durMonth][cat]++;
+      durValMap[durMonth][cat] += valor;
       ldMap[durMonth][cat].push(l);
 
-      // ── Tabela 2: Recorrência Detalhada (indexada por mês de processamento) ──
+      // ── Tabela 2: Recorrência Detalhada ──
       if (isRecorrente(l)) {
         const recMonth = l.data_lancamento?.slice(0, 7) || mc;
         if (!recMap[recMonth]) {
           recMap[recMonth] = { novo: 0, recorrencia: 0 };
           lrMap[recMonth] = { novo: [], recorrencia: [] };
+          recValMap[recMonth] = { novo: 0, recorrencia: 0 };
         }
         const diMonth = l.data_inicio ? l.data_inicio.slice(0, 7) : null;
         if (diMonth && diMonth === recMonth) {
           recMap[recMonth].novo++;
+          recValMap[recMonth].novo += valor;
           lrMap[recMonth].novo.push(l);
         } else {
           recMap[recMonth].recorrencia++;
+          recValMap[recMonth].recorrencia += valor;
           lrMap[recMonth].recorrencia.push(l);
         }
       }
@@ -175,16 +186,21 @@ export default function Relatorios() {
     const recurrenceMonths = Object.keys(recMap).sort();
 
     const durationTotals = emptyDurationRow();
+    const durationValTotals = emptyDurationRow();
     for (const m of durationMonths) {
       for (const k of DURATION_COLUMNS) {
         durationTotals[k.key] += durMap[m][k.key];
+        durationValTotals[k.key] += (durValMap[m]?.[k.key] || 0);
       }
     }
 
     const recurrenceTotals = { novo: 0, recorrencia: 0 };
+    const recurrenceValTotals = { novo: 0, recorrencia: 0 };
     for (const m of recurrenceMonths) {
       recurrenceTotals.novo += recMap[m].novo;
       recurrenceTotals.recorrencia += recMap[m].recorrencia;
+      recurrenceValTotals.novo += (recValMap[m]?.novo || 0);
+      recurrenceValTotals.recorrencia += (recValMap[m]?.recorrencia || 0);
     }
 
     return {
@@ -196,6 +212,10 @@ export default function Relatorios() {
       recurrenceTotals,
       lancamentosByMonthDuration: ldMap,
       lancamentosByMonthRecurrence: lrMap,
+      durationValByMonth: durValMap,
+      recurrenceValByMonth: recValMap,
+      durationValTotals,
+      recurrenceValTotals,
     };
   }, [lancamentos]);
 
@@ -220,6 +240,22 @@ export default function Relatorios() {
       ) : '-'}
     </TableCell>
   );
+
+  const ClickableCurrencyCell = ({ value, title, items, className = '' }: { value: number; title: string; items: Lancamento[]; className?: string }) => (
+    <TableCell className={`text-center text-xs tabular-nums ${className}`}>
+      {value > 0 ? (
+        <button
+          onClick={() => openDrillDown(title, items)}
+          className="underline decoration-dotted underline-offset-2 hover:text-primary transition-colors cursor-pointer"
+        >
+          {formatCurrency(value)}
+        </button>
+      ) : '-'}
+    </TableCell>
+  );
+
+  const durValTotal = (row: Record<DurationKey, number>) =>
+    DURATION_COLUMNS.reduce((sum, c) => sum + row[c.key], 0);
 
   return (
     <AppLayout title="Relatórios">
@@ -339,6 +375,109 @@ export default function Relatorios() {
               </Card>
             </div>
 
+            {/* ── Tabelas de Valores ── */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              {/* Tabela 3 - Receita por Duração */}
+              <Card className="xl:col-span-2 overflow-hidden">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-semibold">Receita por Duração</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="font-semibold text-xs whitespace-nowrap">Mês</TableHead>
+                          {DURATION_COLUMNS.map(c => (
+                            <TableHead key={c.key} className="text-center font-semibold text-xs whitespace-nowrap">{c.label}</TableHead>
+                          ))}
+                          <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {durationMonths.map(mc => {
+                          const row = durationValByMonth[mc] || emptyDurationRow();
+                          return (
+                            <TableRow key={mc} className="hover:bg-muted/30">
+                              <TableCell className="font-medium text-xs whitespace-nowrap">{formatMonth(mc)}</TableCell>
+                              {DURATION_COLUMNS.map(c => (
+                                <ClickableCurrencyCell
+                                  key={c.key}
+                                  value={row[c.key]}
+                                  title={`${c.label} — ${formatMonth(mc)}`}
+                                  items={lancamentosByMonthDuration[mc]?.[c.key] || []}
+                                />
+                              ))}
+                              <TableCell className="text-center font-semibold text-xs tabular-nums">{formatCurrency(durValTotal(row))}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                        <TableRow className="bg-muted/50 font-bold border-t-2">
+                          <TableCell className="text-xs font-bold">Total</TableCell>
+                          {DURATION_COLUMNS.map(c => (
+                            <TableCell key={c.key} className="text-center text-xs font-bold tabular-nums">
+                              {durationValTotals[c.key] ? formatCurrency(durationValTotals[c.key]) : '-'}
+                            </TableCell>
+                          ))}
+                          <TableCell className="text-center text-xs font-bold tabular-nums">{formatCurrency(durValTotal(durationValTotals))}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Tabela 4 - Receita Recorrência Detalhada */}
+              <Card className="overflow-hidden">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                    <CardTitle className="text-base font-semibold">Receita Recorrência</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="font-semibold text-xs">Mês</TableHead>
+                          <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Novos</TableHead>
+                          <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Recorrência</TableHead>
+                          <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {recurrenceMonths.map(mc => {
+                          const rec = recurrenceValByMonth[mc] || { novo: 0, recorrencia: 0 };
+                          return (
+                            <TableRow key={mc} className="hover:bg-muted/30">
+                              <TableCell className="font-medium text-xs whitespace-nowrap">{formatMonth(mc)}</TableCell>
+                              <ClickableCurrencyCell
+                                value={rec.novo}
+                                title={`Novos — ${formatMonth(mc)}`}
+                                items={lancamentosByMonthRecurrence[mc]?.novo || []}
+                              />
+                              <ClickableCurrencyCell
+                                value={rec.recorrencia}
+                                title={`Recorrência — ${formatMonth(mc)}`}
+                                items={lancamentosByMonthRecurrence[mc]?.recorrencia || []}
+                              />
+                              <TableCell className="text-center font-semibold text-xs tabular-nums">{formatCurrency(rec.novo + rec.recorrencia)}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                        <TableRow className="bg-muted/50 font-bold border-t-2">
+                          <TableCell className="text-xs font-bold">Total</TableCell>
+                          <TableCell className="text-center text-xs font-bold tabular-nums">{recurrenceValTotals.novo ? formatCurrency(recurrenceValTotals.novo) : '-'}</TableCell>
+                          <TableCell className="text-center text-xs font-bold tabular-nums">{recurrenceValTotals.recorrencia ? formatCurrency(recurrenceValTotals.recorrencia) : '-'}</TableCell>
+                          <TableCell className="text-center text-xs font-bold tabular-nums">{formatCurrency(recurrenceValTotals.novo + recurrenceValTotals.recorrencia)}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )}
       </div>
