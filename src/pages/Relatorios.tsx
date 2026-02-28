@@ -36,6 +36,7 @@ import { exportToCSV } from '@/lib/csv';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { FechamentoCaixaTable } from '@/components/relatorios/FechamentoCaixaTable';
+import { MetaAnualTable } from '@/components/relatorios/MetaAnualTable';
 
 interface Lancamento {
   condicao_pagamento: string | null;
@@ -137,6 +138,7 @@ export default function Relatorios() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+  const [metaAnualAno, setMetaAnualAno] = useState(() => new Date().getFullYear());
 
   // Query 1: lancamentos entra_meta = true (vendas normais)
   const { data: lancamentos, isLoading } = useQuery({
@@ -781,6 +783,22 @@ export default function Relatorios() {
             </div>
             {empresaId && (
               <FechamentoCaixaTable empresaId={empresaId} mes={fechamentoMes} />
+            )}
+
+            {/* ── Meta Anual ── */}
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold text-foreground">Meta Anual</h2>
+              <Input
+                type="number"
+                min={2020}
+                max={2050}
+                value={metaAnualAno}
+                onChange={e => setMetaAnualAno(parseInt(e.target.value, 10) || new Date().getFullYear())}
+                className="w-24"
+              />
+            </div>
+            {empresaId && (
+              <MetaAnualTable empresaId={empresaId} ano={metaAnualAno} />
             )}
 
           </div>
