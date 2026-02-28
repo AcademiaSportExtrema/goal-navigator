@@ -781,9 +781,9 @@ export default function Dashboard() {
                                 <TableRow key={i} className="even:bg-muted/30">
                                   <TableCell className="font-medium">{c.nome}</TableCell>
                                   <TableCell className="text-right text-muted-foreground">
-                                    {c.meta > 0 ? formatCurrencyCompact(c.meta) : '-'}
+                    {c.meta > 0 ? formatCurrency(c.meta) : '-'}
                                   </TableCell>
-                                  <TableCell className="text-right">{formatCurrencyCompact(c.vendido)}</TableCell>
+                                  <TableCell className="text-right">{formatCurrency(c.vendido)}</TableCell>
                                   <TableCell className={`text-right font-medium ${
                                     c.percentual >= 100 ? 'text-success' :
                                     c.percentual >= 80 ? 'text-warning' : ''
@@ -793,7 +793,7 @@ export default function Dashboard() {
                                   <TableCell className={`text-right font-medium ${
                                     c.falta === 0 ? 'text-success' : 'text-destructive'
                                   }`}>
-                                    {c.falta === 0 ? 'Atingida ✓' : formatCurrencyCompact(c.falta)}
+                                    {c.falta === 0 ? 'Atingida ✓' : formatCurrency(c.falta)}
                                   </TableCell>
                                   <TableCell className="text-right">
                                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
@@ -801,7 +801,7 @@ export default function Dashboard() {
                                     </span>
                                   </TableCell>
                                   <TableCell className="text-right text-success">
-                                    {formatCurrencyCompact(c.comissao)}
+                                    {formatCurrency(c.comissao)}
                                   </TableCell>
                                   <TableCell className="text-center">
                                     {c.consultoraId && (
@@ -822,6 +822,25 @@ export default function Dashboard() {
                                 </TableRow>
                               );
                             })}
+                            {/* Linha de totais */}
+                            {(() => {
+                              const totalMeta = dashboardData.consultoras.reduce((s, c) => s + c.meta, 0);
+                              const totalVendido = dashboardData.consultoras.reduce((s, c) => s + c.vendido, 0);
+                              const totalComissao = dashboardData.consultoras.reduce((s, c) => s + c.comissao, 0);
+                              const percGeral = totalMeta > 0 ? (totalVendido / totalMeta) * 100 : 0;
+                              return (
+                                <TableRow className="border-t-2 font-semibold bg-muted/50">
+                                  <TableCell>Total</TableCell>
+                                  <TableCell className="text-right">{formatCurrency(totalMeta)}</TableCell>
+                                  <TableCell className="text-right">{formatCurrency(totalVendido)}</TableCell>
+                                  <TableCell className="text-right">{percGeral.toFixed(0)}%</TableCell>
+                                  <TableCell className="text-right">-</TableCell>
+                                  <TableCell className="text-right">-</TableCell>
+                                  <TableCell className="text-right text-success">{formatCurrency(totalComissao)}</TableCell>
+                                  <TableCell className="text-center">-</TableCell>
+                                </TableRow>
+                              );
+                            })()}
                           </TableBody>
                         </Table>
                       </div>
