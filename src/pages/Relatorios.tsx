@@ -599,7 +599,7 @@ export default function Relatorios() {
                         <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Wellhub</TableHead>
                         <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total Pass</TableHead>
                         <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Entuspass</TableHead>
-                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap bg-primary/10">Média Mensal</TableHead>
+                        
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -629,19 +629,6 @@ export default function Relatorios() {
                             <TableCell className="text-center text-xs tabular-nums">
                               {epQty > 0 ? formatCurrency(epVal / epQty) : '-'}
                             </TableCell>
-                            <TableCell className="text-center text-xs tabular-nums font-semibold bg-primary/5">
-                              {(() => {
-                                let sumVal = 0, sumQtyMonths = 0;
-                                for (const [key, months] of Object.entries(DURATION_MONTHS)) {
-                                  const k = key as DurationKey;
-                                  if (qtyRow[k] > 0) {
-                                    sumVal += valRow[k];
-                                    sumQtyMonths += qtyRow[k] * months;
-                                  }
-                                }
-                                return sumQtyMonths > 0 ? formatCurrency(sumVal / sumQtyMonths) : '-';
-                              })()}
-                            </TableCell>
                           </TableRow>
                         );
                       })}
@@ -655,19 +642,23 @@ export default function Relatorios() {
                         <TableCell className="text-center text-xs font-bold tabular-nums">{wellhubTotalQty > 0 ? formatCurrency(wellhubTotalVal / wellhubTotalQty) : '-'}</TableCell>
                         <TableCell className="text-center text-xs font-bold tabular-nums">{totalpassTotalQty > 0 ? formatCurrency(totalpassTotalVal / totalpassTotalQty) : '-'}</TableCell>
                         <TableCell className="text-center text-xs font-bold tabular-nums">{entuspassTotalQty > 0 ? formatCurrency(entuspassTotalVal / entuspassTotalQty) : '-'}</TableCell>
-                        <TableCell className="text-center text-xs font-bold tabular-nums bg-primary/5">
-                          {(() => {
-                            let sumVal = 0, sumQtyMonths = 0;
-                            for (const [key, months] of Object.entries(DURATION_MONTHS)) {
-                              const k = key as DurationKey;
-                              if (durationTotals[k] > 0) {
-                                sumVal += durationValTotals[k];
-                                sumQtyMonths += durationTotals[k] * months;
-                              }
-                            }
-                            return sumQtyMonths > 0 ? formatCurrency(sumVal / sumQtyMonths) : '-';
-                          })()}
-                        </TableCell>
+                      </TableRow>
+                      <TableRow className="bg-primary/5 border-t-2">
+                        <TableCell className="text-xs font-bold">Valor Mensal</TableCell>
+                        {DURATION_COLUMNS.map(c => {
+                          const months = DURATION_MONTHS[c.key];
+                          const ticket = durationTotals[c.key] > 0
+                            ? durationValTotals[c.key] / durationTotals[c.key]
+                            : 0;
+                          return (
+                            <TableCell key={c.key} className="text-center text-xs font-bold tabular-nums">
+                              {months && ticket > 0 ? formatCurrency(ticket / months) : '-'}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell className="text-center text-xs font-bold">-</TableCell>
+                        <TableCell className="text-center text-xs font-bold">-</TableCell>
+                        <TableCell className="text-center text-xs font-bold">-</TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>
