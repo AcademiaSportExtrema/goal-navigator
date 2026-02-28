@@ -71,7 +71,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 export default function Dashboard() {
-  const { isAdmin, role, consultoraId } = useAuth();
+  const { isAdmin, role, consultoraId, empresaId } = useAuth();
   const isConsultora = role === 'consultora';
   const { isComponenteVisivel } = useDashboardVisibilidade();
   const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
@@ -219,6 +219,62 @@ export default function Dashboard() {
       return (data || []).reduce((acc, l) => acc + (Number(l.valor) || 0), 0);
     },
   });
+
+  // === Queries Gerenciais (admin only) ===
+  const anoSelecionado = Number(mesSelecionado.split('-')[0]);
+  const mesSelecionadoNum = Number(mesSelecionado.split('-')[1]);
+
+  const { data: realizadoGerencial } = useQuery({
+    queryKey: ['dashboard-realizado-gerencial', mesSelecionado, empresaId],
+    enabled: isAdmin && !!empresaId,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_realizado_por_mes', {
+        p_empresa_id: empresaId!,
+        p_ano: anoSelecionado,
+      });
+      if (error) throw error;
+      const mesData = (data || []).find((d: any) => d.mes === mesSelecionadoNum);
+      return mesData ? Number(mesData.total) : 0;
+    },
+  });
+
+  const { data: metaAnual } = useQuery({
+    queryKey: ['dashboard-meta-anual', anoSelecionado, empresaId],
+    enabled: isAdmin && !!empresaId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('meta_anual')
+        .select('*')
+        .eq('ano', anoSelecionado)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      return data;
+    },
+  });
+
+  const { data: metaAnualMeses } = useQuery({
+    queryKey: ['dashboard-meta-anual-meses', metaAnual?.id],
+    enabled: isAdmin && !!metaAnual?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('meta_anual_meses')
+        .select('*')
+        .eq('meta_anual_id', metaAnual!.id);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const metaGerencialMes = useMemo(() => {
+    if (!metaAnual) return 0;
+    const pesoMes = metaAnualMeses?.find((m: any) => m.mes === mesSelecionadoNum);
+    if (pesoMes && Number(pesoMes.peso_percent) > 0) {
+      return Number(metaAnual.meta_total) * (Number(pesoMes.peso_percent) / 100);
+    }
+    return Number(metaAnual.meta_total) / 12;
+  }, [metaAnual, metaAnualMeses, mesSelecionadoNum]);
+
+  const atingimentoGerencial = metaGerencialMes > 0 ? ((realizadoGerencial || 0) / metaGerencialMes) * 100 : 0;
 
   // === Cálculos de metas ===
   const dashboardData = useMemo(() => {
@@ -601,6 +657,58 @@ export default function Dashboard() {
                   <div className="text-2xl font-bold text-success">
                     {formatCurrency(dashboardData.comissaoTotal)}
                   </div>
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        )}
+
+        {/* Visão Gerencial — admin only */}
+        {isAdmin && metaAnual && (
+          <>
+            <SectionTitle>Visão Gerencial</SectionTitle>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card className="border-l-4 border-l-indigo-500 hover:shadow-md transition-all">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Gerencial</CardTitle>
+                  <DollarSign className="h-4 w-4 text-indigo-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {formatCurrency(realizadoGerencial || 0)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Inclui agregadores e Entuspass</p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-l-4 border-l-indigo-400 hover:shadow-md transition-all">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Meta Gerencial</CardTitle>
+                  <Target className="h-4 w-4 text-indigo-400" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {formatCurrency(metaGerencialMes)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Meta anual: {formatCurrency(Number(metaAnual.meta_total))}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-l-4 border-l-indigo-600 hover:shadow-md transition-all">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">% Atingimento Gerencial</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-indigo-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${
+                    atingimentoGerencial >= 100 ? 'text-success' :
+                    atingimentoGerencial >= 80 ? 'text-warning' : ''
+                  }`}>
+                    {atingimentoGerencial.toFixed(1)}%
+                  </div>
+                  <Progress value={Math.min(atingimentoGerencial, 100)} className="mt-2" />
                 </CardContent>
               </Card>
             </div>
