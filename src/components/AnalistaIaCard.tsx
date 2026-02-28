@@ -209,7 +209,7 @@ export function AnalistaIaCard() {
   }
 
   return (
-    <Card>
+    <Card className="border-l-4 border-l-primary bg-primary/5">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <BrainCircuit className="h-5 w-5 text-primary" />
