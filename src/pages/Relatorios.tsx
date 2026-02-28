@@ -234,7 +234,7 @@ export default function Relatorios() {
     const map: Record<string, { qty: number; val: number; items: Lancamento[] }> = {};
     if (!entuspassLancamentos?.length) return map;
     for (const l of entuspassLancamentos) {
-      const mc = l.mes_competencia || l.data_lancamento?.slice(0, 7);
+      const mc = l.data_lancamento?.slice(0, 7);
       if (!mc) continue;
       if (!map[mc]) map[mc] = { qty: 0, val: 0, items: [] };
       map[mc].qty++;
