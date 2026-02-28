@@ -18,7 +18,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { BarChart3, RefreshCw, Layers } from 'lucide-react';
+import { BarChart3, RefreshCw, Layers, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { exportToCSV } from '@/lib/csv';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface Lancamento {
@@ -473,11 +475,33 @@ export default function Relatorios() {
             </Table>
           </div>
           {drillDown && drillDown.items.length > 0 && (
-            <div className="border-t pt-3 text-xs text-muted-foreground flex justify-between">
+            <div className="border-t pt-3 text-xs text-muted-foreground flex items-center justify-between">
               <span>{drillDown.items.length} lançamento(s)</span>
-              <span className="font-semibold text-foreground">
-                Total: {formatCurrency(drillDown.items.reduce((s, i) => s + (i.valor || 0), 0))}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="font-semibold text-foreground">
+                  Total: {formatCurrency(drillDown.items.reduce((s, i) => s + (i.valor || 0), 0))}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => {
+                    const rows = drillDown.items.map(i => ({
+                      'Cliente': i.nome_cliente || '-',
+                      'Produto': i.produto || '-',
+                      'Plano': i.plano || '-',
+                      'Condição Pgto': i.condicao_pagamento || '-',
+                      'Duração': i.duracao ? `${i.duracao} meses` : '-',
+                      'Valor': i.valor ?? 0,
+                      'Data Início': i.data_inicio || '-',
+                    }));
+                    const filename = (drillDown.title || 'exportacao').replace(/[^a-zA-Z0-9À-ú\s-]/g, '').trim().replace(/\s+/g, '_') + '.csv';
+                    exportToCSV(rows, filename);
+                  }}
+                >
+                  <Download className="h-3 w-3" /> Exportar
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
