@@ -1,37 +1,24 @@
 
 
-## Corrigir Tabela 1: Contar todos os recorrentes processados no mês
+## Aplicar regra de "só venda nova" ao plano Mensal na Tabela 1
 
 ### Problema
-A Tabela 1 conta recorrentes por `mes_competencia`, mas deveria contar **todos os recorrentes processados no mês** (independente de `data_inicio`), já que a separação Novo vs Recorrência é feita na Tabela 2.
-
-Para **parcelados** (4, 6, 12, 18 meses): contar apenas vendas novas (`data_inicio` == `data_lancamento` no mesmo mês), pois parcelas processadas não devem aparecer como novas vendas.
+Planos mensais (`duracao=1`) estão sendo contados mesmo quando são parcelas processadas de meses anteriores. Devem seguir a mesma regra dos parcelados: só contar se `data_inicio` e `data_lancamento` estão no mesmo mês.
 
 ### Alteração
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/pages/Relatorios.tsx` | Na Tabela 1 (~linhas 134-141): para itens **recorrentes**, usar `data_lancamento` como mês-chave (igual à Tabela 2). Para **parcelados** (4,6,12,18), pular se `data_inicio` e `data_lancamento` diferem no mês. Loja e mensal continuam iguais. |
+| `src/pages/Relatorios.tsx` | Linha 138: adicionar `'mensal'` à lista de categorias que filtram por venda original |
 
-### Lógica
-
+### Código
 ```typescript
-const cat = classifyDuration(l);
+// Antes (linha 138):
+if (['quatro', 'seis', 'doze', 'dezoito'].includes(cat)) {
 
-// Parcelados: só conta venda original
-if (['quatro','seis','doze','dezoito'].includes(cat)) {
-  const diM = l.data_inicio?.slice(0, 7);
-  const dlM = l.data_lancamento?.slice(0, 7);
-  if (diM && dlM && diM !== dlM) continue;
-}
-
-// Recorrente: indexa pelo mês de processamento
-const durMonth = (cat === 'recorrente')
-  ? (l.data_lancamento?.slice(0, 7) || mc)
-  : mc;
-
-if (!durMap[durMonth]) { /* inicializa */ }
-durMap[durMonth][cat]++;
-ldMap[durMonth][cat].push(l);
+// Depois:
+if (['mensal', 'quatro', 'seis', 'doze', 'dezoito'].includes(cat)) {
 ```
+
+Alteração de uma única linha. Loja e recorrente continuam com regras próprias.
 
