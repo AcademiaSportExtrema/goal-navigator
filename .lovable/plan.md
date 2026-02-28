@@ -1,35 +1,48 @@
 
 
-## Tabela `pagamentos_agregadores` com quantidade de clientes e ticket médio
+## Mudanças no Relatórios
 
-### O que será feito
-Expandir a tabela `pagamentos_agregadores` para incluir o campo `quantidade_clientes`, e calcular o ticket médio automaticamente (valor / quantidade_clientes) na exibição.
+### Resumo
+1. Substituir coluna única "Agregadores" por 3 colunas separadas: **Wellhub**, **Total Pass**, **Entuspass**
+2. Numerar todas as tabelas (Tabela 1, Tabela 2, etc.)
+3. Reorganizar layout: tabelas de quantidade e receita por duração em largura total; recorrência deslocada para baixo
 
-### Alterações
+### Dados do Entuspass
+O Entuspass já existe nos `lancamentos` com `entra_meta=false`. Vou buscar esses dados automaticamente (sem lançamento manual), fazendo uma segunda query sem o filtro `entra_meta` para pegar os planos "ENTUSPASS RECORRENTE" e "SPORT PASS CÂMARA".
 
-| Arquivo | Mudança |
+**Wellhub e Total Pass** continuam vindo da tabela `pagamentos_agregadores` (lançamento manual).
+**Entuspass** vem automaticamente dos `lancamentos` com `entra_meta=false` e plano contendo "ENTUSPASS".
+
+### Novo layout
+
+```text
+┌─────────────────────────────────────────────────────┐
+│ Tabela 1 — Quantidade por Duração (full width)      │
+│ Colunas: Mês | Loja | Mensal | Rec | 4m | 6m |     │
+│          12m | 18m | Outros | Wellhub | TotalPass | │
+│          Entuspass | Total                           │
+├─────────────────────────────────────────────────────┤
+│ Tabela 2 — Receita por Duração (full width)         │
+│ Mesmas colunas, com valores em R$                   │
+├──────────────────────────┬──────────────────────────┤
+│ Tabela 3 — Recorrência   │ Tabela 4 — Receita      │
+│ Detalhada (qty)           │ Recorrência (R$)        │
+├──────────────────────────┴──────────────────────────┤
+│ Tabela 5 — Detalhamento Mensal por Plano            │
+└─────────────────────────────────────────────────────┘
+```
+
+### Alterações em `src/pages/Relatorios.tsx`
+
+| Mudança | Detalhe |
 |---------|---------|
-| Migration SQL | Criar tabela `pagamentos_agregadores` com colunas: `id`, `empresa_id`, `agregador`, `mes_referencia`, `data_recebimento`, `valor`, `quantidade_clientes` (integer), `observacao`, `created_at`. RLS para admin + super_admin |
-| `src/pages/Relatorios.tsx` | Query da tabela agregadores; coluna "Agregadores" nas Tabelas 1 (qty = soma `quantidade_clientes`) e 3 (valor = soma `valor`); exibir ticket médio (valor/clientes) nas tabelas; Tabela 5 detalhamento mensal por plano; formulário de lançamento com campo extra "Qtd Clientes" |
+| Nova query | Buscar lancamentos com `entra_meta=false` e plano ILIKE '%ENTUSPASS%' para popular coluna Entuspass automaticamente |
+| Agregação por agregador | `agregadorByMonth` passa a ter chaves por agregador (wellhub, totalpass) separadamente, vindo de `pagamentos_agregadores` |
+| Agregação Entuspass | Nova agregação dos lancamentos entra_meta=false agrupados por mês, com qty e valor |
+| Tabelas 1 e 2 | Remover coluna "Agregadores" genérica; adicionar 3 colunas: Wellhub, Total Pass, Entuspass |
+| Títulos | Adicionar numeração: "Tabela 1 — Quantidade por Duração", "Tabela 2 — Receita por Duração", etc. |
+| Layout | Tabelas 1 e 2 em full width (sem grid 2/3+1/3); Tabelas 3 e 4 de recorrência ficam abaixo em grid lado a lado |
 
-### Detalhes
-
-1. **Tabela no banco** — `pagamentos_agregadores`:
-   - `quantidade_clientes integer NOT NULL DEFAULT 0` — quantos clientes entraram naquele mês
-   - Ticket médio = `valor / quantidade_clientes` (calculado no front, sem coluna extra)
-   - RLS: admin da empresa (ALL) + super_admin (ALL)
-
-2. **Coluna "Agregadores" nas Tabelas 1 e 3**:
-   - Tabela 1: exibe soma de `quantidade_clientes` por mês
-   - Tabela 3: exibe soma de `valor` por mês + ticket médio entre parênteses
-
-3. **Formulário de lançamento** — Dialog com campos:
-   - Agregador (Wellhub / Total Pass)
-   - Mês referência (YYYY-MM)
-   - Data recebimento
-   - Valor (R$)
-   - Quantidade de clientes
-   - Observação (opcional)
-
-4. **Tabela 5 — Detalhamento Mensal por Plano**: planos com `duracao=1`, venda nova, agrupados por nome do plano, com qty e valor por mês
+### Pergunta pendente
+"SPORT PASS CÂMARA" aparece nos lancamentos com `entra_meta=false`. Isso deve entrar na coluna Entuspass junto, ou deve ser ignorado/ter coluna própria?
 
