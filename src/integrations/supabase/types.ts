@@ -538,6 +538,42 @@ export type Database = {
           },
         ]
       }
+      pagamentos_agregadores: {
+        Row: {
+          agregador: string
+          created_at: string
+          data_recebimento: string | null
+          empresa_id: string
+          id: string
+          mes_referencia: string
+          observacao: string | null
+          quantidade_clientes: number
+          valor: number
+        }
+        Insert: {
+          agregador: string
+          created_at?: string
+          data_recebimento?: string | null
+          empresa_id: string
+          id?: string
+          mes_referencia: string
+          observacao?: string | null
+          quantidade_clientes?: number
+          valor?: number
+        }
+        Update: {
+          agregador?: string
+          created_at?: string
+          data_recebimento?: string | null
+          empresa_id?: string
+          id?: string
+          mes_referencia?: string
+          observacao?: string | null
+          quantidade_clientes?: number
+          valor?: number
+        }
+        Relationships: []
+      }
       permissoes_perfil: {
         Row: {
           created_at: string
