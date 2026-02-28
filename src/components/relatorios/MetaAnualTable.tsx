@@ -119,7 +119,7 @@ export function MetaAnualTable({ empresaId, ano }: Props) {
   const totalPesos = pesos.reduce((s, p) => s + p, 0);
   const totalDistribuido = pesos.reduce((s, p) => s + (metaTotalNum * p / 100), 0);
   const totalRealizado = realizadoPorMes.reduce((s, v) => s + v, 0);
-  const totalDif = totalDistribuido - totalRealizado;
+  const totalDif = totalRealizado - totalDistribuido;
 
   const setPeso = (i: number, val: string) => {
     const n = parseFloat(val) || 0;
@@ -220,7 +220,7 @@ export function MetaAnualTable({ empresaId, ano }: Props) {
               {MESES.map((nome, i) => {
                 const distribuido = metaTotalNum * pesos[i] / 100;
                 const realizado = realizadoPorMes[i];
-                const dif = distribuido - realizado;
+                const dif = realizado - distribuido;
                 return (
                   <TableRow key={i}>
                     <TableCell className="p-1">
