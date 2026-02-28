@@ -1,28 +1,35 @@
 
 
-## Adicionar Tabelas 3 e 4: Valores por Duração e Valores de Recorrência
+## Tabela `pagamentos_agregadores` com quantidade de clientes e ticket médio
 
 ### O que será feito
-Duas novas tabelas espelhando as Tabelas 1 e 2, mas exibindo **soma de valores (R$)** em vez de quantidades.
+Expandir a tabela `pagamentos_agregadores` para incluir o campo `quantidade_clientes`, e calcular o ticket médio automaticamente (valor / quantidade_clientes) na exibição.
 
-### Alteração
+### Alterações
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/pages/Relatorios.tsx` | Adicionar acumuladores de valor no `useMemo` e renderizar 2 novas tabelas |
+| Migration SQL | Criar tabela `pagamentos_agregadores` com colunas: `id`, `empresa_id`, `agregador`, `mes_referencia`, `data_recebimento`, `valor`, `quantidade_clientes` (integer), `observacao`, `created_at`. RLS para admin + super_admin |
+| `src/pages/Relatorios.tsx` | Query da tabela agregadores; coluna "Agregadores" nas Tabelas 1 (qty = soma `quantidade_clientes`) e 3 (valor = soma `valor`); exibir ticket médio (valor/clientes) nas tabelas; Tabela 5 detalhamento mensal por plano; formulário de lançamento com campo extra "Qtd Clientes" |
 
 ### Detalhes
 
-1) **No `useMemo`**, criar mapas paralelos de valores:
-   - `durValMap[month][cat] += valor` (mesma lógica de filtro/mês da Tabela 1)
-   - `recValMap[month].novo += valor` / `recValMap[month].recorrencia += valor` (mesma lógica da Tabela 2)
-   - Totais: `durationValTotals` e `recurrenceValTotals`
+1. **Tabela no banco** — `pagamentos_agregadores`:
+   - `quantidade_clientes integer NOT NULL DEFAULT 0` — quantos clientes entraram naquele mês
+   - Ticket médio = `valor / quantidade_clientes` (calculado no front, sem coluna extra)
+   - RLS: admin da empresa (ALL) + super_admin (ALL)
 
-2) **Tabela 3 — "Receita por Duração"**: mesma estrutura da Tabela 1, mas células exibem `formatCurrency(valor)`. Drill-down reutiliza os mesmos arrays `ldMap`.
+2. **Coluna "Agregadores" nas Tabelas 1 e 3**:
+   - Tabela 1: exibe soma de `quantidade_clientes` por mês
+   - Tabela 3: exibe soma de `valor` por mês + ticket médio entre parênteses
 
-3) **Tabela 4 — "Receita Recorrência Detalhada"**: mesma estrutura da Tabela 2, mas com valores. Drill-down reutiliza `lrMap`.
+3. **Formulário de lançamento** — Dialog com campos:
+   - Agregador (Wellhub / Total Pass)
+   - Mês referência (YYYY-MM)
+   - Data recebimento
+   - Valor (R$)
+   - Quantidade de clientes
+   - Observação (opcional)
 
-4) **Componente `ClickableCurrencyCell`**: similar ao `ClickableCell`, mas formata como moeda.
-
-5) Layout: as 4 tabelas ficam em 2 linhas de grid (`grid-cols-1 xl:grid-cols-3`), mantendo o padrão existente.
+4. **Tabela 5 — Detalhamento Mensal por Plano**: planos com `duracao=1`, venda nova, agrupados por nome do plano, com qty e valor por mês
 
