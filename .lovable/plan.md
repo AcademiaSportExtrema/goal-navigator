@@ -1,14 +1,19 @@
 
 
-## Mover Analista IA para dentro da aba "Vendas Consultoras"
+## Corrigir tabela "Detalhamento por Consultora": valores completos + totalizadores
 
 ### Problema
-O Analista IA está fora das tabs (linhas 942-948), aparecendo após ambas as abas. O usuário quer que fique apenas no final da primeira aba ("Vendas Consultoras"), analisando tanto a meta de vendas das consultoras quanto a gerencial em uma única análise.
+A tabela usa `formatCurrencyCompact` que abrevia valores (ex: "R$ 40 mil" em vez de "R$ 40.000,00"). O usuário quer valores completos e uma linha de totais no rodapé.
 
-### Alteração
+### Alteração em `src/pages/Dashboard.tsx`
 
-**`src/pages/Dashboard.tsx`**:
-- Remover a seção "Inteligência Artificial" de fora das tabs (linhas 942-948)
-- Inserir essa mesma seção no final do `<TabsContent value="consultoras">`, antes do fechamento `</TabsContent>` (após linha 875, antes de 876)
-- Manter o mesmo componente `AnalistaIaCard` — ele já recebe os dados do mês e gera a análise completa que inclui tanto métricas de consultoras quanto gerencial
+**1. Substituir `formatCurrencyCompact` por `formatCurrency` nas colunas da tabela** (linhas 784, 786, 796, 804):
+- Meta: `formatCurrency(c.meta)` 
+- Vendido: `formatCurrency(c.vendido)`
+- Falta: `formatCurrency(c.falta)`
+- Comissão: `formatCurrency(c.comissao)`
+
+**2. Adicionar linha de totais** após o `.map()` (após linha 824, antes de `</TableBody>`):
+- Nova `<TableRow>` com estilo `border-t-2 font-semibold`
+- Colunas: "Total", soma das metas, soma dos vendidos, % médio geral, "-", "-", soma das comissões, "-"
 
