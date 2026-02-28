@@ -37,11 +37,12 @@ interface Lancamento {
 }
 
 // ── Tabela 1: Planos por Duração (campo `duracao`) ──
-type DurationKey = 'loja' | 'mensal' | 'quatro' | 'seis' | 'doze' | 'dezoito' | 'outros';
+type DurationKey = 'loja' | 'mensal' | 'recorrente' | 'quatro' | 'seis' | 'doze' | 'dezoito' | 'outros';
 
 const DURATION_COLUMNS: { key: DurationKey; label: string }[] = [
   { key: 'loja', label: 'Loja' },
   { key: 'mensal', label: 'Mensal' },
+  { key: 'recorrente', label: 'Recorrente' },
   { key: 'quatro', label: '4 meses' },
   { key: 'seis', label: '6 meses' },
   { key: 'doze', label: '12 meses' },
@@ -49,7 +50,13 @@ const DURATION_COLUMNS: { key: DurationKey; label: string }[] = [
   { key: 'outros', label: 'Outros' },
 ];
 
+function isRecorrente(l: Lancamento): boolean {
+  const cp = (l.condicao_pagamento || '').toUpperCase();
+  return cp.includes('RECORRÊNCIA') || cp.includes('RECORRENCIA');
+}
+
 function classifyDuration(l: Lancamento): DurationKey {
+  if (isRecorrente(l)) return 'recorrente';
   const dur = parseInt(l.duracao || '0', 10);
   if (!dur || dur === 0) return 'loja';
   if (dur === 1) return 'mensal';
@@ -61,20 +68,9 @@ function classifyDuration(l: Lancamento): DurationKey {
 }
 
 function emptyDurationRow(): Record<DurationKey, number> {
-  return { loja: 0, mensal: 0, quatro: 0, seis: 0, doze: 0, dezoito: 0, outros: 0 };
+  return { loja: 0, mensal: 0, recorrente: 0, quatro: 0, seis: 0, doze: 0, dezoito: 0, outros: 0 };
 }
 
-// ── Tabela 3: Parcelado vs Recorrência ──
-type PaymentTypeKey = 'parcelado' | 'recorrente_processado';
-
-const PAYMENT_TYPE_COLUMNS: { key: PaymentTypeKey; label: string }[] = [
-  { key: 'parcelado', label: 'Parcelados' },
-  { key: 'recorrente_processado', label: 'Recorrentes' },
-];
-
-function emptyPaymentTypeRow(): Record<PaymentTypeKey, number> {
-  return { parcelado: 0, recorrente_processado: 0 };
-}
 
 function formatMonth(mc: string) {
   const [y, m] = mc.split('-');
@@ -112,46 +108,38 @@ export default function Relatorios() {
     enabled: !!empresaId,
   });
 
-  const { durationByMonth, recurrenceByMonth, paymentTypeByMonth, months, durationTotals, recurrenceTotals, paymentTypeTotals, lancamentosByMonthDuration, lancamentosByMonthRecurrence, lancamentosByMonthPaymentType } = useMemo(() => {
+  const { durationByMonth, recurrenceByMonth, months, durationTotals, recurrenceTotals, lancamentosByMonthDuration, lancamentosByMonthRecurrence } = useMemo(() => {
     const empty = {
       durationByMonth: {} as Record<string, Record<DurationKey, number>>,
       recurrenceByMonth: {} as Record<string, { novo: number; recorrencia: number }>,
-      paymentTypeByMonth: {} as Record<string, Record<PaymentTypeKey, number>>,
       months: [] as string[],
       durationTotals: emptyDurationRow(),
       recurrenceTotals: { novo: 0, recorrencia: 0 },
-      paymentTypeTotals: emptyPaymentTypeRow(),
       lancamentosByMonthDuration: {} as Record<string, Record<DurationKey, Lancamento[]>>,
       lancamentosByMonthRecurrence: {} as Record<string, Record<'novo' | 'recorrencia', Lancamento[]>>,
-      lancamentosByMonthPaymentType: {} as Record<string, Record<PaymentTypeKey, Lancamento[]>>,
     };
     if (!lancamentos?.length) return empty;
 
     const durMap: Record<string, Record<DurationKey, number>> = {};
     const recMap: Record<string, { novo: number; recorrencia: number }> = {};
-    const ptMap: Record<string, Record<PaymentTypeKey, number>> = {};
     const ldMap: Record<string, Record<DurationKey, Lancamento[]>> = {};
     const lrMap: Record<string, Record<'novo' | 'recorrencia', Lancamento[]>> = {};
-    const lpMap: Record<string, Record<PaymentTypeKey, Lancamento[]>> = {};
 
     for (const l of lancamentos) {
       const mc = l.mes_competencia;
       if (!mc) continue;
 
-      // ── Tabela 1: Duração ──
+      // ── Tabela 1: Duração (com separação Recorrente) ──
       if (!durMap[mc]) {
         durMap[mc] = emptyDurationRow();
-        ldMap[mc] = { loja: [], mensal: [], quatro: [], seis: [], doze: [], dezoito: [], outros: [] };
+        ldMap[mc] = { loja: [], mensal: [], recorrente: [], quatro: [], seis: [], doze: [], dezoito: [], outros: [] };
       }
       const cat = classifyDuration(l);
       durMap[mc][cat]++;
       ldMap[mc][cat].push(l);
 
       // ── Tabela 2: Recorrência Detalhada ──
-      const cp = (l.condicao_pagamento || '').toUpperCase();
-      const isRecorrencia = cp.includes('RECORRÊNCIA') || cp.includes('RECORRENCIA');
-
-      if (isRecorrencia) {
+      if (isRecorrente(l)) {
         if (!recMap[mc]) {
           recMap[mc] = { novo: 0, recorrencia: 0 };
           lrMap[mc] = { novo: [], recorrencia: [] };
@@ -167,29 +155,6 @@ export default function Relatorios() {
           recMap[mc].novo++;
           if (!lrMap[mc]) lrMap[mc] = { novo: [], recorrencia: [] };
           lrMap[mc].novo.push(l);
-        }
-      }
-
-      // ── Tabela 3: Parcelado vs Recorrência ──
-      const dur = parseInt(l.duracao || '0', 10);
-      if (dur > 1) {
-        if (!ptMap[mc]) {
-          ptMap[mc] = emptyPaymentTypeRow();
-          lpMap[mc] = { parcelado: [], recorrente_processado: [] };
-        }
-        if (isRecorrencia) {
-          const dataInicioMonth = l.data_inicio ? l.data_inicio.slice(0, 7) : null;
-          if (dataInicioMonth && dataInicioMonth < mc) {
-            ptMap[mc].recorrente_processado++;
-            lpMap[mc].recorrente_processado.push(l);
-          } else {
-            // new recurrences go to parcelado (first month = like a new sale)
-            ptMap[mc].parcelado++;
-            lpMap[mc].parcelado.push(l);
-          }
-        } else {
-          ptMap[mc].parcelado++;
-          lpMap[mc].parcelado.push(l);
         }
       }
     }
@@ -211,25 +176,14 @@ export default function Relatorios() {
       }
     }
 
-    const paymentTypeTotals = emptyPaymentTypeRow();
-    for (const m of sortedMonths) {
-      if (ptMap[m]) {
-        paymentTypeTotals.parcelado += ptMap[m].parcelado;
-        paymentTypeTotals.recorrente_processado += ptMap[m].recorrente_processado;
-      }
-    }
-
     return {
       durationByMonth: durMap,
       recurrenceByMonth: recMap,
-      paymentTypeByMonth: ptMap,
       months: sortedMonths,
       durationTotals,
       recurrenceTotals,
-      paymentTypeTotals,
       lancamentosByMonthDuration: ldMap,
       lancamentosByMonthRecurrence: lrMap,
-      lancamentosByMonthPaymentType: lpMap,
     };
   }, [lancamentos]);
 
@@ -373,62 +327,6 @@ export default function Relatorios() {
               </Card>
             </div>
 
-            {/* Tabela 3 - Parcelado vs Recorrência */}
-            <Card className="overflow-hidden">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-muted-foreground" />
-                  <CardTitle className="text-base font-semibold">Parcelado vs Recorrência</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="font-semibold text-xs">Mês</TableHead>
-                        {PAYMENT_TYPE_COLUMNS.map(c => (
-                          <TableHead key={c.key} className="text-center font-semibold text-xs whitespace-nowrap">{c.label}</TableHead>
-                        ))}
-                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {months.map(mc => {
-                        const pt = paymentTypeByMonth[mc] || emptyPaymentTypeRow();
-                        return (
-                          <TableRow key={mc} className="hover:bg-muted/30">
-                            <TableCell className="font-medium text-xs whitespace-nowrap">{formatMonth(mc)}</TableCell>
-                            {PAYMENT_TYPE_COLUMNS.map(c => (
-                              <ClickableCell
-                                key={c.key}
-                                value={pt[c.key]}
-                                title={`${c.label} — ${formatMonth(mc)}`}
-                                items={lancamentosByMonthPaymentType[mc]?.[c.key] || []}
-                              />
-                            ))}
-                            <TableCell className="text-center font-semibold text-xs tabular-nums">
-                              {pt.parcelado + pt.recorrente_processado || '-'}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                      <TableRow className="bg-muted/50 font-bold border-t-2">
-                        <TableCell className="text-xs font-bold">Total</TableCell>
-                        {PAYMENT_TYPE_COLUMNS.map(c => (
-                          <TableCell key={c.key} className="text-center text-xs font-bold tabular-nums">
-                            {paymentTypeTotals[c.key] || '-'}
-                          </TableCell>
-                        ))}
-                        <TableCell className="text-center text-xs font-bold tabular-nums">
-                          {paymentTypeTotals.parcelado + paymentTypeTotals.recorrente_processado || '-'}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         )}
       </div>
