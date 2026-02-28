@@ -873,6 +873,10 @@ export default function Dashboard() {
                   )}
                 </>
               )}
+
+              {/* Analista IA — no final da aba Vendas Consultoras */}
+              <SectionTitle>Inteligência Artificial</SectionTitle>
+              <AnalistaIaCard />
             </TabsContent>
 
             {/* Aba Meta Gerencial */}
@@ -939,13 +943,6 @@ export default function Dashboard() {
           </Tabs>
         )}
 
-        {/* Analista IA — fora das tabs, visível sempre para admin */}
-        {isAdmin && (
-          <>
-            <SectionTitle>Inteligência Artificial</SectionTitle>
-            <AnalistaIaCard />
-          </>
-        )}
       </div>
       {selectedConsultoraId && (
         <AiCoach
