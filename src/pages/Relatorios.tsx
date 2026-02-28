@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { BarChart3, RefreshCw, Layers, Download, Plus, Trash2 } from 'lucide-react';
+import { BarChart3, RefreshCw, Layers, Download, Plus, Trash2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -134,6 +134,7 @@ export default function Relatorios() {
   const [formValor, setFormValor] = useState('');
   const [formQtdClientes, setFormQtdClientes] = useState('');
   const [formObs, setFormObs] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [fechamentoMes, setFechamentoMes] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -188,10 +189,15 @@ export default function Relatorios() {
     enabled: !!empresaId,
   });
 
+  const resetForm = () => {
+    setFormMesRef(''); setFormDataReceb(''); setFormValor(''); setFormQtdClientes(''); setFormObs('');
+    setEditingId(null);
+  };
+
   const insertAgregador = useMutation({
     mutationFn: async () => {
       if (!empresaId) throw new Error('Sem empresa');
-      const { error } = await supabase.from('pagamentos_agregadores' as any).insert({
+      const payload = {
         empresa_id: empresaId,
         agregador: formAgregador,
         mes_referencia: formMesRef,
@@ -199,14 +205,20 @@ export default function Relatorios() {
         valor: parseFloat(formValor.replace(/\./g, '').replace(',', '.')),
         quantidade_clientes: parseInt(formQtdClientes, 10) || 0,
         observacao: formObs || null,
-      } as any);
-      if (error) throw error;
+      };
+      if (editingId) {
+        const { error } = await supabase.from('pagamentos_agregadores' as any).update(payload as any).eq('id', editingId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('pagamentos_agregadores' as any).insert(payload as any);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      toast.success('Pagamento agregador salvo!');
+      toast.success(editingId ? 'Registro atualizado!' : 'Pagamento agregador salvo!');
       queryClient.invalidateQueries({ queryKey: ['pagamentos-agregadores'] });
       setShowAgregadorForm(false);
-      setFormMesRef(''); setFormDataReceb(''); setFormValor(''); setFormQtdClientes(''); setFormObs('');
+      resetForm();
     },
     onError: (e: any) => toast.error(e.message || 'Erro ao salvar'),
   });
@@ -229,9 +241,10 @@ export default function Relatorios() {
     if (!agregadores?.length) return map;
     for (const a of agregadores) {
       if (a.agregador.toLowerCase().includes('wellhub')) {
-        if (!map[a.mes_referencia]) map[a.mes_referencia] = { qty: 0, val: 0 };
-        map[a.mes_referencia].qty += a.quantidade_clientes;
-        map[a.mes_referencia].val += a.valor;
+        const mesKey = a.data_recebimento ? a.data_recebimento.slice(0, 7) : a.mes_referencia;
+        if (!map[mesKey]) map[mesKey] = { qty: 0, val: 0 };
+        map[mesKey].qty += a.quantidade_clientes;
+        map[mesKey].val += a.valor;
       }
     }
     return map;
@@ -242,9 +255,10 @@ export default function Relatorios() {
     if (!agregadores?.length) return map;
     for (const a of agregadores) {
       if (a.agregador.toLowerCase().includes('total pass')) {
-        if (!map[a.mes_referencia]) map[a.mes_referencia] = { qty: 0, val: 0 };
-        map[a.mes_referencia].qty += a.quantidade_clientes;
-        map[a.mes_referencia].val += a.valor;
+        const mesKey = a.data_recebimento ? a.data_recebimento.slice(0, 7) : a.mes_referencia;
+        if (!map[mesKey]) map[mesKey] = { qty: 0, val: 0 };
+        map[mesKey].qty += a.quantidade_clientes;
+        map[mesKey].val += a.valor;
       }
     }
     return map;
@@ -911,7 +925,23 @@ export default function Relatorios() {
                         <TableCell className="text-xs">{formatMonth(a.mes_referencia)}</TableCell>
                         <TableCell className="text-xs text-right tabular-nums">{formatCurrency(a.valor)}</TableCell>
                         <TableCell className="text-xs text-center">{a.quantidade_clientes}</TableCell>
-                        <TableCell className="text-xs p-1">
+                        <TableCell className="text-xs p-1 flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              setEditingId(a.id);
+                              setFormAgregador(a.agregador);
+                              setFormMesRef(a.mes_referencia);
+                              setFormDataReceb(a.data_recebimento || '');
+                              setFormValor(a.valor.toString().replace('.', ','));
+                              setFormQtdClientes(a.quantidade_clientes.toString());
+                              setFormObs(a.observacao || '');
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -933,7 +963,7 @@ export default function Relatorios() {
 
             {/* Formulário novo registro */}
             <div className="space-y-4 border-t pt-4">
-              <h4 className="text-sm font-semibold text-muted-foreground">Novo registro</h4>
+              <h4 className="text-sm font-semibold text-muted-foreground">{editingId ? 'Editar registro' : 'Novo registro'}</h4>
               <div className="space-y-2">
                 <Label>Agregador</Label>
                 <Select value={formAgregador} onValueChange={setFormAgregador}>
@@ -969,12 +999,15 @@ export default function Relatorios() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAgregadorForm(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => { setShowAgregadorForm(false); resetForm(); }}>Cancelar</Button>
+            {editingId && (
+              <Button variant="outline" onClick={resetForm}>Novo</Button>
+            )}
             <Button
               onClick={() => insertAgregador.mutate()}
               disabled={!formMesRef || !formValor || insertAgregador.isPending}
             >
-              {insertAgregador.isPending ? 'Salvando...' : 'Salvar'}
+              {insertAgregador.isPending ? 'Salvando...' : editingId ? 'Atualizar' : 'Salvar'}
             </Button>
           </DialogFooter>
         </DialogContent>
