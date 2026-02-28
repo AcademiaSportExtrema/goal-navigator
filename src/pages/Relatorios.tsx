@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -17,11 +17,24 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
-import { BarChart3, RefreshCw, Layers, Download } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { BarChart3, RefreshCw, Layers, Download, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { exportToCSV } from '@/lib/csv';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from 'sonner';
 
 interface Lancamento {
   condicao_pagamento: string | null;
@@ -35,6 +48,16 @@ interface Lancamento {
   produto: string | null;
   valor: number | null;
   numero_contrato: string | null;
+}
+
+interface AgregadorRow {
+  id: string;
+  agregador: string;
+  mes_referencia: string;
+  data_recebimento: string | null;
+  valor: number;
+  quantidade_clientes: number;
+  observacao: string | null;
 }
 
 // ── Tabela 1: Planos por Duração (campo `duracao`) ──
@@ -72,7 +95,6 @@ function emptyDurationRow(): Record<DurationKey, number> {
   return { loja: 0, mensal: 0, recorrente: 0, quatro: 0, seis: 0, doze: 0, dezoito: 0, outros: 0 };
 }
 
-
 function formatMonth(mc: string) {
   const [y, m] = mc.split('-');
   const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -92,7 +114,15 @@ interface DrillDownState {
 
 export default function Relatorios() {
   const { empresaId } = useAuth();
+  const queryClient = useQueryClient();
   const [drillDown, setDrillDown] = useState<DrillDownState | null>(null);
+  const [showAgregadorForm, setShowAgregadorForm] = useState(false);
+  const [formAgregador, setFormAgregador] = useState('Wellhub');
+  const [formMesRef, setFormMesRef] = useState('');
+  const [formDataReceb, setFormDataReceb] = useState('');
+  const [formValor, setFormValor] = useState('');
+  const [formQtdClientes, setFormQtdClientes] = useState('');
+  const [formObs, setFormObs] = useState('');
 
   const { data: lancamentos, isLoading } = useQuery({
     queryKey: ['relatorios-lancamentos', empresaId],
@@ -109,7 +139,56 @@ export default function Relatorios() {
     enabled: !!empresaId,
   });
 
-  const { durationByMonth, recurrenceByMonth, durationMonths, recurrenceMonths, durationTotals, recurrenceTotals, lancamentosByMonthDuration, lancamentosByMonthRecurrence, durationValByMonth, recurrenceValByMonth, durationValTotals, recurrenceValTotals } = useMemo(() => {
+  const { data: agregadores } = useQuery({
+    queryKey: ['pagamentos-agregadores', empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase
+        .from('pagamentos_agregadores' as any)
+        .select('*')
+        .eq('empresa_id', empresaId);
+      if (error) throw error;
+      return (data || []) as unknown as AgregadorRow[];
+    },
+    enabled: !!empresaId,
+  });
+
+  const insertAgregador = useMutation({
+    mutationFn: async () => {
+      if (!empresaId) throw new Error('Sem empresa');
+      const { error } = await supabase.from('pagamentos_agregadores' as any).insert({
+        empresa_id: empresaId,
+        agregador: formAgregador,
+        mes_referencia: formMesRef,
+        data_recebimento: formDataReceb || null,
+        valor: parseFloat(formValor.replace(',', '.')),
+        quantidade_clientes: parseInt(formQtdClientes, 10) || 0,
+        observacao: formObs || null,
+      } as any);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Pagamento agregador salvo!');
+      queryClient.invalidateQueries({ queryKey: ['pagamentos-agregadores'] });
+      setShowAgregadorForm(false);
+      setFormMesRef(''); setFormDataReceb(''); setFormValor(''); setFormQtdClientes(''); setFormObs('');
+    },
+    onError: (e: any) => toast.error(e.message || 'Erro ao salvar'),
+  });
+
+  // Aggregate agregadores by mes_referencia
+  const agregadorByMonth = useMemo(() => {
+    const map: Record<string, { qty: number; val: number }> = {};
+    if (!agregadores?.length) return map;
+    for (const a of agregadores) {
+      if (!map[a.mes_referencia]) map[a.mes_referencia] = { qty: 0, val: 0 };
+      map[a.mes_referencia].qty += a.quantidade_clientes;
+      map[a.mes_referencia].val += a.valor;
+    }
+    return map;
+  }, [agregadores]);
+
+  const { durationByMonth, recurrenceByMonth, durationMonths, recurrenceMonths, durationTotals, recurrenceTotals, lancamentosByMonthDuration, lancamentosByMonthRecurrence, durationValByMonth, recurrenceValByMonth, durationValTotals, recurrenceValTotals, mensalPlanByMonth, mensalPlanMonths, allMensalPlans } = useMemo(() => {
     const empty = {
       durationByMonth: {} as Record<string, Record<DurationKey, number>>,
       recurrenceByMonth: {} as Record<string, { novo: number; recorrencia: number }>,
@@ -123,6 +202,9 @@ export default function Relatorios() {
       recurrenceValByMonth: {} as Record<string, { novo: number; recorrencia: number }>,
       durationValTotals: emptyDurationRow(),
       recurrenceValTotals: { novo: 0, recorrencia: 0 },
+      mensalPlanByMonth: {} as Record<string, Record<string, { qty: number; val: number }>>,
+      mensalPlanMonths: [] as string[],
+      allMensalPlans: [] as string[],
     };
     if (!lancamentos?.length) return empty;
 
@@ -132,6 +214,8 @@ export default function Relatorios() {
     const lrMap: Record<string, Record<'novo' | 'recorrencia', Lancamento[]>> = {};
     const durValMap: Record<string, Record<DurationKey, number>> = {};
     const recValMap: Record<string, { novo: number; recorrencia: number }> = {};
+    const mensalMap: Record<string, Record<string, { qty: number; val: number }>> = {};
+    const mensalPlanSet = new Set<string>();
 
     for (const l of lancamentos) {
       const mc = l.mes_competencia;
@@ -161,6 +245,16 @@ export default function Relatorios() {
       durValMap[durMonth][cat] += valor;
       ldMap[durMonth][cat].push(l);
 
+      // ── Tabela 5: Detalhamento Mensal por Plano ──
+      if (cat === 'mensal') {
+        const planKey = l.plano || 'Sem Plano';
+        if (!mensalMap[durMonth]) mensalMap[durMonth] = {};
+        if (!mensalMap[durMonth][planKey]) mensalMap[durMonth][planKey] = { qty: 0, val: 0 };
+        mensalMap[durMonth][planKey].qty++;
+        mensalMap[durMonth][planKey].val += valor;
+        mensalPlanSet.add(planKey);
+      }
+
       // ── Tabela 2: Recorrência Detalhada ──
       if (isRecorrente(l)) {
         const recMonth = l.data_lancamento?.slice(0, 7) || mc;
@@ -184,6 +278,8 @@ export default function Relatorios() {
 
     const durationMonths = Object.keys(durMap).sort();
     const recurrenceMonths = Object.keys(recMap).sort();
+    const mensalPlanMonths = Object.keys(mensalMap).sort();
+    const allMensalPlans = Array.from(mensalPlanSet).sort();
 
     const durationTotals = emptyDurationRow();
     const durationValTotals = emptyDurationRow();
@@ -216,6 +312,9 @@ export default function Relatorios() {
       recurrenceValByMonth: recValMap,
       durationValTotals,
       recurrenceValTotals,
+      mensalPlanByMonth: mensalMap,
+      mensalPlanMonths,
+      allMensalPlans,
     };
   }, [lancamentos]);
 
@@ -257,12 +356,21 @@ export default function Relatorios() {
   const durValTotal = (row: Record<DurationKey, number>) =>
     DURATION_COLUMNS.reduce((sum, c) => sum + row[c.key], 0);
 
+  // Aggregator totals
+  const agregadorTotalQty = Object.values(agregadorByMonth).reduce((s, a) => s + a.qty, 0);
+  const agregadorTotalVal = Object.values(agregadorByMonth).reduce((s, a) => s + a.val, 0);
+
   return (
     <AppLayout title="Relatórios">
       <div className="space-y-6 p-4 md:p-6">
-        <div className="flex items-center gap-3">
-          <BarChart3 className="h-6 w-6 text-muted-foreground" />
-          <h1 className="text-2xl font-bold text-foreground">Relatórios</h1>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <BarChart3 className="h-6 w-6 text-muted-foreground" />
+            <h1 className="text-2xl font-bold text-foreground">Relatórios</h1>
+          </div>
+          <Button size="sm" onClick={() => setShowAgregadorForm(true)} className="gap-1">
+            <Plus className="h-4 w-4" /> Lançar Agregador
+          </Button>
         </div>
 
         {isLoading ? (
@@ -273,7 +381,7 @@ export default function Relatorios() {
         ) : (
           <div className="space-y-6">
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Tabela 1 - Planos por Duração */}
+              {/* Tabela 1 - Planos por Duração + Agregadores */}
               <Card className="xl:col-span-2 overflow-hidden">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base font-semibold">Planos por Duração</CardTitle>
@@ -287,12 +395,14 @@ export default function Relatorios() {
                           {DURATION_COLUMNS.map(c => (
                             <TableHead key={c.key} className="text-center font-semibold text-xs whitespace-nowrap">{c.label}</TableHead>
                           ))}
+                          <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Agregadores</TableHead>
                           <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {durationMonths.map(mc => {
                           const row = durationByMonth[mc];
+                          const agQty = agregadorByMonth[mc]?.qty || 0;
                           return (
                             <TableRow key={mc} className="hover:bg-muted/30">
                               <TableCell className="font-medium text-xs whitespace-nowrap">{formatMonth(mc)}</TableCell>
@@ -304,7 +414,8 @@ export default function Relatorios() {
                                   items={lancamentosByMonthDuration[mc]?.[c.key] || []}
                                 />
                               ))}
-                              <TableCell className="text-center font-semibold text-xs tabular-nums">{durTotal(row)}</TableCell>
+                              <TableCell className="text-center text-xs tabular-nums">{agQty || '-'}</TableCell>
+                              <TableCell className="text-center font-semibold text-xs tabular-nums">{durTotal(row) + agQty}</TableCell>
                             </TableRow>
                           );
                         })}
@@ -315,7 +426,8 @@ export default function Relatorios() {
                               {durationTotals[c.key] || '-'}
                             </TableCell>
                           ))}
-                          <TableCell className="text-center text-xs font-bold tabular-nums">{durTotal(durationTotals)}</TableCell>
+                          <TableCell className="text-center text-xs font-bold tabular-nums">{agregadorTotalQty || '-'}</TableCell>
+                          <TableCell className="text-center text-xs font-bold tabular-nums">{durTotal(durationTotals) + agregadorTotalQty}</TableCell>
                         </TableRow>
                       </TableBody>
                     </Table>
@@ -377,7 +489,7 @@ export default function Relatorios() {
 
             {/* ── Tabelas de Valores ── */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Tabela 3 - Receita por Duração */}
+              {/* Tabela 3 - Receita por Duração + Agregadores */}
               <Card className="xl:col-span-2 overflow-hidden">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base font-semibold">Receita por Duração</CardTitle>
@@ -391,12 +503,17 @@ export default function Relatorios() {
                           {DURATION_COLUMNS.map(c => (
                             <TableHead key={c.key} className="text-center font-semibold text-xs whitespace-nowrap">{c.label}</TableHead>
                           ))}
+                          <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Agregadores</TableHead>
                           <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {durationMonths.map(mc => {
                           const row = durationValByMonth[mc] || emptyDurationRow();
+                          const agData = agregadorByMonth[mc];
+                          const agVal = agData?.val || 0;
+                          const agQty = agData?.qty || 0;
+                          const ticketMedio = agQty > 0 ? agVal / agQty : 0;
                           return (
                             <TableRow key={mc} className="hover:bg-muted/30">
                               <TableCell className="font-medium text-xs whitespace-nowrap">{formatMonth(mc)}</TableCell>
@@ -408,7 +525,12 @@ export default function Relatorios() {
                                   items={lancamentosByMonthDuration[mc]?.[c.key] || []}
                                 />
                               ))}
-                              <TableCell className="text-center font-semibold text-xs tabular-nums">{formatCurrency(durValTotal(row))}</TableCell>
+                              <TableCell className="text-center text-xs tabular-nums">
+                                {agVal > 0 ? (
+                                  <span>{formatCurrency(agVal)}{ticketMedio > 0 && <span className="text-muted-foreground ml-1">({formatCurrency(ticketMedio)})</span>}</span>
+                                ) : '-'}
+                              </TableCell>
+                              <TableCell className="text-center font-semibold text-xs tabular-nums">{formatCurrency(durValTotal(row) + agVal)}</TableCell>
                             </TableRow>
                           );
                         })}
@@ -419,7 +541,12 @@ export default function Relatorios() {
                               {durationValTotals[c.key] ? formatCurrency(durationValTotals[c.key]) : '-'}
                             </TableCell>
                           ))}
-                          <TableCell className="text-center text-xs font-bold tabular-nums">{formatCurrency(durValTotal(durationValTotals))}</TableCell>
+                          <TableCell className="text-center text-xs font-bold tabular-nums">
+                            {agregadorTotalVal > 0 ? (
+                              <span>{formatCurrency(agregadorTotalVal)}{agregadorTotalQty > 0 && <span className="text-muted-foreground ml-1">({formatCurrency(agregadorTotalVal / agregadorTotalQty)})</span>}</span>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell className="text-center text-xs font-bold tabular-nums">{formatCurrency(durValTotal(durationValTotals) + agregadorTotalVal)}</TableCell>
                         </TableRow>
                       </TableBody>
                     </Table>
@@ -478,6 +605,90 @@ export default function Relatorios() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Tabela 5 - Detalhamento Mensal por Plano */}
+            {allMensalPlans.length > 0 && (
+              <Card className="overflow-hidden">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-muted-foreground" />
+                    <CardTitle className="text-base font-semibold">Detalhamento Mensal por Plano</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="font-semibold text-xs whitespace-nowrap">Mês</TableHead>
+                          {allMensalPlans.map(p => (
+                            <TableHead key={p} className="text-center font-semibold text-xs whitespace-nowrap" colSpan={2}>{p}</TableHead>
+                          ))}
+                          <TableHead className="text-center font-semibold text-xs whitespace-nowrap" colSpan={2}>Total</TableHead>
+                        </TableRow>
+                        <TableRow className="bg-muted/30">
+                          <TableHead className="text-xs"></TableHead>
+                          {allMensalPlans.map(p => (
+                            <>
+                              <TableHead key={`${p}-qty`} className="text-center text-xs whitespace-nowrap">Qty</TableHead>
+                              <TableHead key={`${p}-val`} className="text-center text-xs whitespace-nowrap">Valor</TableHead>
+                            </>
+                          ))}
+                          <TableHead className="text-center text-xs whitespace-nowrap">Qty</TableHead>
+                          <TableHead className="text-center text-xs whitespace-nowrap">Valor</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {mensalPlanMonths.map(mc => {
+                          const plans = mensalPlanByMonth[mc] || {};
+                          let totalQty = 0, totalVal = 0;
+                          return (
+                            <TableRow key={mc} className="hover:bg-muted/30">
+                              <TableCell className="font-medium text-xs whitespace-nowrap">{formatMonth(mc)}</TableCell>
+                              {allMensalPlans.map(p => {
+                                const d = plans[p] || { qty: 0, val: 0 };
+                                totalQty += d.qty;
+                                totalVal += d.val;
+                                return (
+                                  <>
+                                    <TableCell key={`${p}-qty`} className="text-center text-xs tabular-nums">{d.qty || '-'}</TableCell>
+                                    <TableCell key={`${p}-val`} className="text-center text-xs tabular-nums">{d.val > 0 ? formatCurrency(d.val) : '-'}</TableCell>
+                                  </>
+                                );
+                              })}
+                              <TableCell className="text-center font-semibold text-xs tabular-nums">{totalQty}</TableCell>
+                              <TableCell className="text-center font-semibold text-xs tabular-nums">{formatCurrency(totalVal)}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                        <TableRow className="bg-muted/50 font-bold border-t-2">
+                          <TableCell className="text-xs font-bold">Total</TableCell>
+                          {allMensalPlans.map(p => {
+                            let tq = 0, tv = 0;
+                            for (const mc of mensalPlanMonths) {
+                              const d = mensalPlanByMonth[mc]?.[p];
+                              if (d) { tq += d.qty; tv += d.val; }
+                            }
+                            return (
+                              <>
+                                <TableCell key={`${p}-tq`} className="text-center text-xs font-bold tabular-nums">{tq || '-'}</TableCell>
+                                <TableCell key={`${p}-tv`} className="text-center text-xs font-bold tabular-nums">{tv > 0 ? formatCurrency(tv) : '-'}</TableCell>
+                              </>
+                            );
+                          })}
+                          <TableCell className="text-center text-xs font-bold tabular-nums">
+                            {mensalPlanMonths.reduce((s, mc) => s + allMensalPlans.reduce((ss, p) => ss + (mensalPlanByMonth[mc]?.[p]?.qty || 0), 0), 0)}
+                          </TableCell>
+                          <TableCell className="text-center text-xs font-bold tabular-nums">
+                            {formatCurrency(mensalPlanMonths.reduce((s, mc) => s + allMensalPlans.reduce((ss, p) => ss + (mensalPlanByMonth[mc]?.[p]?.val || 0), 0), 0))}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
       </div>
@@ -556,6 +767,59 @@ export default function Relatorios() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Formulário Lançar Agregador */}
+      <Dialog open={showAgregadorForm} onOpenChange={setShowAgregadorForm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Lançar Pagamento Agregador</DialogTitle>
+            <DialogDescription>Registre o recebimento mensal do agregador.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Agregador</Label>
+              <Select value={formAgregador} onValueChange={setFormAgregador}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Wellhub">Wellhub</SelectItem>
+                  <SelectItem value="Total Pass">Total Pass</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Mês Referência</Label>
+              <Input type="month" value={formMesRef} onChange={e => setFormMesRef(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Data Recebimento</Label>
+              <Input type="date" value={formDataReceb} onChange={e => setFormDataReceb(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Valor (R$)</Label>
+                <Input placeholder="0,00" value={formValor} onChange={e => setFormValor(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Qtd Clientes</Label>
+                <Input type="number" min="0" placeholder="0" value={formQtdClientes} onChange={e => setFormQtdClientes(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Observação (opcional)</Label>
+              <Textarea value={formObs} onChange={e => setFormObs(e.target.value)} rows={2} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAgregadorForm(false)}>Cancelar</Button>
+            <Button
+              onClick={() => insertAgregador.mutate()}
+              disabled={!formMesRef || !formValor || insertAgregador.isPending}
+            >
+              {insertAgregador.isPending ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AppLayout>
