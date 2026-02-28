@@ -1,26 +1,16 @@
 
 
-## Melhorias Visuais no Dashboard
+## Formatar número do META ANO
 
-### 1. Mover Analista IA para o final
-- Remover `{isAdmin && <AnalistaIaCard />}` da linha 357 (logo após o header)
-- Inserir antes do fechamento do `</div>` principal (antes da linha 765), após todos os gráficos
+O input "META ANO" mostra o valor bruto (ex: `3000000`) sem formatação. Precisa exibir como `3.000.000,00` no formato brasileiro.
 
-### 2. Melhorar diagramação do Analista IA (`AnalistaIaCard.tsx`)
-- Aumentar padding interno do CardContent
-- Adicionar `space-y-4` e margens nos elementos do markdown (headings, parágrafos, listas)
-- Melhorar separação visual entre seções do texto com `leading-relaxed`
-- Adicionar estilo nos componentes de markdown: headings com `mt-6 mb-2`, parágrafos com `mb-3`, listas com `ml-4 space-y-1`
-- Melhorar o header com padding mais generoso
+### Alterações em `src/components/relatorios/MetaAnualTable.tsx`
 
-### 3. Ajustes visuais gerais no Dashboard
-- **Progress bars**: adicionar `h-2 rounded-full` para visual mais polido
-- **Grid de cards resumo**: garantir `items-stretch` para cards de mesma altura
-- **Espaçamento entre seções**: aumentar `space-y-6` para `space-y-8` no container principal para mais respiro
-- **SectionTitle**: adicionar `mb-1` e ícone sutil para mais destaque
-- **Tabela de consultoras**: melhorar header com `text-xs uppercase tracking-wide` para visual mais profissional
+1. **Adicionar função `formatInputBRL`** — formata número para string BRL (ex: `3000000` → `3.000.000,00`)
 
-### Arquivos alterados
-- `src/pages/Dashboard.tsx` — mover AnalistaIaCard + ajustes visuais
-- `src/components/AnalistaIaCard.tsx` — melhorar espaçamento do markdown
+2. **Alterar o `useEffect` (linha 92-98)** — ao carregar do banco, formatar o valor com `formatInputBRL` em vez de `String()`
+
+3. **Alterar o `onChange` do Input META ANO (linha 195)** — permitir apenas dígitos, pontos e vírgula na digitação, mantendo o valor legível
+
+4. **Arquivo**: `src/components/relatorios/MetaAnualTable.tsx`
 
