@@ -64,6 +64,8 @@ interface AgregadorRow {
 // ── Tabela 1: Planos por Duração (campo `duracao`) ──
 type DurationKey = 'loja' | 'mensal' | 'recorrente' | 'quatro' | 'seis' | 'doze' | 'dezoito' | 'outros';
 
+const DURATION_MONTHS: Partial<Record<DurationKey, number>> = { recorrente: 1, quatro: 4, seis: 6, doze: 12, dezoito: 18 };
+
 const DURATION_COLUMNS: { key: DurationKey; label: string }[] = [
   { key: 'loja', label: 'Loja' },
   { key: 'mensal', label: 'Mensal' },
@@ -597,6 +599,7 @@ export default function Relatorios() {
                         <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Wellhub</TableHead>
                         <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total Pass</TableHead>
                         <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Entuspass</TableHead>
+                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap bg-primary/10">Média Mensal</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -626,6 +629,19 @@ export default function Relatorios() {
                             <TableCell className="text-center text-xs tabular-nums">
                               {epQty > 0 ? formatCurrency(epVal / epQty) : '-'}
                             </TableCell>
+                            <TableCell className="text-center text-xs tabular-nums font-semibold bg-primary/5">
+                              {(() => {
+                                let sumVal = 0, sumQtyMonths = 0;
+                                for (const [key, months] of Object.entries(DURATION_MONTHS)) {
+                                  const k = key as DurationKey;
+                                  if (qtyRow[k] > 0) {
+                                    sumVal += valRow[k];
+                                    sumQtyMonths += qtyRow[k] * months;
+                                  }
+                                }
+                                return sumQtyMonths > 0 ? formatCurrency(sumVal / sumQtyMonths) : '-';
+                              })()}
+                            </TableCell>
                           </TableRow>
                         );
                       })}
@@ -639,6 +655,19 @@ export default function Relatorios() {
                         <TableCell className="text-center text-xs font-bold tabular-nums">{wellhubTotalQty > 0 ? formatCurrency(wellhubTotalVal / wellhubTotalQty) : '-'}</TableCell>
                         <TableCell className="text-center text-xs font-bold tabular-nums">{totalpassTotalQty > 0 ? formatCurrency(totalpassTotalVal / totalpassTotalQty) : '-'}</TableCell>
                         <TableCell className="text-center text-xs font-bold tabular-nums">{entuspassTotalQty > 0 ? formatCurrency(entuspassTotalVal / entuspassTotalQty) : '-'}</TableCell>
+                        <TableCell className="text-center text-xs font-bold tabular-nums bg-primary/5">
+                          {(() => {
+                            let sumVal = 0, sumQtyMonths = 0;
+                            for (const [key, months] of Object.entries(DURATION_MONTHS)) {
+                              const k = key as DurationKey;
+                              if (durationTotals[k] > 0) {
+                                sumVal += durationValTotals[k];
+                                sumQtyMonths += durationTotals[k] * months;
+                              }
+                            }
+                            return sumQtyMonths > 0 ? formatCurrency(sumVal / sumQtyMonths) : '-';
+                          })()}
+                        </TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>
