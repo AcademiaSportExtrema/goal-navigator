@@ -109,11 +109,12 @@ export default function Relatorios() {
     enabled: !!empresaId,
   });
 
-  const { durationByMonth, recurrenceByMonth, months, durationTotals, recurrenceTotals, lancamentosByMonthDuration, lancamentosByMonthRecurrence } = useMemo(() => {
+  const { durationByMonth, recurrenceByMonth, durationMonths, recurrenceMonths, durationTotals, recurrenceTotals, lancamentosByMonthDuration, lancamentosByMonthRecurrence } = useMemo(() => {
     const empty = {
       durationByMonth: {} as Record<string, Record<DurationKey, number>>,
       recurrenceByMonth: {} as Record<string, { novo: number; recorrencia: number }>,
-      months: [] as string[],
+      durationMonths: [] as string[],
+      recurrenceMonths: [] as string[],
       durationTotals: emptyDurationRow(),
       recurrenceTotals: { novo: 0, recorrencia: 0 },
       lancamentosByMonthDuration: {} as Record<string, Record<DurationKey, Lancamento[]>>,
@@ -139,45 +140,45 @@ export default function Relatorios() {
       durMap[mc][cat]++;
       ldMap[mc][cat].push(l);
 
-      // ── Tabela 2: Recorrência Detalhada ──
+      // ── Tabela 2: Recorrência Detalhada (indexada por mês de processamento) ──
       if (isRecorrente(l)) {
-        if (!recMap[mc]) {
-          recMap[mc] = { novo: 0, recorrencia: 0 };
-          lrMap[mc] = { novo: [], recorrencia: [] };
+        const recMonth = l.data_lancamento?.slice(0, 7) || mc;
+        if (!recMap[recMonth]) {
+          recMap[recMonth] = { novo: 0, recorrencia: 0 };
+          lrMap[recMonth] = { novo: [], recorrencia: [] };
         }
         const diMonth = l.data_inicio ? l.data_inicio.slice(0, 7) : null;
-        const dlMonth = l.data_lancamento ? l.data_lancamento.slice(0, 7) : null;
-        if (diMonth && dlMonth && diMonth === dlMonth) {
-          recMap[mc].novo++;
-          lrMap[mc].novo.push(l);
+        if (diMonth && diMonth === recMonth) {
+          recMap[recMonth].novo++;
+          lrMap[recMonth].novo.push(l);
         } else {
-          recMap[mc].recorrencia++;
-          lrMap[mc].recorrencia.push(l);
+          recMap[recMonth].recorrencia++;
+          lrMap[recMonth].recorrencia.push(l);
         }
       }
     }
 
-    const sortedMonths = Object.keys(durMap).sort();
+    const durationMonths = Object.keys(durMap).sort();
+    const recurrenceMonths = Object.keys(recMap).sort();
 
     const durationTotals = emptyDurationRow();
-    for (const m of sortedMonths) {
+    for (const m of durationMonths) {
       for (const k of DURATION_COLUMNS) {
         durationTotals[k.key] += durMap[m][k.key];
       }
     }
 
     const recurrenceTotals = { novo: 0, recorrencia: 0 };
-    for (const m of sortedMonths) {
-      if (recMap[m]) {
-        recurrenceTotals.novo += recMap[m].novo;
-        recurrenceTotals.recorrencia += recMap[m].recorrencia;
-      }
+    for (const m of recurrenceMonths) {
+      recurrenceTotals.novo += recMap[m].novo;
+      recurrenceTotals.recorrencia += recMap[m].recorrencia;
     }
 
     return {
       durationByMonth: durMap,
       recurrenceByMonth: recMap,
-      months: sortedMonths,
+      durationMonths,
+      recurrenceMonths,
       durationTotals,
       recurrenceTotals,
       lancamentosByMonthDuration: ldMap,
@@ -241,7 +242,7 @@ export default function Relatorios() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {months.map(mc => {
+                        {durationMonths.map(mc => {
                           const row = durationByMonth[mc];
                           return (
                             <TableRow key={mc} className="hover:bg-muted/30">
@@ -293,7 +294,7 @@ export default function Relatorios() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {months.map(mc => {
+                        {recurrenceMonths.map(mc => {
                           const rec = recurrenceByMonth[mc] || { novo: 0, recorrencia: 0 };
                           return (
                             <TableRow key={mc} className="hover:bg-muted/30">
@@ -346,6 +347,7 @@ export default function Relatorios() {
                   <TableHead className="text-xs font-semibold">Duração</TableHead>
                   <TableHead className="text-xs font-semibold text-right">Valor</TableHead>
                   <TableHead className="text-xs font-semibold">Data Início</TableHead>
+                  <TableHead className="text-xs font-semibold">Data Lançamento</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -358,11 +360,12 @@ export default function Relatorios() {
                     <TableCell className="text-xs">{item.duracao ? `${item.duracao} meses` : '-'}</TableCell>
                     <TableCell className="text-xs text-right tabular-nums">{formatCurrency(item.valor)}</TableCell>
                     <TableCell className="text-xs">{item.data_inicio || '-'}</TableCell>
+                    <TableCell className="text-xs">{item.data_lancamento || '-'}</TableCell>
                   </TableRow>
                 ))}
                 {(!drillDown?.items.length) && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-8">
+                    <TableCell colSpan={8} className="text-center text-xs text-muted-foreground py-8">
                       Nenhum lançamento encontrado
                     </TableCell>
                   </TableRow>
@@ -390,6 +393,7 @@ export default function Relatorios() {
                       'Duração': i.duracao ? `${i.duracao} meses` : '-',
                       'Valor': i.valor ?? 0,
                       'Data Início': i.data_inicio || '-',
+                      'Data Lançamento': i.data_lancamento || '-',
                     }));
                     const filename = (drillDown.title || 'exportacao').replace(/[^a-zA-Z0-9À-ú\s-]/g, '').trim().replace(/\s+/g, '_') + '.csv';
                     exportToCSV(rows, filename);
