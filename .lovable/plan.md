@@ -1,24 +1,53 @@
 
 
-## Problema: emails duplicados por usuário
+## Relatório de Planos por Duração e Recorrência
 
-### Causa raiz
+### Dados disponíveis
 
-Existem **dois caminhos** que disparam o `send-analise-email`:
+Confirmei que o banco de dados já possui todas as informações necessárias na tabela `lancamentos`:
+- `condicao_pagamento`: identifica o tipo de plano (A VISTA = mensal, EM 6 VEZES, EM 12 VEZES, Em 18 vezes, RECORRÊNCIA, etc.)
+- `data_inicio`: data de início do contrato
+- `data_lancamento`: data do processamento/faturamento
+- `mes_competencia`: mês de referência
+- `forma_pagamento`: identifica PIX, cartão, etc.
 
-1. **Auto-send no backend** (`supabase/functions/ai-analista/index.ts`, linhas 267-288): após salvar a análise, a edge function chama internamente `send-analise-email` com `_internal: true`
-2. **Re-trigger no frontend** (`src/components/AnalistaIaCard.tsx`): o `useEffect` (linha 164) verifica se já existe análise do dia. Se o componente remontar (navegação, re-render), o `autoTriggered.current` reseta e `fetchAnalise()` é chamado novamente → gera nova análise → auto-send dispara de novo
+A lógica de recorrência funciona assim:
+- Se `data_inicio` está no mesmo mês que `mes_competencia` → plano recorrente **novo**
+- Se `data_inicio` é de mês anterior → **parcela de recorrência** processada no mês
 
-O componente usa um `useRef(false)` para evitar chamadas duplicadas, mas refs resetam quando o componente desmonta e remonta (ex: trocar de aba e voltar, re-render do layout).
+### Onde colocar
 
-### Solução
+Criar uma nova página **Relatórios** (`/relatorios`) acessível a admins, com link no sidebar. O Dashboard já está carregado de informações; uma página dedicada permite carregar dados de múltiplos meses sem pesar o Dashboard.
 
-Remover o auto-send de dentro do `ai-analista` e manter apenas o envio manual pelo botão de email no frontend. Isso elimina o disparo automático e dá controle ao gestor.
-
-Adicionalmente, adicionar uma trava de deduplicação no `send-analise-email` para evitar envios repetidos da mesma análise em janela curta (ex: verificar se já enviou email para essa `empresa_id` + `mes_referencia` nos últimos 5 minutos).
+### Alterações
 
 | Arquivo | Mudança |
 |---------|---------|
-| `supabase/functions/ai-analista/index.ts` | Remover bloco de auto-send (linhas 267-288) |
-| `supabase/functions/send-analise-email/index.ts` | Adicionar dedup: verificar `analise.created_at` e armazenar último envio para evitar duplicatas |
+| `src/pages/Relatorios.tsx` | Nova página com duas tabelas: (1) Vendas por duração/mês e (2) Recorrente novo vs recorrência processada |
+| `src/components/layout/AppSidebar.tsx` | Adicionar link "Relatórios" no menu para admins |
+| `src/App.tsx` | Adicionar rota `/relatorios` com ProtectedRoute admin |
+
+### Estrutura da página
+
+**Tabela 1 – Planos por Duração** (igual à imagem, lado esquerdo):
+- Linhas: meses disponíveis
+- Colunas: recorrente, entuspass, mensal, pix, tres, quatro, seis, doze, dezoito, total mês
+- Classificação baseada em `condicao_pagamento`:
+  - `RECORRÊNCIA` → recorrente
+  - `A VISTA` → mensal
+  - `NULL` com `forma_pagamento ILIKE '%PIX%'` → pix
+  - `EM 3` → tres, `EM 4` → quatro, `EM 6` → seis, `EM 12 VEZES` (sem recorrência) → doze, `Em 18` → dezoito
+  - Planos com "ENTUSPASS" no nome → entuspass
+- Linha de totais no rodapé
+
+**Tabela 2 – Recorrência Detalhada** (lado direito da imagem):
+- Linhas: meses disponíveis  
+- Colunas: mês, recorrente (novos vendidos no mês), plano (parcelas de recorrências de meses anteriores), total planos
+- Lógica: para lançamentos com `condicao_pagamento ILIKE '%RECORRÊNCIA%'`:
+  - `to_char(data_inicio, 'YYYY-MM') = mes_competencia` → novo
+  - `to_char(data_inicio, 'YYYY-MM') < mes_competencia` → recorrência anterior
+
+### Query
+
+Uma única query busca todos os lançamentos com `entra_meta = true`, agrupando client-side por `mes_competencia` para montar as duas tabelas. Usaremos `useMemo` para classificar e computar os totais.
 
