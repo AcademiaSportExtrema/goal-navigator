@@ -35,6 +35,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { exportToCSV } from '@/lib/csv';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import { FechamentoCaixaTable } from '@/components/relatorios/FechamentoCaixaTable';
 
 interface Lancamento {
   condicao_pagamento: string | null;
@@ -132,6 +133,10 @@ export default function Relatorios() {
   const [formValor, setFormValor] = useState('');
   const [formQtdClientes, setFormQtdClientes] = useState('');
   const [formObs, setFormObs] = useState('');
+  const [fechamentoMes, setFechamentoMes] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
 
   // Query 1: lancamentos entra_meta = true (vendas normais)
   const { data: lancamentos, isLoading } = useQuery({
@@ -763,6 +768,20 @@ export default function Relatorios() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* ── Tabela 6 — Fechamento de Caixa ── */}
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold text-foreground">Fechamento de Caixa</h2>
+              <Input
+                type="month"
+                value={fechamentoMes}
+                onChange={e => setFechamentoMes(e.target.value)}
+                className="w-44"
+              />
+            </div>
+            {empresaId && (
+              <FechamentoCaixaTable empresaId={empresaId} mes={fechamentoMes} />
+            )}
 
           </div>
         )}
