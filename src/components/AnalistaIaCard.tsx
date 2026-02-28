@@ -210,7 +210,7 @@ export function AnalistaIaCard() {
 
   return (
     <Card className="border-l-4 border-l-primary bg-primary/5">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 px-6 py-5 pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <BrainCircuit className="h-5 w-5 text-primary" />
           Analista IA — Relatório do Mês
@@ -240,10 +240,10 @@ export function AnalistaIaCard() {
           </div>
         )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-6 pb-6">
         {loading && !text ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-muted-foreground text-sm mb-3">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-muted-foreground text-sm mb-4">
               <Loader2 className="h-4 w-4 animate-spin" />
               Analisando dados da empresa...
             </div>
@@ -252,7 +252,7 @@ export function AnalistaIaCard() {
             <Skeleton className="h-4 w-4/6" />
           </div>
         ) : text ? (
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+          <div className="prose prose-sm dark:prose-invert max-w-none space-y-4 leading-relaxed prose-headings:mt-6 prose-headings:mb-2 prose-p:mb-3 prose-li:my-1 prose-ul:ml-4 prose-ol:ml-4 prose-ul:space-y-1 prose-ol:space-y-1">
             {(() => {
               const parsed = parseRankingTable(text);
               if (parsed) {

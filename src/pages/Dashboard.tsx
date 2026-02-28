@@ -61,7 +61,7 @@ const nivelBadgeClass: Record<string, string> = {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3 pt-2">
+    <div className="flex items-center gap-3 pt-2 mb-1">
       <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground whitespace-nowrap">
         {children}
       </span>
@@ -331,7 +331,7 @@ export default function Dashboard() {
 
   return (
     <AppLayout title="Dashboard">
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Header do mês — redesenhado */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div>
@@ -352,9 +352,6 @@ export default function Dashboard() {
             </SelectContent>
           </Select>
         </div>
-
-        {/* Analista IA para admins */}
-        {isAdmin && <AnalistaIaCard />}
 
         {/* Cards resumo rápido — com bordas coloridas */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
@@ -652,14 +649,14 @@ export default function Dashboard() {
                   <Table className="table-dense">
                     <TableHeader>
                       <TableRow className="bg-muted/50">
-                        <TableHead>Consultora</TableHead>
-                        <TableHead className="text-right">Meta</TableHead>
-                        <TableHead className="text-right">Vendido</TableHead>
-                        <TableHead className="text-right">%</TableHead>
-                        <TableHead className="text-right">Falta</TableHead>
-                        <TableHead className="text-right">Nível</TableHead>
-                        <TableHead className="text-right">Comissão</TableHead>
-                        <TableHead className="text-center w-12">Coach</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wide">Consultora</TableHead>
+                        <TableHead className="text-right text-xs uppercase tracking-wide">Meta</TableHead>
+                        <TableHead className="text-right text-xs uppercase tracking-wide">Vendido</TableHead>
+                        <TableHead className="text-right text-xs uppercase tracking-wide">%</TableHead>
+                        <TableHead className="text-right text-xs uppercase tracking-wide">Falta</TableHead>
+                        <TableHead className="text-right text-xs uppercase tracking-wide">Nível</TableHead>
+                        <TableHead className="text-right text-xs uppercase tracking-wide">Comissão</TableHead>
+                        <TableHead className="text-center w-12 text-xs uppercase tracking-wide">Coach</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -760,6 +757,14 @@ export default function Dashboard() {
               ticketMedio={salesMetrics.ticketMedioGlobal}
             />
             )}
+          </>
+        )}
+
+        {/* Analista IA — no final do dashboard */}
+        {isAdmin && (
+          <>
+            <SectionTitle>Inteligência Artificial</SectionTitle>
+            <AnalistaIaCard />
           </>
         )}
       </div>
