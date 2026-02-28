@@ -1,39 +1,27 @@
 
 
-## Problema: Limite de 1000 linhas no Supabase
+## Histórico de Comissões por Consultora
 
-A consulta que busca os lançamentos para calcular o "Realizado" na Meta Anual está limitada a 1000 registros (limite padrão do Supabase). O banco tem **1160 registros** com `entra_meta = true` em 2026, então ~160 registros são silenciosamente ignorados, resultando em valores incorretos.
+### Problema
+A página "Visão Consultora" está travada no mês atual (`mesAtual = format(new Date(), 'yyyy-MM')`). Admins precisam consultar meses anteriores para ver comissões históricas.
 
-- Receita real de Fevereiro no banco: **R$ 211.912,45**
-- Receita mostrada na tela: **R$ 211.605,55** (faltando dados)
+### Solução
+Adicionar um seletor de mês na página **Visão Consultora** (apenas para admins), reutilizando a mesma lógica de meses do Dashboard (12 meses retroativos). 
 
-### Solução: Criar função RPC para agregar no banco
+### Alterações em `src/pages/VisaoConsultora.tsx`
 
-**1. Migração SQL** — criar função `get_realizado_por_mes`
+1. **Substituir `mesAtual` fixo por estado `mesSelecionado`** com valor inicial do mês corrente
+2. **Gerar lista de meses** (12 meses) igual ao Dashboard admin
+3. **Adicionar Select de mês** ao lado do seletor de consultora no card de seleção
+4. **Substituir todas as referências** de `mesAtual` por `mesSelecionado` nas queries e exibição
 
-```sql
-CREATE OR REPLACE FUNCTION get_realizado_por_mes(p_empresa_id uuid, p_ano integer)
-RETURNS TABLE(mes integer, total numeric)
-LANGUAGE sql SECURITY DEFINER SET search_path = ''
-AS $$
-  SELECT 
-    extract(month from data_lancamento::date)::integer as mes,
-    coalesce(sum(valor), 0) as total
-  FROM public.lancamentos
-  WHERE empresa_id = p_empresa_id
-    AND entra_meta = true
-    AND data_lancamento >= (p_ano || '-01-01')::date
-    AND data_lancamento <= (p_ano || '-12-31')::date
-  GROUP BY mes
-  ORDER BY mes;
-$$;
+A estrutura do seletor ficará:
+
+```text
+┌──────────────────────────────────────────────┐
+│ 👁 [Selecione uma consultora ▼]  [Mês ▼]    │
+└──────────────────────────────────────────────┘
 ```
 
-**2. Alterar `MetaAnualTable.tsx`** — substituir a query de lançamentos pela chamada RPC
-
-- Remover a query que busca lançamentos individuais (linhas 67-83)
-- Substituir por `supabase.rpc('get_realizado_por_mes', { p_empresa_id, p_ano })`
-- Ajustar o `useMemo` de `realizadoPorMes` para mapear o resultado da RPC diretamente
-
-Isso garante que **todos** os registros sejam somados no servidor, sem limite de linhas.
+Nenhuma alteração de banco de dados necessária.
 
