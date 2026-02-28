@@ -1,40 +1,46 @@
 
 
-## Tabela 3 — Adicionar coluna "Média Mensal"
+## Correção: Trocar coluna "Média Mensal" por linha "Valor Mensal"
 
-### O que será feito
-Adicionar uma coluna **"Média Mensal"** na Tabela 3 (Ticket Médio por Duração) que calcula o valor mensal equivalente dividindo o ticket médio pela duração em meses.
-
-### Lógica
-- Para cada coluna com duração conhecida, dividir o ticket médio pelo número de meses:
-  - `recorrente` → ticket / 1 (já é mensal, mas incluir para consistência)
+### O que muda
+- **Remover** a coluna "Média Mensal" (header + células de dados + total)
+- **Adicionar uma linha extra** abaixo da linha Total chamada "Valor Mensal" que mostra, para cada coluna de duração, o ticket médio dividido pela duração em meses
+- Cálculo simples: para cada coluna, `ticket_médio_total / meses_duração`
+  - `recorrente` → ticket / 1
   - `quatro` → ticket / 4
   - `seis` → ticket / 6
   - `doze` → ticket / 12
   - `dezoito` → ticket / 18
-- **Excluir** do cálculo: `loja`, `mensal`, `entuspass` (não fazem sentido como média mensal)
-- `outros` → excluir também, pois não temos duração fixa
+- Colunas sem duração (`loja`, `mensal`, `outros`) e agregadores (`Wellhub`, `Total Pass`, `Entuspass`) mostram "-"
 
-### Implementação em `src/pages/Relatorios.tsx`
+### Alterações em `src/pages/Relatorios.tsx`
 
-| Mudança | Detalhe |
-|---------|---------|
-| Mapa de divisores | `const DURATION_MONTHS: Partial<Record<DurationKey, number>> = { recorrente: 1, quatro: 4, seis: 6, doze: 12, dezoito: 18 }` |
-| Nova coluna no header | Adicionar `<TableHead>Média Mensal</TableHead>` após Entuspass |
-| Cálculo por linha | Para cada mês, somar todos os valores das durações aplicáveis, somar todas as quantidades × respectivos meses, e calcular a média ponderada mensal |
-| Linha Total | Mesmo cálculo sobre os totais globais |
+| Mudança | Linhas |
+|---------|--------|
+| Remover `<TableHead>Média Mensal</TableHead>` | ~602 |
+| Remover `<TableCell>` da média mensal nas linhas de dados | ~632-644 |
+| Remover `<TableCell>` da média mensal na linha Total | ~658-670 |
+| Adicionar nova `<TableRow>` "Valor Mensal" após a linha Total | Após ~671 |
 
-O cálculo da média mensal ponderada por linha será:
+A nova linha usará os totais globais (`durationValTotals` / `durationTotals`) divididos pela duração:
+
 ```typescript
-// soma dos (valor de cada coluna) / soma dos (qty × meses de cada coluna)
-// Ou seja: quanto cada plano custa por mês, ponderado pela quantidade vendida
-let sumVal = 0, sumQtyMonths = 0;
-for (const [key, months] of Object.entries(DURATION_MONTHS)) {
-  if (qtyRow[key] > 0) {
-    sumVal += valRow[key];
-    sumQtyMonths += qtyRow[key] * months;
-  }
-}
-const mediaMensal = sumQtyMonths > 0 ? sumVal / sumQtyMonths : null;
+<TableRow className="bg-primary/5 border-t-2">
+  <TableCell className="text-xs font-bold">Valor Mensal</TableCell>
+  {DURATION_COLUMNS.map(c => {
+    const months = DURATION_MONTHS[c.key];
+    const ticket = durationTotals[c.key] > 0 
+      ? durationValTotals[c.key] / durationTotals[c.key] 
+      : 0;
+    return (
+      <TableCell key={c.key} className="text-center text-xs font-bold tabular-nums">
+        {months && ticket > 0 ? formatCurrency(ticket / months) : '-'}
+      </TableCell>
+    );
+  })}
+  <TableCell>-</TableCell> {/* Wellhub */}
+  <TableCell>-</TableCell> {/* Total Pass */}
+  <TableCell>-</TableCell> {/* Entuspass */}
+</TableRow>
 ```
 
