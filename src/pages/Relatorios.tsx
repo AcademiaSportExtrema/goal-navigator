@@ -580,14 +580,80 @@ export default function Relatorios() {
               </CardContent>
             </Card>
 
-            {/* ── Tabelas 3 e 4 — Recorrência (lado a lado) ── */}
+            {/* ── Tabela 3 — Ticket Médio por Duração (full width) ── */}
+            <Card className="overflow-hidden">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold">Tabela 3 — Ticket Médio por Duração</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="font-semibold text-xs whitespace-nowrap">Mês</TableHead>
+                        {DURATION_COLUMNS.map(c => (
+                          <TableHead key={c.key} className="text-center font-semibold text-xs whitespace-nowrap">{c.label}</TableHead>
+                        ))}
+                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Wellhub</TableHead>
+                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Total Pass</TableHead>
+                        <TableHead className="text-center font-semibold text-xs whitespace-nowrap">Entuspass</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {durationMonths.map(mc => {
+                        const qtyRow = durationByMonth[mc] || emptyDurationRow();
+                        const valRow = durationValByMonth[mc] || emptyDurationRow();
+                        const wQty = wellhubByMonth[mc]?.qty || 0;
+                        const wVal = wellhubByMonth[mc]?.val || 0;
+                        const tpQty = totalpassByMonth[mc]?.qty || 0;
+                        const tpVal = totalpassByMonth[mc]?.val || 0;
+                        const epQty = entuspassByMonth[mc]?.qty || 0;
+                        const epVal = entuspassByMonth[mc]?.val || 0;
+                        return (
+                          <TableRow key={mc} className="hover:bg-muted/30">
+                            <TableCell className="font-medium text-xs whitespace-nowrap">{formatMonth(mc)}</TableCell>
+                            {DURATION_COLUMNS.map(c => (
+                              <TableCell key={c.key} className="text-center text-xs tabular-nums">
+                                {qtyRow[c.key] > 0 ? formatCurrency(valRow[c.key] / qtyRow[c.key]) : '-'}
+                              </TableCell>
+                            ))}
+                            <TableCell className="text-center text-xs tabular-nums">
+                              {wQty > 0 ? formatCurrency(wVal / wQty) : '-'}
+                            </TableCell>
+                            <TableCell className="text-center text-xs tabular-nums">
+                              {tpQty > 0 ? formatCurrency(tpVal / tpQty) : '-'}
+                            </TableCell>
+                            <TableCell className="text-center text-xs tabular-nums">
+                              {epQty > 0 ? formatCurrency(epVal / epQty) : '-'}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      <TableRow className="bg-muted/50 font-bold border-t-2">
+                        <TableCell className="text-xs font-bold">Total</TableCell>
+                        {DURATION_COLUMNS.map(c => (
+                          <TableCell key={c.key} className="text-center text-xs font-bold tabular-nums">
+                            {durationTotals[c.key] > 0 ? formatCurrency(durationValTotals[c.key] / durationTotals[c.key]) : '-'}
+                          </TableCell>
+                        ))}
+                        <TableCell className="text-center text-xs font-bold tabular-nums">{wellhubTotalQty > 0 ? formatCurrency(wellhubTotalVal / wellhubTotalQty) : '-'}</TableCell>
+                        <TableCell className="text-center text-xs font-bold tabular-nums">{totalpassTotalQty > 0 ? formatCurrency(totalpassTotalVal / totalpassTotalQty) : '-'}</TableCell>
+                        <TableCell className="text-center text-xs font-bold tabular-nums">{entuspassTotalQty > 0 ? formatCurrency(entuspassTotalVal / entuspassTotalQty) : '-'}</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* ── Tabelas 4 e 5 — Recorrência (lado a lado) ── */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              {/* Tabela 3 — Recorrência Detalhada (qty) */}
+              {/* Tabela 4 — Recorrência Detalhada (qty) */}
               <Card className="overflow-hidden">
                 <CardHeader className="pb-3">
                   <div className="flex items-center gap-2">
                     <RefreshCw className="h-4 w-4 text-muted-foreground" />
-                    <CardTitle className="text-base font-semibold">Tabela 3 — Recorrência Detalhada</CardTitle>
+                    <CardTitle className="text-base font-semibold">Tabela 4 — Recorrência Detalhada</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -633,12 +699,12 @@ export default function Relatorios() {
                 </CardContent>
               </Card>
 
-              {/* Tabela 4 — Receita Recorrência (R$) */}
+              {/* Tabela 5 — Receita Recorrência (R$) */}
               <Card className="overflow-hidden">
                 <CardHeader className="pb-3">
                   <div className="flex items-center gap-2">
                     <RefreshCw className="h-4 w-4 text-muted-foreground" />
-                    <CardTitle className="text-base font-semibold">Tabela 4 — Receita Recorrência</CardTitle>
+                    <CardTitle className="text-base font-semibold">Tabela 5 — Receita Recorrência</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -685,13 +751,13 @@ export default function Relatorios() {
               </Card>
             </div>
 
-            {/* Tabela 5 — Detalhamento Mensal por Plano */}
+            {/* Tabela 6 — Detalhamento Mensal por Plano */}
             {allMensalPlans.length > 0 && (
               <Card className="overflow-hidden">
                 <CardHeader className="pb-3">
                   <div className="flex items-center gap-2">
                     <Layers className="h-4 w-4 text-muted-foreground" />
-                    <CardTitle className="text-base font-semibold">Tabela 5 — Detalhamento Mensal por Plano</CardTitle>
+                    <CardTitle className="text-base font-semibold">Tabela 6 — Detalhamento Mensal por Plano</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
