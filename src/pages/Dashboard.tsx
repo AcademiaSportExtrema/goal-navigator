@@ -7,6 +7,7 @@ import { RevenueByPaymentChart } from '@/components/dashboard/RevenueByPaymentCh
 import { PlanSalesTable } from '@/components/dashboard/PlanSalesTable';
 import { CategoryShareChart } from '@/components/dashboard/CategoryShareChart';
 import { ConsultoraShareChart } from '@/components/dashboard/ConsultoraShareChart';
+import { ClientesUnicosChart } from '@/components/dashboard/ClientesUnicosChart';
 import { TicketHistogram } from '@/components/dashboard/TicketHistogram';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -361,6 +362,49 @@ export default function Dashboard() {
   })) || [];
 
   const salesMetrics = useSalesMetrics(lancamentos);
+
+  // Clientes únicos por consultora (data_inicio no mês, excluindo loja)
+  const { clientesUnicosData, clientesDetalhes } = useMemo(() => {
+    if (!lancamentos) return { clientesUnicosData: [], clientesDetalhes: [] };
+    const [ano, mes] = mesSelecionado.split('-').map(Number);
+    const inicioMes = new Date(ano, mes - 1, 1);
+    const fimMes = new Date(ano, mes, 0);
+
+    const porConsultora: Record<string, Map<string, string>> = {};
+
+    for (const l of lancamentos) {
+      // Excluir loja: duracao = 0, vazio ou nulo
+      const dur = l.duracao;
+      if (!dur || dur === '0' || dur.trim() === '') continue;
+
+      // Filtrar por data_inicio no mês
+      if (!l.data_inicio) continue;
+      const [dAno, dMes, dDia] = l.data_inicio.split('-').map(Number);
+      const dataInicio = new Date(dAno, dMes - 1, dDia);
+      if (dataInicio < inicioMes || dataInicio > fimMes) continue;
+
+      const chave = l.consultora_chave || 'Não identificado';
+      const cliente = l.nome_cliente || 'Não informado';
+      if (!porConsultora[chave]) porConsultora[chave] = new Map();
+      if (!porConsultora[chave].has(cliente)) {
+        porConsultora[chave].set(cliente, l.data_inicio);
+      }
+    }
+
+    const chartData = Object.entries(porConsultora)
+      .map(([nome, clientes]) => ({ nome, clientes: clientes.size }))
+      .sort((a, b) => b.clientes - a.clientes);
+
+    const detalhes: { consultora: string; cliente: string; data_inicio: string }[] = [];
+    for (const [consultora, clientes] of Object.entries(porConsultora)) {
+      for (const [cliente, dataInicio] of clientes.entries()) {
+        detalhes.push({ consultora, cliente, data_inicio: dataInicio });
+      }
+    }
+    detalhes.sort((a, b) => a.consultora.localeCompare(b.consultora) || a.cliente.localeCompare(b.cliente));
+
+    return { clientesUnicosData: chartData, clientesDetalhes: detalhes };
+  }, [lancamentos, mesSelecionado]);
 
   const getVendidoColor = (percentual: number) => {
     if (percentual >= 100) return 'hsl(var(--success))';
@@ -819,15 +863,24 @@ export default function Dashboard() {
                   </Card>
                 </div>
 
-                {show('grafico_share_consultora') && (() => {
-                  const totalVendidoConsultoras = dashboardData.consultoras.reduce((acc, c) => acc + c.vendido, 0);
-                  const shareData = dashboardData.consultoras.map(c => ({
-                    nome: c.nome,
-                    vendido: c.vendido,
-                    percentual: totalVendidoConsultoras > 0 ? (c.vendido / totalVendidoConsultoras) * 100 : 0,
-                  }));
-                  return <ConsultoraShareChart data={shareData} />;
-                })()}
+                {(show('grafico_share_consultora') || clientesUnicosData.length > 0) && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {show('grafico_share_consultora') && (() => {
+                    const totalVendidoConsultoras = dashboardData.consultoras.reduce((acc, c) => acc + c.vendido, 0);
+                    const shareData = dashboardData.consultoras.map(c => ({
+                      nome: c.nome,
+                      vendido: c.vendido,
+                      percentual: totalVendidoConsultoras > 0 ? (c.vendido / totalVendidoConsultoras) * 100 : 0,
+                    }));
+                    return <ConsultoraShareChart data={shareData} />;
+                  })()}
+                  <ClientesUnicosChart
+                    data={clientesUnicosData}
+                    detalhes={clientesDetalhes}
+                    mesSelecionado={mesSelecionado}
+                  />
+                </div>
+                )}
                 </>
               )}
 
