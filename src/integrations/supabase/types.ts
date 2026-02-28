@@ -1047,6 +1047,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_realizado_por_mes: {
+        Args: { p_ano: number; p_empresa_id: string }
+        Returns: {
+          mes: number
+          total: number
+        }[]
+      }
       get_user_consultora_id: { Args: { _user_id: string }; Returns: string }
       get_user_empresa_id: { Args: { _user_id: string }; Returns: string }
       has_role: {

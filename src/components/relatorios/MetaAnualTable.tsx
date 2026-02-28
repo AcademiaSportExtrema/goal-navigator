@@ -63,36 +63,29 @@ export function MetaAnualTable({ empresaId, ano }: Props) {
     enabled: !!metaAnual?.id,
   });
 
-  // Fetch realized values from lancamentos
-  const { data: realizadoData } = useQuery({
+  // Fetch realized values via RPC (server-side aggregation, no row limit)
+  const { data: realizadoRpc } = useQuery({
     queryKey: ['meta-anual-realizado', empresaId, ano],
     queryFn: async () => {
-      const startDate = `${ano}-01-01`;
-      const endDate = `${ano}-12-31`;
-      const { data, error } = await supabase
-        .from('lancamentos')
-        .select('data_lancamento, valor')
-        .eq('empresa_id', empresaId)
-        .eq('entra_meta', true)
-        .gte('data_lancamento', startDate)
-        .lte('data_lancamento', endDate);
+      const { data, error } = await supabase.rpc('get_realizado_por_mes' as any, {
+        p_empresa_id: empresaId,
+        p_ano: ano,
+      });
       if (error) throw error;
-      return data || [];
+      return (data || []) as { mes: number; total: number }[];
     },
     enabled: !!empresaId,
   });
 
-  // Aggregate realized by month
+  // Map RPC result to array indexed 0-11
   const realizadoPorMes = useMemo(() => {
     const arr = Array(12).fill(0);
-    if (!realizadoData) return arr;
-    for (const l of realizadoData) {
-      if (!l.data_lancamento) continue;
-      const m = parseInt(l.data_lancamento.slice(5, 7), 10) - 1;
-      if (m >= 0 && m < 12) arr[m] += (l.valor || 0);
+    if (!realizadoRpc) return arr;
+    for (const r of realizadoRpc) {
+      if (r.mes >= 1 && r.mes <= 12) arr[r.mes - 1] = Number(r.total) || 0;
     }
     return arr;
-  }, [realizadoData]);
+  }, [realizadoRpc]);
 
   // Sync state from DB
   useEffect(() => {
