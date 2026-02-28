@@ -216,14 +216,14 @@ export function FechamentoCaixaTable({ empresaId, mes }: Props) {
                 <TableHead className="text-xs font-semibold whitespace-nowrap">Dia</TableHead>
                 <TableHead className="text-xs font-semibold whitespace-nowrap">Dia Semana</TableHead>
                 {PAYMENT_COLS.map(c => (
-                  <TableHead key={c.key} className="text-xs font-semibold whitespace-nowrap text-center">{c.label}</TableHead>
+                  <TableHead key={c.key} className="text-xs font-semibold whitespace-nowrap text-right">{c.label}</TableHead>
                 ))}
-                <TableHead className="text-xs font-semibold whitespace-nowrap text-center bg-muted">Total</TableHead>
-                <TableHead className="text-xs font-semibold whitespace-nowrap text-center bg-yellow-50 dark:bg-yellow-900/20">F360</TableHead>
-                <TableHead className="text-xs font-semibold whitespace-nowrap text-center">Dif</TableHead>
-                <TableHead className="text-xs font-semibold whitespace-nowrap text-center bg-muted">Total PIX</TableHead>
-                <TableHead className="text-xs font-semibold whitespace-nowrap text-center bg-yellow-50 dark:bg-yellow-900/20">PIX F360</TableHead>
-                <TableHead className="text-xs font-semibold whitespace-nowrap text-center">Dif</TableHead>
+                <TableHead className="text-xs font-semibold whitespace-nowrap text-right bg-muted">Total</TableHead>
+                <TableHead className="text-xs font-semibold whitespace-nowrap text-right bg-yellow-50 dark:bg-yellow-900/20">F360</TableHead>
+                <TableHead className="text-xs font-semibold whitespace-nowrap text-right">Dif</TableHead>
+                <TableHead className="text-xs font-semibold whitespace-nowrap text-right bg-muted">Total PIX</TableHead>
+                <TableHead className="text-xs font-semibold whitespace-nowrap text-right bg-yellow-50 dark:bg-yellow-900/20">PIX F360</TableHead>
+                <TableHead className="text-xs font-semibold whitespace-nowrap text-right">Dif</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -251,24 +251,24 @@ export function FechamentoCaixaTable({ empresaId, mes }: Props) {
                     <TableCell className="text-xs font-medium tabular-nums">{dayNum}</TableCell>
                     <TableCell className="text-xs">{dayName}</TableCell>
                     {cells.map((v, i) => (
-                      <TableCell key={i} className="text-center text-xs tabular-nums">
+                      <TableCell key={i} className="text-right text-xs tabular-nums">
                         {v > 0 ? fmtCur(v) : '-'}
                       </TableCell>
                     ))}
-                    <TableCell className="text-center text-xs tabular-nums font-semibold bg-muted/30">{dayTotal > 0 ? fmtCur(dayTotal) : '-'}</TableCell>
+                    <TableCell className="text-right text-xs tabular-nums font-semibold bg-muted/30">{dayTotal > 0 ? fmtCur(dayTotal) : '-'}</TableCell>
                     <EditableCell
                       value={f360Val}
                       onSave={(val) => upsertF360.mutate({ data: ds, field: 'valor_f360', value: val })}
                     />
-                    <TableCell className={`text-center text-xs tabular-nums font-medium ${dif !== 0 && dayTotal > 0 ? (dif > 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                    <TableCell className={`text-right text-xs tabular-nums font-medium ${dif !== 0 && dayTotal > 0 ? (dif > 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
                       {dayTotal > 0 || f360Val > 0 ? fmtCur(dif) : '-'}
                     </TableCell>
-                    <TableCell className="text-center text-xs tabular-nums font-semibold bg-muted/30">{dayPix > 0 ? fmtCur(dayPix) : '-'}</TableCell>
+                    <TableCell className="text-right text-xs tabular-nums font-semibold bg-muted/30">{dayPix > 0 ? fmtCur(dayPix) : '-'}</TableCell>
                     <EditableCell
                       value={pixF360Val}
                       onSave={(val) => upsertF360.mutate({ data: ds, field: 'valor_pix_f360', value: val })}
                     />
-                    <TableCell className={`text-center text-xs tabular-nums font-medium ${difPix !== 0 && dayPix > 0 ? (difPix > 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                    <TableCell className={`text-right text-xs tabular-nums font-medium ${difPix !== 0 && dayPix > 0 ? (difPix > 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
                       {dayPix > 0 || pixF360Val > 0 ? fmtCur(difPix) : '-'}
                     </TableCell>
                   </TableRow>
@@ -280,18 +280,18 @@ export function FechamentoCaixaTable({ empresaId, mes }: Props) {
                 <TableCell className="text-xs">Total</TableCell>
                 <TableCell />
                 {PAYMENT_COLS.map(col => (
-                  <TableCell key={col.key} className="text-center text-xs tabular-nums">
+                  <TableCell key={col.key} className="text-right text-xs tabular-nums">
                     {(totals.byPayment[col.key] || 0) > 0 ? fmtCur(totals.byPayment[col.key] || 0) : '-'}
                   </TableCell>
                 ))}
-                <TableCell className="text-center text-xs tabular-nums bg-muted/30">{fmtCur(totals.totalAll)}</TableCell>
-                <TableCell className="text-center text-xs tabular-nums bg-yellow-50 dark:bg-yellow-900/20">{fmtCur(totals.totalF360)}</TableCell>
-                <TableCell className={`text-center text-xs tabular-nums ${totals.totalAll - totals.totalF360 !== 0 ? (totals.totalAll - totals.totalF360 > 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                <TableCell className="text-right text-xs tabular-nums bg-muted/30">{fmtCur(totals.totalAll)}</TableCell>
+                <TableCell className="text-right text-xs tabular-nums bg-yellow-50 dark:bg-yellow-900/20">{fmtCur(totals.totalF360)}</TableCell>
+                <TableCell className={`text-right text-xs tabular-nums ${totals.totalAll - totals.totalF360 !== 0 ? (totals.totalAll - totals.totalF360 > 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
                   {fmtCur(totals.totalAll - totals.totalF360)}
                 </TableCell>
-                <TableCell className="text-center text-xs tabular-nums bg-muted/30">{fmtCur(totals.totalPix)}</TableCell>
-                <TableCell className="text-center text-xs tabular-nums bg-yellow-50 dark:bg-yellow-900/20">{fmtCur(totals.totalPixF360)}</TableCell>
-                <TableCell className={`text-center text-xs tabular-nums ${totals.totalPix - totals.totalPixF360 !== 0 ? (totals.totalPix - totals.totalPixF360 > 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                <TableCell className="text-right text-xs tabular-nums bg-muted/30">{fmtCur(totals.totalPix)}</TableCell>
+                <TableCell className="text-right text-xs tabular-nums bg-yellow-50 dark:bg-yellow-900/20">{fmtCur(totals.totalPixF360)}</TableCell>
+                <TableCell className={`text-right text-xs tabular-nums ${totals.totalPix - totals.totalPixF360 !== 0 ? (totals.totalPix - totals.totalPixF360 > 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
                   {fmtCur(totals.totalPix - totals.totalPixF360)}
                 </TableCell>
               </TableRow>
@@ -323,10 +323,10 @@ function EditableCell({ value, onSave }: { value: number; onSave: (v: number) =>
 
   if (editing) {
     return (
-      <TableCell className="text-center p-1 bg-yellow-50 dark:bg-yellow-900/20">
+      <TableCell className="text-right p-1 bg-yellow-50 dark:bg-yellow-900/20">
         <input
           autoFocus
-          className="w-24 text-xs text-center border rounded px-1 py-0.5 bg-background"
+          className="w-24 text-xs text-right border rounded px-1 py-0.5 bg-background"
           value={text}
           onChange={e => setText(e.target.value)}
           onBlur={commit}
@@ -338,7 +338,7 @@ function EditableCell({ value, onSave }: { value: number; onSave: (v: number) =>
 
   return (
     <TableCell
-      className="text-center text-xs tabular-nums cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-900/30 bg-yellow-50 dark:bg-yellow-900/20"
+      className="text-right text-xs tabular-nums cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-900/30 bg-yellow-50 dark:bg-yellow-900/20"
       onClick={startEdit}
     >
       {value > 0 ? fmtCur(value) : <span className="text-muted-foreground">—</span>}
