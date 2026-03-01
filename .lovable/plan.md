@@ -1,18 +1,33 @@
 
 
-## Adicionar Ritmo Semanal na Visão Consultora + permitir visualização no próximo mês
+## Trocar filtro de data na Visão Consultora: mês atual + próximo mês com toggle buttons
+
+### Problema
+O seletor de data na Visão Consultora mostra 12 meses retroativos (desnecessário para consultoras) e não inclui o próximo mês. O admin precisa ver o mês atual e o próximo para conferir metas futuras.
 
 ### Alterações
 
-**1. `src/pages/VisaoConsultora.tsx`**
-- Importar `useMetaSemanal` e `RitmoSemanalCard`
-- Chamar `useMetaSemanal` com `metaMensal?.id`, meta individual, total vendido, `mesSelecionado` e `lancamentos`
-- Renderizar `RitmoSemanalCard` após os cards de resumo (antes da Dica do Dia), com `motivacional={true}`
+**`src/pages/VisaoConsultora.tsx`**
 
-**2. `src/pages/MinhaPerformance.tsx`**
-- Remover a condição `!isProximoMes` que oculta o `RitmoSemanalCard` — permitir que consultoras vejam a distribuição semanal mesmo ao selecionar o próximo mês (mostrará as metas por semana com vendido zerado)
+1. **Remover** `mesesDisponiveis` (useMemo com `subMonths` gerando 12 meses) e a importação de `subMonths`
+2. **Adicionar** variáveis `mesAtual` e `proximoMes` (como em MinhaPerformance, usando `addMonths`)
+3. **Substituir** o `<Select>` de data por **toggle buttons** (mesmo padrão de MinhaPerformance):
 
-### Resultado
-- Admin vê o ritmo semanal de qualquer consultora na Visão Consultora (com histórico de 12 meses)
-- Consultora vê o ritmo semanal tanto no mês atual quanto no próximo mês em Minha Performance
+```text
+[ fev 2026 ]  [ mar 2026 ]     ← toggle buttons
+```
+
+4. Layout final do seletor:
+```text
+┌──────────────────────────────────────────────────────────┐
+│ 👁 [ Selecione uma consultora ▾ ]   [fev 2026] [mar 2026]│
+└──────────────────────────────────────────────────────────┘
+```
+
+- Botão ativo: `bg-primary text-primary-foreground`
+- Botão inativo: `bg-muted text-muted-foreground hover:bg-accent`
+- Default: mês atual selecionado
+
+### Nenhuma outra alteração
+Mesma lógica de dados, mesma query — só muda o componente de filtro e os meses disponíveis.
 
