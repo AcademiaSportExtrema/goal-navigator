@@ -20,6 +20,7 @@ export const DASHBOARD_COMPONENTES: DashboardComponente[] = [
   { chave: 'ultimos_uploads', label: 'Últimos Uploads', padrao: false },
   { chave: 'card_equipe', label: 'Equipe', padrao: false },
   { chave: 'acoes_rapidas', label: 'Ações Rápidas', padrao: false },
+  { chave: 'card_ritmo_semanal', label: 'Ritmo Semanal', padrao: true },
 ];
 
 const DEFAULTS = Object.fromEntries(

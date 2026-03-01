@@ -16,8 +16,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { DollarSign, TrendingUp, Save } from 'lucide-react';
+import { DollarSign, TrendingUp, Save, CalendarDays } from 'lucide-react';
 import { format, addMonths, subMonths } from 'date-fns';
+import { useMetaSemanalSalvar } from '@/hooks/useMetaSemanal';
 import { ptBR } from 'date-fns/locale';
 import type { MetaMensal, Consultora, MetaConsultora, ComissaoNivel } from '@/types/database';
 import { getNivelNome } from '@/lib/utils';
@@ -50,8 +51,12 @@ export default function ConfiguracaoMes() {
   const [metaTotal, setMetaTotal] = useState('');
   const [percentuais, setPercentuais] = useState<Record<string, string>>({});
   const [niveis, setNiveis] = useState<NivelConfig[]>(defaultNiveis);
+  const [pesosSemana, setPesosSemana] = useState<Record<number, string>>({
+    1: '30', 2: '25', 3: '25', 4: '20', 5: '0',
+  });
   
   const { toast } = useToast();
+  const { salvar: salvarMetaSemanal } = useMetaSemanalSalvar();
   const { empresaId } = useAuth();
   const queryClient = useQueryClient();
 
@@ -97,6 +102,21 @@ export default function ConfiguracaoMes() {
       
       if (error) throw error;
       return data as MetaConsultora[];
+    },
+  });
+
+  // Buscar pesos semanais
+  const { data: pesosSemanalDb } = useQuery({
+    queryKey: ['meta-semanal-config', metaMensal?.id],
+    enabled: !!metaMensal?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('meta_semanal')
+        .select('semana, peso_percent')
+        .eq('meta_mensal_id', metaMensal!.id)
+        .order('semana');
+      if (error) throw error;
+      return data as { semana: number; peso_percent: number }[];
     },
   });
 
@@ -172,6 +192,18 @@ export default function ConfiguracaoMes() {
     }
   }, [metasConsultoras, consultoras]);
 
+  useEffect(() => {
+    if (pesosSemanalDb && pesosSemanalDb.length > 0) {
+      const newPesos: Record<number, string> = { 1: '0', 2: '0', 3: '0', 4: '0', 5: '0' };
+      for (const p of pesosSemanalDb) {
+        newPesos[p.semana] = String(Number(p.peso_percent));
+      }
+      setPesosSemana(newPesos);
+    } else {
+      setPesosSemana({ 1: '30', 2: '25', 3: '25', 4: '20', 5: '0' });
+    }
+  }, [pesosSemanalDb]);
+
    useEffect(() => {
     if (niveisComissao && niveisComissao.length > 0) {
       setNiveis(mapNiveisToConfig(niveisComissao));
@@ -242,11 +274,23 @@ export default function ConfiguracaoMes() {
       
       const { error: niveisError } = await supabase.from('comissao_niveis').insert(niveisInsert);
       if (niveisError) throw niveisError;
+
+      // Salvar pesos semanais
+      const somaSemanas = Object.values(pesosSemana).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+      if (somaSemanas > 0 && Math.abs(somaSemanas - 100) > 0.01) {
+        throw new Error(`A soma da distribuição semanal deve ser 100% (atual: ${somaSemanas.toFixed(1)}%)`);
+      }
+      await salvarMetaSemanal(
+        metaId!,
+        empresaId!,
+        [1, 2, 3, 4, 5].map(s => ({ semana: s, peso_percent: parseFloat(pesosSemana[s]) || 0 })),
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['meta-mensal'] });
       queryClient.invalidateQueries({ queryKey: ['metas-consultoras'] });
       queryClient.invalidateQueries({ queryKey: ['comissao-niveis'] });
+      queryClient.invalidateQueries({ queryKey: ['meta-semanal'] });
       toast({ title: 'Configurações salvas com sucesso!' });
     },
     onError: (error: any) => {
@@ -324,6 +368,42 @@ export default function ConfiguracaoMes() {
                   placeholder="R$ 0,00"
                   className="text-xl font-semibold h-12"
                 />
+              </div>
+
+              {/* Distribuição Semanal */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Distribuição Semanal da Meta</Label>
+                </div>
+                <div className="grid grid-cols-5 gap-2">
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <div key={s} className="space-y-1">
+                      <Label className="text-xs text-center block text-muted-foreground">S{s}</Label>
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={pesosSemana[s] || '0'}
+                          onChange={e => setPesosSemana(p => ({ ...p, [s]: e.target.value }))}
+                          className="text-center h-9 text-sm"
+                        />
+                        <span className="text-xs text-muted-foreground">%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {(() => {
+                  const soma = Object.values(pesosSemana).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+                  const isExact = Math.abs(soma - 100) < 0.01;
+                  return (
+                    <p className={`text-xs font-medium ${isExact ? 'text-success' : 'text-destructive'}`}>
+                      Total: {soma.toFixed(0)}% {!isExact && '(deve somar 100%)'}
+                    </p>
+                  );
+                })()}
               </div>
 
               {consultoras && consultoras.length > 0 ? (
