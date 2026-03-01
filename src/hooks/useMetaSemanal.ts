@@ -6,72 +6,125 @@ interface PesoSemanal {
   peso_percent: number;
 }
 
+export interface SemanaDetalhe {
+  semana: number;
+  diasLabel: string;
+  metaValor: number;
+  vendido: number;
+  percentual: number;
+  falta: number;
+  status: 'bateu' | 'no_ritmo' | 'atrasada' | 'futura';
+  isCurrent: boolean;
+}
+
 interface RitmoSemanal {
   semanaAtual: number;
+  totalSemanas: number;
   metaEsperadaPercent: number;
   metaEsperadaValor: number;
   vendido: number;
   percentualDoEsperado: number;
   status: 'adiantada' | 'no_ritmo' | 'atrasada';
   pesos: PesoSemanal[];
+  semanas: SemanaDetalhe[];
 }
 
 /**
- * Determina em qual semana do mês estamos (1-5)
- * S1: dias 1-7, S2: 8-14, S3: 15-21, S4: 22-28, S5: 29+
+ * Calcula quantas semanas o mês tem (4 ou 5) e retorna os intervalos de dias.
  */
-function getSemanaDoMes(dia: number): number {
+export function getSemanasDoMes(ano: number, mes: number): { semana: number; diaInicio: number; diaFim: number }[] {
+  const ultimoDia = new Date(ano, mes, 0).getDate();
+  const semanas = [
+    { semana: 1, diaInicio: 1, diaFim: 7 },
+    { semana: 2, diaInicio: 8, diaFim: 14 },
+    { semana: 3, diaInicio: 15, diaFim: 21 },
+    { semana: 4, diaInicio: 22, diaFim: ultimoDia <= 28 ? ultimoDia : 28 },
+  ];
+
+  if (ultimoDia > 28) {
+    // Mês tem 5ª semana
+    semanas[3].diaFim = 28;
+    semanas.push({ semana: 5, diaInicio: 29, diaFim: ultimoDia });
+  }
+
+  return semanas;
+}
+
+function getSemanaDoMes(dia: number, ultimoDia: number): number {
   if (dia <= 7) return 1;
   if (dia <= 14) return 2;
   if (dia <= 21) return 3;
   if (dia <= 28) return 4;
-  return 5;
+  return ultimoDia > 28 ? 5 : 4;
 }
 
-/**
- * Calcula a proporção da semana atual que já passou (0 a 1)
- */
-function getProgressoSemana(dia: number): number {
-  const semana = getSemanaDoMes(dia);
-  const inicioSemana = (semana - 1) * 7 + 1;
-  const fimSemana = semana === 5 ? 31 : semana * 7;
-  const diasNaSemana = fimSemana - inicioSemana + 1;
-  const diasPassados = dia - inicioSemana + 1;
+function getProgressoSemana(dia: number, semanaInfo: { diaInicio: number; diaFim: number }): number {
+  const diasNaSemana = semanaInfo.diaFim - semanaInfo.diaInicio + 1;
+  const diasPassados = dia - semanaInfo.diaInicio + 1;
   return Math.min(diasPassados / diasNaSemana, 1);
 }
 
-/**
- * Calcula o percentual da meta que deveria ter sido atingido até agora,
- * considerando os pesos semanais configurados.
- */
 function calcularMetaEsperada(
   pesos: PesoSemanal[],
   dia: number,
+  semanasDoMes: { semana: number; diaInicio: number; diaFim: number }[],
 ): number {
-  const semanaAtual = getSemanaDoMes(dia);
-  const progressoSemana = getProgressoSemana(dia);
+  const ultimoDia = semanasDoMes[semanasDoMes.length - 1].diaFim;
+  const semanaAtual = getSemanaDoMes(dia, ultimoDia);
+  const semanaInfo = semanasDoMes.find(s => s.semana === semanaAtual);
 
   let acumulado = 0;
 
-  // Semanas já concluídas
   for (const p of pesos) {
     if (p.semana < semanaAtual) {
       acumulado += p.peso_percent;
     }
   }
 
-  // Proporção da semana atual
   const pesoSemanaAtual = pesos.find(p => p.semana === semanaAtual)?.peso_percent || 0;
-  acumulado += pesoSemanaAtual * progressoSemana;
+  if (semanaInfo) {
+    acumulado += pesoSemanaAtual * getProgressoSemana(dia, semanaInfo);
+  }
 
   return acumulado;
+}
+
+/**
+ * Agrupa vendas por semana a partir de lancamentos usando data_inicio.
+ */
+function agruparVendasPorSemana(
+  lancamentos: { data_inicio?: string | null; valor?: number | null }[] | undefined,
+  ano: number,
+  mes: number,
+  semanasDoMes: { semana: number; diaInicio: number; diaFim: number }[],
+): Record<number, number> {
+  const result: Record<number, number> = {};
+  for (const s of semanasDoMes) {
+    result[s.semana] = 0;
+  }
+
+  if (!lancamentos) return result;
+
+  for (const l of lancamentos) {
+    if (!l.data_inicio) continue;
+    const [dAno, dMes, dDia] = l.data_inicio.split('-').map(Number);
+    if (dAno !== ano || dMes !== mes) continue;
+
+    const semanaInfo = semanasDoMes.find(s => dDia >= s.diaInicio && dDia <= s.diaFim);
+    if (semanaInfo) {
+      result[semanaInfo.semana] += Number(l.valor) || 0;
+    }
+  }
+
+  return result;
 }
 
 export function useMetaSemanal(
   metaMensalId: string | undefined,
   metaTotal: number,
-  vendido: number,
+  vendidoTotal: number,
   mesSelecionado: string,
+  lancamentos?: { data_inicio?: string | null; valor?: number | null }[],
 ) {
   const { data: pesosDb } = useQuery({
     queryKey: ['meta-semanal', metaMensalId],
@@ -87,39 +140,76 @@ export function useMetaSemanal(
     },
   });
 
-  // Default: distribuição uniforme (25% por semana, S5 = 0)
-  const pesos: PesoSemanal[] = pesosDb && pesosDb.length > 0
-    ? pesosDb
-    : [
-        { semana: 1, peso_percent: 25 },
-        { semana: 2, peso_percent: 25 },
-        { semana: 3, peso_percent: 25 },
-        { semana: 4, peso_percent: 25 },
-      ];
-
-  // Verificar se o mês selecionado é o mês atual
-  const hoje = new Date();
   const [ano, mes] = mesSelecionado.split('-').map(Number);
-  const isMesAtual = hoje.getFullYear() === ano && hoje.getMonth() + 1 === mes;
-  const dia = isMesAtual ? hoje.getDate() : new Date(ano, mes, 0).getDate(); // último dia se não for o mês atual
+  const semanasDoMes = getSemanasDoMes(ano, mes);
+  const totalSemanas = semanasDoMes.length;
 
-  const semanaAtual = getSemanaDoMes(dia);
-  const metaEsperadaPercent = calcularMetaEsperada(pesos, dia);
+  // Default: distribuição uniforme
+  const defaultPeso = totalSemanas === 5 ? 20 : 25;
+  const pesos: PesoSemanal[] = pesosDb && pesosDb.length > 0
+    ? pesosDb.filter(p => p.semana <= totalSemanas)
+    : semanasDoMes.map(s => ({ semana: s.semana, peso_percent: defaultPeso }));
+
+  // Dia atual ou último dia do mês
+  const hoje = new Date();
+  const isMesAtual = hoje.getFullYear() === ano && hoje.getMonth() + 1 === mes;
+  const dia = isMesAtual ? hoje.getDate() : semanasDoMes[semanasDoMes.length - 1].diaFim;
+
+  const ultimoDia = semanasDoMes[semanasDoMes.length - 1].diaFim;
+  const semanaAtual = getSemanaDoMes(dia, ultimoDia);
+  const metaEsperadaPercent = calcularMetaEsperada(pesos, dia, semanasDoMes);
   const metaEsperadaValor = metaTotal * (metaEsperadaPercent / 100);
-  const percentualDoEsperado = metaEsperadaValor > 0 ? (vendido / metaEsperadaValor) * 100 : 0;
+  const percentualDoEsperado = metaEsperadaValor > 0 ? (vendidoTotal / metaEsperadaValor) * 100 : 0;
 
   let status: 'adiantada' | 'no_ritmo' | 'atrasada' = 'no_ritmo';
   if (percentualDoEsperado >= 105) status = 'adiantada';
   else if (percentualDoEsperado < 90) status = 'atrasada';
 
+  // Per-week breakdown
+  const vendasPorSemana = agruparVendasPorSemana(lancamentos, ano, mes, semanasDoMes);
+
+  const semanas: SemanaDetalhe[] = semanasDoMes.map(s => {
+    const peso = pesos.find(p => p.semana === s.semana)?.peso_percent || 0;
+    const metaValor = metaTotal * (peso / 100);
+    const vendido = vendasPorSemana[s.semana] || 0;
+    const percentual = metaValor > 0 ? (vendido / metaValor) * 100 : 0;
+    const falta = Math.max(0, metaValor - vendido);
+    const isCurrent = s.semana === semanaAtual && isMesAtual;
+
+    let semStatus: SemanaDetalhe['status'] = 'futura';
+    if (isMesAtual) {
+      if (s.semana < semanaAtual) {
+        semStatus = percentual >= 100 ? 'bateu' : percentual >= 90 ? 'no_ritmo' : 'atrasada';
+      } else if (s.semana === semanaAtual) {
+        semStatus = percentual >= 100 ? 'bateu' : percentual >= 90 ? 'no_ritmo' : 'atrasada';
+      }
+    } else {
+      // Mês passado: todas as semanas estão concluídas
+      semStatus = percentual >= 100 ? 'bateu' : percentual >= 90 ? 'no_ritmo' : 'atrasada';
+    }
+
+    return {
+      semana: s.semana,
+      diasLabel: `${s.diaInicio} - ${s.diaFim}`,
+      metaValor,
+      vendido,
+      percentual,
+      falta,
+      status: semStatus,
+      isCurrent,
+    };
+  });
+
   const ritmo: RitmoSemanal = {
     semanaAtual,
+    totalSemanas,
     metaEsperadaPercent,
     metaEsperadaValor,
-    vendido,
+    vendido: vendidoTotal,
     percentualDoEsperado,
     status,
     pesos,
+    semanas,
   };
 
   return ritmo;
@@ -128,13 +218,11 @@ export function useMetaSemanal(
 export function useMetaSemanalSalvar() {
   return {
     salvar: async (metaMensalId: string, empresaId: string, pesos: { semana: number; peso_percent: number }[]) => {
-      // Delete existing
       await (supabase as any)
         .from('meta_semanal')
         .delete()
         .eq('meta_mensal_id', metaMensalId);
 
-      // Insert new
       const rows = pesos
         .filter(p => p.peso_percent > 0)
         .map(p => ({

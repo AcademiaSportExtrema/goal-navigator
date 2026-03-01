@@ -152,6 +152,7 @@ export default function MinhaPerformance() {
     metricas?.metaIndividual || 0,
     metricas?.totalVendido || 0,
     mesSelecionado,
+    meusLancamentos || undefined,
   );
 
   const fmt = (v: number) =>
@@ -290,13 +291,8 @@ export default function MinhaPerformance() {
             {/* Ritmo Semanal */}
             {!isProximoMes && metricas && metricas.metaIndividual > 0 && (
               <RitmoSemanalCard
-                semanaAtual={ritmo.semanaAtual}
-                metaEsperadaValor={ritmo.metaEsperadaValor}
-                metaEsperadaPercent={ritmo.metaEsperadaPercent}
-                vendido={ritmo.vendido}
-                percentualDoEsperado={ritmo.percentualDoEsperado}
+                semanas={ritmo.semanas}
                 status={ritmo.status}
-                metaTotal={metricas.metaIndividual}
                 motivacional
               />
             )}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -18,7 +18,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { DollarSign, TrendingUp, Save, CalendarDays } from 'lucide-react';
 import { format, addMonths, subMonths } from 'date-fns';
-import { useMetaSemanalSalvar } from '@/hooks/useMetaSemanal';
+import { useMetaSemanalSalvar, getSemanasDoMes } from '@/hooks/useMetaSemanal';
 import { ptBR } from 'date-fns/locale';
 import type { MetaMensal, Consultora, MetaConsultora, ComissaoNivel } from '@/types/database';
 import { getNivelNome } from '@/lib/utils';
@@ -276,14 +276,18 @@ export default function ConfiguracaoMes() {
       if (niveisError) throw niveisError;
 
       // Salvar pesos semanais
-      const somaSemanas = Object.values(pesosSemana).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+      const semanasAtual = getSemanasDoMes(
+        Number(mesSelecionado.split('-')[0]),
+        Number(mesSelecionado.split('-')[1]),
+      );
+      const somaSemanas = semanasAtual.reduce((s, w) => s + (parseFloat(pesosSemana[w.semana]) || 0), 0);
       if (somaSemanas > 0 && Math.abs(somaSemanas - 100) > 0.01) {
         throw new Error(`A soma da distribuição semanal deve ser 100% (atual: ${somaSemanas.toFixed(1)}%)`);
       }
       await salvarMetaSemanal(
         metaId!,
         empresaId!,
-        [1, 2, 3, 4, 5].map(s => ({ semana: s, peso_percent: parseFloat(pesosSemana[s]) || 0 })),
+        semanasAtual.map(s => ({ semana: s.semana, peso_percent: parseFloat(pesosSemana[s.semana]) || 0 })),
       );
     },
     onSuccess: () => {
@@ -317,6 +321,11 @@ export default function ConfiguracaoMes() {
   });
 
   const metaNum = parseFloat(metaTotal.replace(/\D/g, '')) / 100 || 0;
+
+  // Dynamic weeks for selected month
+  const [anoSel, mesSel] = mesSelecionado.split('-').map(Number);
+  const semanasDoMes = useMemo(() => getSemanasDoMes(anoSel, mesSel), [anoSel, mesSel]);
+  const totalSemanas = semanasDoMes.length;
 
   return (
     <AppLayout title="Configuração do Mês">
@@ -376,18 +385,20 @@ export default function ConfiguracaoMes() {
                   <CalendarDays className="h-4 w-4 text-muted-foreground" />
                   <Label className="text-xs text-muted-foreground uppercase tracking-wide">Distribuição Semanal da Meta</Label>
                 </div>
-                <div className="grid grid-cols-5 gap-2">
-                  {[1, 2, 3, 4, 5].map(s => (
-                    <div key={s} className="space-y-1">
-                      <Label className="text-xs text-center block text-muted-foreground">S{s}</Label>
+                <div className={`grid gap-2 ${totalSemanas === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+                  {semanasDoMes.map(s => (
+                    <div key={s.semana} className="space-y-1">
+                      <Label className="text-xs text-center block text-muted-foreground">
+                        S{s.semana} ({s.diaInicio}-{s.diaFim})
+                      </Label>
                       <div className="flex items-center gap-1">
                         <Input
                           type="number"
                           min="0"
                           max="100"
                           step="1"
-                          value={pesosSemana[s] || '0'}
-                          onChange={e => setPesosSemana(p => ({ ...p, [s]: e.target.value }))}
+                          value={pesosSemana[s.semana] || '0'}
+                          onChange={e => setPesosSemana(p => ({ ...p, [s.semana]: e.target.value }))}
                           className="text-center h-9 text-sm"
                         />
                         <span className="text-xs text-muted-foreground">%</span>
@@ -396,7 +407,7 @@ export default function ConfiguracaoMes() {
                   ))}
                 </div>
                 {(() => {
-                  const soma = Object.values(pesosSemana).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+                  const soma = semanasDoMes.reduce((s, w) => s + (parseFloat(pesosSemana[w.semana]) || 0), 0);
                   const isExact = Math.abs(soma - 100) < 0.01;
                   return (
                     <p className={`text-xs font-medium ${isExact ? 'text-success' : 'text-destructive'}`}>
