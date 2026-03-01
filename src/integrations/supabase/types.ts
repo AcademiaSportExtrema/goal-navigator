@@ -563,6 +563,41 @@ export type Database = {
           },
         ]
       }
+      meta_semanal: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          id: string
+          meta_mensal_id: string
+          peso_percent: number
+          semana: number
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          id?: string
+          meta_mensal_id: string
+          peso_percent?: number
+          semana: number
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          meta_mensal_id?: string
+          peso_percent?: number
+          semana?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_semanal_meta_mensal_id_fkey"
+            columns: ["meta_mensal_id"]
+            isOneToOne: false
+            referencedRelation: "metas_mensais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       metas_consultoras: {
         Row: {
           consultora_id: string

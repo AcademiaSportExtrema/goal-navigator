@@ -8,7 +8,9 @@ import { PlanSalesTable } from '@/components/dashboard/PlanSalesTable';
 import { CategoryShareChart } from '@/components/dashboard/CategoryShareChart';
 import { ConsultoraShareChart } from '@/components/dashboard/ConsultoraShareChart';
 import { ClientesUnicosChart } from '@/components/dashboard/ClientesUnicosChart';
+import { RitmoSemanalCard } from '@/components/dashboard/RitmoSemanalCard';
 import { TicketHistogram } from '@/components/dashboard/TicketHistogram';
+import { useMetaSemanal } from '@/hooks/useMetaSemanal';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -406,6 +408,32 @@ export default function Dashboard() {
     return { clientesUnicosData: chartData, clientesDetalhes: detalhes };
   }, [lancamentos, mesSelecionado]);
 
+  // Ritmo Semanal — meta geral
+  const ritmoGeral = useMetaSemanal(
+    metaMensal?.id,
+    metaMensal ? Number(metaMensal.meta_total) : 0,
+    totalVendidoInicio || 0,
+    mesSelecionado,
+  );
+
+  // Ritmo Semanal — consultora individual
+  const minhaMetaValorRitmo = useMemo(() => {
+    if (!metaMensal || !metaIndividual) return 0;
+    return Number(metaMensal.meta_total) * Number(metaIndividual.percentual);
+  }, [metaMensal, metaIndividual]);
+
+  const meuVendidoRitmo = useMemo(() => {
+    if (!dashboardData || !consultoraId) return 0;
+    return dashboardData.consultoras.find(c => c.consultoraId === consultoraId)?.vendido || 0;
+  }, [dashboardData, consultoraId]);
+
+  const ritmoConsultora = useMetaSemanal(
+    metaMensal?.id,
+    minhaMetaValorRitmo,
+    meuVendidoRitmo,
+    mesSelecionado,
+  );
+
   const getVendidoColor = (percentual: number) => {
     if (percentual >= 100) return 'hsl(var(--success))';
     return 'hsl(var(--chart-1))';
@@ -489,6 +517,20 @@ export default function Dashboard() {
               )}
 
             </div>
+
+            {/* Ritmo Semanal — Consultora */}
+            {show('card_ritmo_semanal') && metaMensal && metaIndividual && minhaMetaValorRitmo > 0 && (
+              <RitmoSemanalCard
+                semanaAtual={ritmoConsultora.semanaAtual}
+                metaEsperadaValor={ritmoConsultora.metaEsperadaValor}
+                metaEsperadaPercent={ritmoConsultora.metaEsperadaPercent}
+                vendido={ritmoConsultora.vendido}
+                percentualDoEsperado={ritmoConsultora.percentualDoEsperado}
+                status={ritmoConsultora.status}
+                metaTotal={minhaMetaValorRitmo}
+                motivacional
+              />
+            )}
 
             {/* Cards de meta individual para consultora */}
             {metaMensal && (
@@ -734,6 +776,19 @@ export default function Dashboard() {
                     </Card>
                   </div>
                 </>
+              )}
+
+              {/* Ritmo Semanal — Admin */}
+              {metaMensal && (
+                <RitmoSemanalCard
+                  semanaAtual={ritmoGeral.semanaAtual}
+                  metaEsperadaValor={ritmoGeral.metaEsperadaValor}
+                  metaEsperadaPercent={ritmoGeral.metaEsperadaPercent}
+                  vendido={ritmoGeral.vendido}
+                  percentualDoEsperado={ritmoGeral.percentualDoEsperado}
+                  status={ritmoGeral.status}
+                  metaTotal={Number(metaMensal.meta_total)}
+                />
               )}
 
               {/* Performance por Consultora */}

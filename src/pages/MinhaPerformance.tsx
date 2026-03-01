@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useMetaSemanal } from '@/hooks/useMetaSemanal';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -15,6 +16,7 @@ import {
 } from '@/components/ui/table';
 import { Target, TrendingUp, DollarSign, Award, Calendar } from 'lucide-react';
 import { CoachDicaDoDia } from '@/components/CoachDicaDoDia';
+import { RitmoSemanalCard } from '@/components/dashboard/RitmoSemanalCard';
 import { format, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
@@ -143,6 +145,14 @@ export default function MinhaPerformance() {
       comissaoEstimada,
     };
   }, [meusLancamentos, metaMensal, minhaMeta, niveisComissao]);
+
+  // Ritmo Semanal
+  const ritmo = useMetaSemanal(
+    metaMensal?.id,
+    metricas?.metaIndividual || 0,
+    metricas?.totalVendido || 0,
+    mesSelecionado,
+  );
 
   const fmt = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -276,6 +286,20 @@ export default function MinhaPerformance() {
                 </>
               )}
             </div>
+
+            {/* Ritmo Semanal */}
+            {!isProximoMes && metricas && metricas.metaIndividual > 0 && (
+              <RitmoSemanalCard
+                semanaAtual={ritmo.semanaAtual}
+                metaEsperadaValor={ritmo.metaEsperadaValor}
+                metaEsperadaPercent={ritmo.metaEsperadaPercent}
+                vendido={ritmo.vendido}
+                percentualDoEsperado={ritmo.percentualDoEsperado}
+                status={ritmo.status}
+                metaTotal={metricas.metaIndividual}
+                motivacional
+              />
+            )}
 
             {/* Dica do Dia */}
             {!isProximoMes && consultoraId && <CoachDicaDoDia consultoraId={consultoraId} />}
