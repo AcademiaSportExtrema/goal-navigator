@@ -34,7 +34,7 @@ export type OperadorRegra = 'contem' | 'igual' | 'comeca_com' | 'termina_com' | 
 
 export type ResponsavelCampo = 'resp_venda' | 'resp_recebimento';
 
-export type RegraMes = 'DATA_LANCAMENTO' | 'DATA_INICIO' | 'HIBRIDA';
+export type RegraMes = 'DATA_LANCAMENTO' | 'DATA_INICIO';
 
 export interface UserRole {
   id: string;

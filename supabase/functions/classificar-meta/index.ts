@@ -114,9 +114,6 @@ Deno.serve(async (req) => {
               dataRef = lancamento.data_lancamento;
             } else if (regra.regra_mes === 'DATA_INICIO') {
               dataRef = lancamento.data_inicio || lancamento.data_lancamento;
-            } else if (regra.regra_mes === 'HIBRIDA') {
-              const isRecorrencia = (lancamento.condicao_pagamento || '').toUpperCase().includes('RECORRÊNCIA');
-              dataRef = isRecorrencia ? (lancamento.data_inicio || lancamento.data_lancamento) : lancamento.data_lancamento;
             }
 
             await supabase.from('lancamentos').update({

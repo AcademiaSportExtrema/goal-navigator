@@ -1135,7 +1135,7 @@ export type Database = {
         | "comeca_com"
         | "termina_com"
         | "regex"
-      regra_mes: "DATA_LANCAMENTO" | "DATA_INICIO" | "HIBRIDA"
+      regra_mes: "DATA_LANCAMENTO" | "DATA_INICIO"
       responsavel_campo: "resp_venda" | "resp_recebimento"
       ticket_prioridade: "baixa" | "media" | "alta" | "urgente"
       ticket_status: "aberto" | "em_andamento" | "resolvido" | "fechado"
@@ -1282,7 +1282,7 @@ export const Constants = {
       ],
       coach_diretriz_tipo: ["permitido", "proibido"],
       operador_regra: ["contem", "igual", "comeca_com", "termina_com", "regex"],
-      regra_mes: ["DATA_LANCAMENTO", "DATA_INICIO", "HIBRIDA"],
+      regra_mes: ["DATA_LANCAMENTO", "DATA_INICIO"],
       responsavel_campo: ["resp_venda", "resp_recebimento"],
       ticket_prioridade: ["baixa", "media", "alta", "urgente"],
       ticket_status: ["aberto", "em_andamento", "resolvido", "fechado"],

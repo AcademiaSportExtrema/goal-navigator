@@ -68,7 +68,6 @@ const responsavelOptions: { value: ResponsavelCampo; label: string }[] = [
 const regraMesOptions: { value: RegraMes; label: string }[] = [
   { value: 'DATA_LANCAMENTO', label: 'Data de Lançamento' },
   { value: 'DATA_INICIO', label: 'Data de Início' },
-  { value: 'HIBRIDA', label: 'Híbrida (plano → início, senão → lançamento)' },
 ];
 
 const VALID_CAMPOS: string[] = campoAlvoOptions.map(o => o.value);
