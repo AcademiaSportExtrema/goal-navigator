@@ -20,11 +20,13 @@ import { PaginationControls } from '@/components/PaginationControls';
 import { getNivelNome } from '@/lib/utils';
 import { useSalesMetrics } from '@/hooks/useSalesMetrics';
 import { useDashboardVisibilidade } from '@/hooks/useDashboardVisibilidade';
+import { useMetaSemanal } from '@/hooks/useMetaSemanal';
 import { RevenueTrendChart } from '@/components/dashboard/RevenueTrendChart';
 import { RevenueByPaymentChart } from '@/components/dashboard/RevenueByPaymentChart';
 import { PlanSalesTable } from '@/components/dashboard/PlanSalesTable';
 import { CategoryShareChart } from '@/components/dashboard/CategoryShareChart';
 import { TicketHistogram } from '@/components/dashboard/TicketHistogram';
+import { RitmoSemanalCard } from '@/components/dashboard/RitmoSemanalCard';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -161,6 +163,15 @@ export default function VisaoConsultora() {
 
   const salesMetrics = useSalesMetrics(lancamentos);
 
+  // Ritmo Semanal
+  const ritmo = useMetaSemanal(
+    metaMensal?.id,
+    metricas?.metaIndividual || 0,
+    metricas?.totalVendido || 0,
+    mesSelecionado,
+    lancamentos || undefined,
+  );
+
   const fmt = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
@@ -294,6 +305,15 @@ export default function VisaoConsultora() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Ritmo Semanal */}
+            {metricas && metricas.metaIndividual > 0 && (
+              <RitmoSemanalCard
+                semanas={ritmo.semanas}
+                status={ritmo.status}
+                motivacional
+              />
+            )}
 
             {/* Dica do Dia */}
             <CoachDicaDoDia consultoraId={selectedConsultoraId} />

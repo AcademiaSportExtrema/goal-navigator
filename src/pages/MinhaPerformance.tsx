@@ -289,7 +289,7 @@ export default function MinhaPerformance() {
             </div>
 
             {/* Ritmo Semanal */}
-            {!isProximoMes && metricas && metricas.metaIndividual > 0 && (
+            {metricas && metricas.metaIndividual > 0 && (
               <RitmoSemanalCard
                 semanas={ritmo.semanas}
                 status={ritmo.status}
