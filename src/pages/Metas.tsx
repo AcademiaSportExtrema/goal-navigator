@@ -187,8 +187,10 @@ export default function Metas() {
     };
   }, [lancamentos, metaMensal, metasConsultoras, niveisComissao]);
 
+  const showPreviousMonth = new Date().getDate() <= 5;
   const meses = isConsultora
     ? [
+        ...(showPreviousMonth ? [{ value: format(subMonths(new Date(), 1), 'yyyy-MM'), label: format(subMonths(new Date(), 1), 'MMMM yyyy', { locale: ptBR }) }] : []),
         { value: format(new Date(), 'yyyy-MM'), label: format(new Date(), 'MMMM yyyy', { locale: ptBR }) },
         { value: format(addMonths(new Date(), 1), 'yyyy-MM'), label: format(addMonths(new Date(), 1), 'MMMM yyyy', { locale: ptBR }) },
       ]

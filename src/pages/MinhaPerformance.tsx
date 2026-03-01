@@ -17,7 +17,7 @@ import {
 import { Target, TrendingUp, DollarSign, Award, Calendar } from 'lucide-react';
 import { CoachDicaDoDia } from '@/components/CoachDicaDoDia';
 import { RitmoSemanalCard } from '@/components/dashboard/RitmoSemanalCard';
-import { format, addMonths } from 'date-fns';
+import { format, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
 import { getNivelNome } from '@/lib/utils';
@@ -25,9 +25,11 @@ import { getNivelNome } from '@/lib/utils';
 export default function MinhaPerformance() {
   const { consultoraId } = useAuth();
   const mesAtual = format(new Date(), 'yyyy-MM');
+  const mesAnterior = format(subMonths(new Date(), 1), 'yyyy-MM');
   const proximoMes = format(addMonths(new Date(), 1), 'yyyy-MM');
+  const showPreviousMonth = new Date().getDate() <= 5;
   const [mesSelecionado, setMesSelecionado] = useState(mesAtual);
-  const isProximoMes = mesSelecionado !== mesAtual;
+  const isProximoMes = mesSelecionado === proximoMes;
 
   // Buscar dados da consultora
   const { data: consultora } = useQuery({
@@ -176,6 +178,18 @@ export default function MinhaPerformance() {
             </div>
           </div>
           <div className="flex gap-2">
+            {showPreviousMonth && (
+              <button
+                onClick={() => setMesSelecionado(mesAnterior)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  mesSelecionado === mesAnterior
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-accent'
+                }`}
+              >
+                {format(new Date(mesAnterior + '-01'), 'MMM yyyy', { locale: ptBR })}
+              </button>
+            )}
             <button
               onClick={() => setMesSelecionado(mesAtual)}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
