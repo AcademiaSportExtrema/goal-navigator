@@ -1,33 +1,34 @@
 
 
-## Trocar filtro de data na Visão Consultora: mês atual + próximo mês com toggle buttons
+## Correção: 2 lançamentos de março + regra SPORT 06 OFF + lógica HIBRIDA
 
-### Problema
-O seletor de data na Visão Consultora mostra 12 meses retroativos (desnecessário para consultoras) e não inclui o próximo mês. O admin precisa ver o mês atual e o próximo para conferir metas futuras.
+### 1. Corrigir regra SPORT 06 OFF no banco
+A regra `dda589a4` está com `regra_mes = DATA_INICIO` mas SPORT 06 OFF é parcelado. Alterar para `DATA_LANCAMENTO`.
 
-### Alterações
+### 2. Corrigir os 2 lançamentos no banco
+- `13c32f13` (Jozineide): `mes_competencia` de `2026-03` → `2026-02`
+- `55b01ae8` (Kenzo): `mes_competencia` de `2026-03` → `2026-02`
 
-**`src/pages/VisaoConsultora.tsx`**
+### 3. Corrigir lógica HIBRIDA nos 3 edge functions
 
-1. **Remover** `mesesDisponiveis` (useMemo com `subMonths` gerando 12 meses) e a importação de `subMonths`
-2. **Adicionar** variáveis `mesAtual` e `proximoMes` (como em MinhaPerformance, usando `addMonths`)
-3. **Substituir** o `<Select>` de data por **toggle buttons** (mesmo padrão de MinhaPerformance):
-
-```text
-[ fev 2026 ]  [ mar 2026 ]     ← toggle buttons
+Alterar nos 3 arquivos a linha HIBRIDA de:
+```typescript
+dataRef = lancamento.plano ? (lancamento.data_inicio || lancamento.data_lancamento) : lancamento.data_lancamento;
+```
+Para:
+```typescript
+const isRecorrencia = (lancamento.condicao_pagamento || '').toUpperCase().includes('RECORRÊNCIA');
+dataRef = isRecorrencia ? (lancamento.data_inicio || lancamento.data_lancamento) : lancamento.data_lancamento;
 ```
 
-4. Layout final do seletor:
-```text
-┌──────────────────────────────────────────────────────────┐
-│ 👁 [ Selecione uma consultora ▾ ]   [fev 2026] [mar 2026]│
-└──────────────────────────────────────────────────────────┘
-```
+**Arquivos afetados:**
+- `supabase/functions/classificar-meta/index.ts` (linha ~118)
+- `supabase/functions/upload-importar-xls/index.ts` (linha ~204-205)
+- `supabase/functions/reprocessar-upload/index.ts` (linha ~265)
 
-- Botão ativo: `bg-primary text-primary-foreground`
-- Botão inativo: `bg-muted text-muted-foreground hover:bg-accent`
-- Default: mês atual selecionado
-
-### Nenhuma outra alteração
-Mesma lógica de dados, mesma query — só muda o componente de filtro e os meses disponíveis.
+### Impacto
+- Janeiro: **sem alteração** (não mexemos)
+- Fevereiro: +R$ 3.336 (Nicole +R$ 2.322, Livia +R$ 1.014)
+- Março: zera (correto, mês não começou)
+- Futuros uploads: lógica HIBRIDA usará `data_inicio` somente para recorrências
 
