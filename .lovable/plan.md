@@ -1,34 +1,31 @@
 
 
-## Correção: 2 lançamentos de março + regra SPORT 06 OFF + lógica HIBRIDA
+## Remover opção HIBRIDA do motor de regras
 
-### 1. Corrigir regra SPORT 06 OFF no banco
-A regra `dda589a4` está com `regra_mes = DATA_INICIO` mas SPORT 06 OFF é parcelado. Alterar para `DATA_LANCAMENTO`.
+### Contexto
+Existem **75 regras** com `regra_mes = 'HIBRIDA'`, 8 com `DATA_INICIO` e 9 com `DATA_LANCAMENTO`. A maioria das regras HIBRIDA são produtos (Bold, Monster, Gatorade, etc.) que devem usar `DATA_LANCAMENTO`. 
 
-### 2. Corrigir os 2 lançamentos no banco
-- `13c32f13` (Jozineide): `mes_competencia` de `2026-03` → `2026-02`
-- `55b01ae8` (Kenzo): `mes_competencia` de `2026-03` → `2026-02`
+### Decisão necessária
+Antes de implementar, preciso confirmar: as 75 regras HIBRIDA devem ser convertidas para `DATA_LANCAMENTO`? Produtos de loja/avulsos usam data de lançamento, e as regras com `DATA_INICIO` (8 regras) já estão corretas para recorrências.
 
-### 3. Corrigir lógica HIBRIDA nos 3 edge functions
+### Plano de execução
 
-Alterar nos 3 arquivos a linha HIBRIDA de:
-```typescript
-dataRef = lancamento.plano ? (lancamento.data_inicio || lancamento.data_lancamento) : lancamento.data_lancamento;
-```
-Para:
-```typescript
-const isRecorrencia = (lancamento.condicao_pagamento || '').toUpperCase().includes('RECORRÊNCIA');
-dataRef = isRecorrencia ? (lancamento.data_inicio || lancamento.data_lancamento) : lancamento.data_lancamento;
-```
+**1. Migração no banco de dados**
+- Converter todas as 75 regras `HIBRIDA` → `DATA_LANCAMENTO`
+- Remover o valor `HIBRIDA` do enum `regra_mes` (ficam apenas `DATA_LANCAMENTO` e `DATA_INICIO`)
 
-**Arquivos afetados:**
-- `supabase/functions/classificar-meta/index.ts` (linha ~118)
-- `supabase/functions/upload-importar-xls/index.ts` (linha ~204-205)
-- `supabase/functions/reprocessar-upload/index.ts` (linha ~265)
+**2. Remover HIBRIDA do frontend (2 arquivos)**
+- `src/pages/Regras.tsx` (linha 71): remover opção `HIBRIDA` do array `regraMesOptions`
+- `src/pages/Pendencias.tsx` (linha 68): remover opção `HIBRIDA` do array `regraMesOptions`
+- `src/types/database.ts` (linha 37): remover `HIBRIDA` do tipo `RegraMes`
+
+**3. Remover lógica HIBRIDA dos 3 edge functions**
+- `supabase/functions/classificar-meta/index.ts`: remover bloco `else if HIBRIDA` (linhas 117-119)
+- `supabase/functions/upload-importar-xls/index.ts`: remover bloco `else if HIBRIDA` (linhas 204-206)
+- `supabase/functions/reprocessar-upload/index.ts`: remover bloco `else if HIBRIDA` (linhas 265-268)
 
 ### Impacto
-- Janeiro: **sem alteração** (não mexemos)
-- Fevereiro: +R$ 3.336 (Nicole +R$ 2.322, Livia +R$ 1.014)
-- Março: zera (correto, mês não começou)
-- Futuros uploads: lógica HIBRIDA usará `data_inicio` somente para recorrências
+- Regras existentes HIBRIDA passam a usar `DATA_LANCAMENTO` (correto para produtos)
+- Regras de recorrência já usam `DATA_INICIO` e não são afetadas
+- Nenhum lançamento é reprocessado (apenas a regra muda para futuras classificações)
 
