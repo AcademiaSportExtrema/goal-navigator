@@ -262,10 +262,8 @@ Deno.serve(async (req) => {
               let dataRef: string | null = null;
               if (regra.regra_mes === 'DATA_LANCAMENTO') dataRef = lancamento.data_lancamento;
               else if (regra.regra_mes === 'DATA_INICIO') dataRef = lancamento.data_inicio || lancamento.data_lancamento;
-              else if (regra.regra_mes === 'HIBRIDA') {
-                const isRecorrencia = (lancamento.condicao_pagamento || '').toUpperCase().includes('RECORRÊNCIA');
-                dataRef = isRecorrencia ? (lancamento.data_inicio || lancamento.data_lancamento) : lancamento.data_lancamento;
-              }
+
+
 
               if (dataRef) lancamento.mes_competencia = dataRef.substring(0, 7);
               break;
