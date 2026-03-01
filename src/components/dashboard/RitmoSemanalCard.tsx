@@ -1,101 +1,116 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Clock, TrendingUp, TrendingDown, Minus, CheckCircle2 } from 'lucide-react';
+import type { SemanaDetalhe } from '@/hooks/useMetaSemanal';
 
 interface RitmoSemanalCardProps {
-  semanaAtual: number;
-  metaEsperadaValor: number;
-  metaEsperadaPercent: number;
-  vendido: number;
-  percentualDoEsperado: number;
-  status: 'adiantada' | 'no_ritmo' | 'atrasada';
-  metaTotal: number;
+  semanas: SemanaDetalhe[];
   /** Show motivational message for consultora view */
   motivacional?: boolean;
+  status: 'adiantada' | 'no_ritmo' | 'atrasada';
 }
 
 const statusConfig = {
   adiantada: {
-    label: 'Adiantada',
-    color: 'text-success',
-    borderColor: 'border-l-green-500',
-    icon: TrendingUp,
     mensagem: '🚀 Ótimo ritmo! Continue assim que a meta está no caminho!',
   },
   no_ritmo: {
-    label: 'No Ritmo',
-    color: 'text-primary',
-    borderColor: 'border-l-blue-500',
-    icon: Minus,
     mensagem: '👍 Você está no ritmo certo. Mantenha o foco!',
   },
   atrasada: {
-    label: 'Atrasada',
-    color: 'text-destructive',
-    borderColor: 'border-l-red-500',
-    icon: TrendingDown,
     mensagem: '⚡ Hora de acelerar! Foque nos clientes mais quentes para recuperar o ritmo.',
   },
 };
 
+const semanaStatusStyle: Record<SemanaDetalhe['status'], string> = {
+  bateu: 'bg-green-50 border-green-300 dark:bg-green-950/40 dark:border-green-700',
+  no_ritmo: 'bg-amber-50 border-amber-300 dark:bg-amber-950/40 dark:border-amber-700',
+  atrasada: 'bg-red-50 border-red-300 dark:bg-red-950/40 dark:border-red-700',
+  futura: 'bg-muted/30 border-border opacity-60',
+};
+
+const semanaStatusIcon: Record<SemanaDetalhe['status'], React.ReactNode> = {
+  bateu: <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />,
+  no_ritmo: <Minus className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
+  atrasada: <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />,
+  futura: <Clock className="h-4 w-4 text-muted-foreground" />,
+};
+
+const semanaStatusLabel: Record<SemanaDetalhe['status'], string> = {
+  bateu: '✅ Bateu',
+  no_ritmo: '🔶 Quase',
+  atrasada: '🔴 Falta',
+  futura: '⏳ Futuro',
+};
+
 const fmt = (v: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(v);
 
 export function RitmoSemanalCard({
-  semanaAtual,
-  metaEsperadaValor,
-  metaEsperadaPercent,
-  vendido,
-  percentualDoEsperado,
-  status,
-  metaTotal,
+  semanas,
   motivacional = false,
+  status,
 }: RitmoSemanalCardProps) {
-  const cfg = statusConfig[status];
-  const Icon = cfg.icon;
-  const progressValue = Math.min(percentualDoEsperado, 100);
+  const gridCols = semanas.length === 5 ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4';
 
   return (
-    <Card className={`border-l-4 ${cfg.borderColor} hover:shadow-md transition-all`}>
+    <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">
-          Ritmo Semanal — Semana {semanaAtual}
+          Ritmo Semanal
         </CardTitle>
         <Clock className="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Icon className={`h-5 w-5 ${cfg.color}`} />
-          <span className={`text-lg font-bold ${cfg.color}`}>{cfg.label}</span>
-          <span className="text-sm text-muted-foreground ml-auto">
-            {percentualDoEsperado.toFixed(0)}% do esperado
-          </span>
-        </div>
+        <div className={`grid ${gridCols} gap-2`}>
+          {semanas.map(s => (
+            <div
+              key={s.semana}
+              className={`rounded-lg border p-3 text-center transition-all ${
+                s.isCurrent
+                  ? 'bg-primary text-primary-foreground border-primary ring-2 ring-primary/30'
+                  : semanaStatusStyle[s.status]
+              }`}
+            >
+              <div className="font-bold text-sm">Semana {s.semana}</div>
+              <div className={`text-xs ${s.isCurrent ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                dias {s.diasLabel}
+              </div>
 
-        <Progress value={progressValue} className="h-3" />
+              <div className="mt-2 space-y-0.5">
+                <div className={`text-xs ${s.isCurrent ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                  Meta: {fmt(s.metaValor)}
+                </div>
+                <div className="text-base font-bold">
+                  {fmt(s.vendido)}
+                </div>
+                <div className={`text-sm font-semibold ${
+                  s.isCurrent
+                    ? 'text-primary-foreground'
+                    : s.percentual >= 100
+                      ? 'text-green-600 dark:text-green-400'
+                      : s.percentual >= 90
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : s.status === 'futura'
+                          ? 'text-muted-foreground'
+                          : 'text-red-600 dark:text-red-400'
+                }`}>
+                  {s.percentual.toFixed(0)}%
+                </div>
+              </div>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-          <div>
-            <span className="text-muted-foreground">Vendido:</span>
-            <span className="ml-1 font-medium">{fmt(vendido)}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Esperado agora:</span>
-            <span className="ml-1 font-medium">{fmt(metaEsperadaValor)}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Meta total:</span>
-            <span className="ml-1 font-medium">{fmt(metaTotal)}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Progresso esperado:</span>
-            <span className="ml-1 font-medium">{metaEsperadaPercent.toFixed(0)}%</span>
-          </div>
+              <div className={`mt-1 flex items-center justify-center gap-1 text-xs font-medium ${
+                s.isCurrent ? 'text-primary-foreground/80' : ''
+              }`}>
+                {!s.isCurrent && semanaStatusIcon[s.status]}
+                <span>{semanaStatusLabel[s.status]}</span>
+              </div>
+            </div>
+          ))}
         </div>
 
         {motivacional && (
           <p className="text-sm text-muted-foreground border-t pt-2 mt-1">
-            {cfg.mensagem}
+            {statusConfig[status].mensagem}
           </p>
         )}
       </CardContent>

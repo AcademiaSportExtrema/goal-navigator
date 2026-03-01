@@ -414,6 +414,7 @@ export default function Dashboard() {
     metaMensal ? Number(metaMensal.meta_total) : 0,
     totalVendidoInicio || 0,
     mesSelecionado,
+    lancamentos || undefined,
   );
 
   // Ritmo Semanal — consultora individual
@@ -427,11 +428,20 @@ export default function Dashboard() {
     return dashboardData.consultoras.find(c => c.consultoraId === consultoraId)?.vendido || 0;
   }, [dashboardData, consultoraId]);
 
+  // Filter lancamentos for this consultora
+  const meusLancamentosConsultora = useMemo(() => {
+    if (!lancamentos || !consultoraId || !dashboardData) return undefined;
+    const meuNome = dashboardData.consultoras.find(c => c.consultoraId === consultoraId)?.nome;
+    if (!meuNome) return undefined;
+    return lancamentos.filter(l => l.consultora_chave === meuNome);
+  }, [lancamentos, consultoraId, dashboardData]);
+
   const ritmoConsultora = useMetaSemanal(
     metaMensal?.id,
     minhaMetaValorRitmo,
     meuVendidoRitmo,
     mesSelecionado,
+    meusLancamentosConsultora,
   );
 
   const getVendidoColor = (percentual: number) => {
@@ -521,13 +531,8 @@ export default function Dashboard() {
             {/* Ritmo Semanal — Consultora */}
             {show('card_ritmo_semanal') && metaMensal && metaIndividual && minhaMetaValorRitmo > 0 && (
               <RitmoSemanalCard
-                semanaAtual={ritmoConsultora.semanaAtual}
-                metaEsperadaValor={ritmoConsultora.metaEsperadaValor}
-                metaEsperadaPercent={ritmoConsultora.metaEsperadaPercent}
-                vendido={ritmoConsultora.vendido}
-                percentualDoEsperado={ritmoConsultora.percentualDoEsperado}
+                semanas={ritmoConsultora.semanas}
                 status={ritmoConsultora.status}
-                metaTotal={minhaMetaValorRitmo}
                 motivacional
               />
             )}
@@ -781,13 +786,8 @@ export default function Dashboard() {
               {/* Ritmo Semanal — Admin */}
               {metaMensal && (
                 <RitmoSemanalCard
-                  semanaAtual={ritmoGeral.semanaAtual}
-                  metaEsperadaValor={ritmoGeral.metaEsperadaValor}
-                  metaEsperadaPercent={ritmoGeral.metaEsperadaPercent}
-                  vendido={ritmoGeral.vendido}
-                  percentualDoEsperado={ritmoGeral.percentualDoEsperado}
+                  semanas={ritmoGeral.semanas}
                   status={ritmoGeral.status}
-                  metaTotal={Number(metaMensal.meta_total)}
                 />
               )}
 
