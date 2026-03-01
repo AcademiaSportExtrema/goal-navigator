@@ -1,41 +1,61 @@
 
 
-## Adicionar gráfico "Clientes Únicos por Consultora" + exportação CSV
+## Metas Semanais — Proporção semanal configurável + acompanhamento no Dashboard
 
-### Regra de negócio
-Contar **pessoas únicas** (`nome_cliente` distinto) por consultora, filtrando apenas lançamentos com **data de início dentro do mês selecionado** (não pela `mes_competencia`). Isso mostra quantas pessoas cada consultora efetivamente atendeu para vender planos naquele mês. Excluir itens de loja (`duracao` = `0`, vazio ou nulo).
+### Conceito
+Permitir ao admin definir, na Configuração do Mês, qual percentual da meta deve ser atingido em cada semana (ex: S1=30%, S2=25%, S3=25%, S4=20%). O Dashboard do admin e das consultoras mostra uma barra ou indicador comparando o vendido acumulado vs. a meta acumulada esperada até a semana atual, evidenciando se estão adiantadas ou atrasadas.
 
-### Alterações
+### 1. Nova tabela no banco de dados
 
-**1. Novo componente `src/components/dashboard/ClientesUnicosChart.tsx`**
-- Gráfico de barras horizontais (Recharts `BarChart layout="vertical"`)
-- Recebe `{ nome: string; clientes: number }[]`
-- Ordenado do maior para o menor
-- Card com título "Clientes Atendidos por Consultora"
-- Botão de exportar CSV no header do card (ícone Download)
-- O CSV exportado lista: Consultora, Quantidade de Clientes, e opcionalmente os nomes dos clientes
+```sql
+CREATE TABLE public.meta_semanal (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  meta_mensal_id uuid NOT NULL REFERENCES metas_mensais(id) ON DELETE CASCADE,
+  empresa_id uuid NOT NULL,
+  semana integer NOT NULL CHECK (semana BETWEEN 1 AND 5),
+  peso_percent numeric NOT NULL DEFAULT 25,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (meta_mensal_id, semana)
+);
 
-**2. Nova query em `src/pages/Dashboard.tsx`**
-- Buscar lançamentos com `data_inicio` dentro do mês selecionado (entre `YYYY-MM-01` e último dia do mês)
-- Filtrar no front: `duracao` diferente de `0`, `''` e `null` (exclui Loja)
-- Agrupar por `consultora_chave`, contar `nome_cliente` distintos via `Set`
-- Guardar também a lista de nomes por consultora para exportação CSV
+ALTER TABLE public.meta_semanal ENABLE ROW LEVEL SECURITY;
 
-**3. Layout em grid 2 colunas** (linhas ~822-830)
-- Envolver `ConsultoraShareChart` + `ClientesUnicosChart` em `<div className="grid gap-4 md:grid-cols-2">`
+CREATE POLICY "Admins manage own empresa meta_semanal"
+  ON public.meta_semanal FOR ALL
+  USING (has_role(auth.uid(), 'admin') AND empresa_id = get_user_empresa_id(auth.uid()));
 
-### Exportação CSV
-O botão no card exporta um arquivo com colunas: `Consultora | Cliente | Data Início` — listando cada cliente único por consultora, permitindo ao admin ver exatamente com quem cada consultora conversou.
+CREATE POLICY "Super admins full access meta_semanal"
+  ON public.meta_semanal FOR ALL
+  USING (has_role(auth.uid(), 'super_admin'));
 
-### Resultado visual
-```text
-┌──────────────────────────┐  ┌──────────────────────────┐
-│  Participação por        │  │  Clientes Atendidos  [⬇] │
-│  Consultora (donut)      │  │  por Consultora          │
-│                          │  │  ████████████ 32          │
-│      🍩                  │  │  █████████ 24            │
-│                          │  │  ██████ 18               │
-│                          │  │  ████ 12                 │
-└──────────────────────────┘  └──────────────────────────┘
+CREATE POLICY "Users view own empresa meta_semanal"
+  ON public.meta_semanal FOR SELECT
+  USING (empresa_id = get_user_empresa_id(auth.uid()));
 ```
+
+### 2. Configuração do Mês (`ConfiguracaoMes.tsx`)
+- Adicionar seção "Distribuição Semanal" abaixo da meta total
+- 4-5 inputs para os pesos semanais (S1, S2, S3, S4, S5) com default 25% cada
+- Totalizar e alertar se soma ≠ 100%
+- Salvar na tabela `meta_semanal` junto com o restante
+
+### 3. Lógica de cálculo da semana atual
+- Determinar em qual semana do mês estamos (dias 1-7 = S1, 8-14 = S2, 15-21 = S3, 22-28 = S4, 29+ = S5 ou S4)
+- Meta acumulada esperada = soma dos pesos das semanas já concluídas + proporção da semana atual
+- Comparar com vendido acumulado para gerar status (adiantada/no ritmo/atrasada)
+
+### 4. Dashboard Admin (`Dashboard.tsx`)
+- Novo card "Ritmo Semanal" na seção de vendas consultoras
+- Mostra: meta esperada até agora vs. vendido, com indicador visual (verde/amarelo/vermelho)
+- Na tabela de consultoras, adicionar coluna "Ritmo" com ícone de status
+
+### 5. Dashboard Consultora (visão consultora no `Dashboard.tsx` + `MinhaPerformance.tsx`)
+- Card "Ritmo da Semana" mostrando se está no ritmo ou atrasada
+- Barra de progresso comparando vendido vs. meta acumulada esperada
+- Mensagem motivacional baseada no status
+
+### Detalhes técnicos
+- Query: buscar `meta_semanal` pelo `meta_mensal_id` do mês selecionado
+- Se não houver config semanal, assumir distribuição uniforme (25% por semana)
+- Registrar `meta_semanal` no `useDashboardVisibilidade` como componente toggleável (`card_ritmo_semanal`)
 
