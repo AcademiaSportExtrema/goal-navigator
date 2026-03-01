@@ -25,8 +25,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Plus, RefreshCw, Zap } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { AlertCircle, RefreshCw, Zap } from 'lucide-react';
 import type { CampoAlvo, OperadorRegra, ResponsavelCampo, RegraMes } from '@/types/database';
 
 interface PendenciaGroup {
@@ -367,13 +366,6 @@ export default function Pendencias() {
                           }).format(p.total_valor)}
                         </p>
                       </div>
-
-                      <Button asChild size="sm" variant="outline">
-                        <Link to={`/regras?produto=${p.produto || ''}&plano=${p.plano || ''}`}>
-                          <Plus className="h-4 w-4 mr-1" />
-                          Criar Regra
-                        </Link>
-                      </Button>
 
                       <Button size="sm" onClick={() => handleOpenDialog(p)}>
                         <Zap className="h-4 w-4 mr-1" />
