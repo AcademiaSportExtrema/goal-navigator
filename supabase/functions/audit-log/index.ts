@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
       actor_id: user.id,
       actor_email: user.email,
       actor_role: userRole?.role || null,
-      empresa_id: empresa_id || userRole?.empresa_id || null,
+      empresa_id: userRole?.empresa_id || null,
       action,
       target_table: target_table || null,
       target_id: target_id || null,

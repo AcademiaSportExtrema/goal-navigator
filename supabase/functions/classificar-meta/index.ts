@@ -48,15 +48,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { reprocessar_todos, mes_competencia, lancamento_ids } = await req.json();
+    const body = await req.json();
+    const { reprocessar_todos, mes_competencia, lancamento_ids } = body;
 
     // Buscar lançamentos a processar (scoped by empresa)
     let query = supabase.from('lancamentos').select('*');
     
-    // Super admin can optionally skip empresa filter; admin always filtered
-    if (!isSuperAdmin && userEmpresaId) {
-      query = query.eq('empresa_id', userEmpresaId);
+    // Always filter by empresa_id for tenant isolation
+    const targetEmpresaId = userEmpresaId || body.empresa_id;
+    
+    if (!targetEmpresaId) {
+      return new Response(JSON.stringify({ error: 'empresa_id é obrigatório para reprocessamento' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
+    
+    query = query.eq('empresa_id', targetEmpresaId);
 
     if (lancamento_ids?.length) {
       query = query.in('id', lancamento_ids);
@@ -69,11 +76,12 @@ Deno.serve(async (req) => {
     const { data: lancamentos, error: fetchError } = await query;
     if (fetchError) throw fetchError;
 
-    // Buscar regras ativas
+    // Buscar regras ativas - FILTRADO por empresa_id para isolamento multi-tenant
     const { data: regras } = await supabase
       .from('regras_meta')
       .select('*')
       .eq('ativo', true)
+      .eq('empresa_id', targetEmpresaId)
       .order('prioridade', { ascending: true });
 
     let processados = 0;

@@ -39,7 +39,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { action, email, consultora_id, password, empresa_id } = await req.json();
+    // Derive empresa_id from the caller's server-side data (never trust the body)
+    const { data: callerEmpresaId } = await supabaseAdmin.rpc('get_user_empresa_id', { _user_id: caller.id });
+    if (!callerEmpresaId) {
+      return new Response(JSON.stringify({ error: 'Empresa do administrador não encontrada' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const { action, email, consultora_id, password } = await req.json();
 
     if (action === 'check') {
       if (!email) {
@@ -79,6 +87,19 @@ Deno.serve(async (req) => {
       if (!email || !consultora_id || !password) {
         return new Response(JSON.stringify({ error: 'Email, password e consultora_id são obrigatórios' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Validate consultora belongs to caller's empresa
+      const { data: consultoraData } = await supabaseAdmin
+        .from('consultoras')
+        .select('id')
+        .eq('id', consultora_id)
+        .eq('empresa_id', callerEmpresaId)
+        .maybeSingle();
+      if (!consultoraData) {
+        return new Response(JSON.stringify({ error: 'Consultora não encontrada nesta empresa' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
@@ -126,13 +147,13 @@ Deno.serve(async (req) => {
       if (existingRole) {
         const { error: updateError } = await supabaseAdmin
           .from('user_roles')
-          .update({ role: 'consultora', consultora_id, empresa_id: empresa_id || undefined })
+          .update({ role: 'consultora', consultora_id, empresa_id: callerEmpresaId })
           .eq('id', existingRole.id);
         if (updateError) throw updateError;
       } else {
         const { error: insertError } = await supabaseAdmin
           .from('user_roles')
-          .insert({ user_id: userId, role: 'consultora', consultora_id, empresa_id });
+          .insert({ user_id: userId, role: 'consultora', consultora_id, empresa_id: callerEmpresaId });
         if (insertError) throw insertError;
       }
 
@@ -141,7 +162,7 @@ Deno.serve(async (req) => {
         actor_id: caller.id,
         actor_email: caller.email,
         actor_role: 'admin',
-        empresa_id: empresa_id || null,
+        empresa_id: callerEmpresaId,
         action: 'consultora.create_and_link',
         target_table: 'user_roles',
         metadata: { email, consultora_id },
@@ -156,6 +177,19 @@ Deno.serve(async (req) => {
       if (!email || !consultora_id) {
         return new Response(JSON.stringify({ error: 'Email e consultora_id são obrigatórios' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Validate consultora belongs to caller's empresa
+      const { data: consultoraData } = await supabaseAdmin
+        .from('consultoras')
+        .select('id')
+        .eq('id', consultora_id)
+        .eq('empresa_id', callerEmpresaId)
+        .maybeSingle();
+      if (!consultoraData) {
+        return new Response(JSON.stringify({ error: 'Consultora não encontrada nesta empresa' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
@@ -178,13 +212,13 @@ Deno.serve(async (req) => {
       if (existingRole) {
         const { error: updateError } = await supabaseAdmin
           .from('user_roles')
-          .update({ role: 'consultora', consultora_id, empresa_id: empresa_id || undefined })
+          .update({ role: 'consultora', consultora_id, empresa_id: callerEmpresaId })
           .eq('id', existingRole.id);
         if (updateError) throw updateError;
       } else {
         const { error: insertError } = await supabaseAdmin
           .from('user_roles')
-          .insert({ user_id: targetUser.id, role: 'consultora', consultora_id, empresa_id });
+          .insert({ user_id: targetUser.id, role: 'consultora', consultora_id, empresa_id: callerEmpresaId });
         if (insertError) throw insertError;
       }
 
@@ -193,7 +227,7 @@ Deno.serve(async (req) => {
         actor_id: caller.id,
         actor_email: caller.email,
         actor_role: 'admin',
-        empresa_id: empresa_id || null,
+        empresa_id: callerEmpresaId,
         action: 'consultora.link',
         target_table: 'user_roles',
         metadata: { email, consultora_id },
@@ -211,6 +245,19 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Validate consultora belongs to caller's empresa
+      const { data: consultoraData } = await supabaseAdmin
+        .from('consultoras')
+        .select('id')
+        .eq('id', consultora_id)
+        .eq('empresa_id', callerEmpresaId)
+        .maybeSingle();
+      if (!consultoraData) {
+        return new Response(JSON.stringify({ error: 'Consultora não encontrada nesta empresa' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
       const { error: deleteError } = await supabaseAdmin
         .from('user_roles')
         .delete()
@@ -224,7 +271,7 @@ Deno.serve(async (req) => {
         actor_id: caller.id,
         actor_email: caller.email,
         actor_role: 'admin',
-        empresa_id: empresa_id || null,
+        empresa_id: callerEmpresaId,
         action: 'consultora.unlink',
         target_table: 'user_roles',
         metadata: { consultora_id },
