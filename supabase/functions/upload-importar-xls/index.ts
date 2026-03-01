@@ -202,7 +202,8 @@ export async function processarLinhas(
             } else if (regra.regra_mes === 'DATA_INICIO') {
               dataRef = lancamento.data_inicio || lancamento.data_lancamento;
             } else if (regra.regra_mes === 'HIBRIDA') {
-              dataRef = lancamento.plano ? (lancamento.data_inicio || lancamento.data_lancamento) : lancamento.data_lancamento;
+              const isRecorrencia = (lancamento.condicao_pagamento || '').toUpperCase().includes('RECORRÊNCIA');
+              dataRef = isRecorrencia ? (lancamento.data_inicio || lancamento.data_lancamento) : lancamento.data_lancamento;
             }
 
             if (dataRef) {
