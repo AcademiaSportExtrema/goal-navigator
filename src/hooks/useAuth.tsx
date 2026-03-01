@@ -75,7 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          setTimeout(() => fetchUserData(session.user.id), 0);
+          // Keep isLoading true until fetchUserData completes
+          await fetchUserData(session.user.id);
         } else {
           setRole(null);
           setConsultoraId(null);
