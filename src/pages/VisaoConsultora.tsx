@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select';
 import { Target, TrendingUp, DollarSign, Award, Eye } from 'lucide-react';
 import { CoachDicaDoDia } from '@/components/CoachDicaDoDia';
-import { format, addMonths, startOfMonth } from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
 import { PaginationControls } from '@/components/PaginationControls';
@@ -37,8 +37,10 @@ export default function VisaoConsultora() {
   const [currentPage, setCurrentPage] = useState(1);
   const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
 
+  const mesAnterior = useMemo(() => format(subMonths(startOfMonth(new Date()), 1), 'yyyy-MM'), []);
   const mesAtual = useMemo(() => format(startOfMonth(new Date()), 'yyyy-MM'), []);
   const proximoMes = useMemo(() => format(addMonths(startOfMonth(new Date()), 1), 'yyyy-MM'), []);
+  const showPreviousMonth = new Date().getDate() <= 5;
 
   useEffect(() => { setCurrentPage(1); }, [selectedConsultoraId]);
 
@@ -190,7 +192,7 @@ export default function VisaoConsultora() {
                 </Select>
               </div>
               <div className="flex gap-2">
-                {[mesAtual, proximoMes].map((mes) => {
+                {[...(showPreviousMonth ? [mesAnterior] : []), mesAtual, proximoMes].map((mes) => {
                   const [y, m] = mes.split('-').map(Number);
                   const label = format(new Date(y, m - 1, 1), 'MMM yyyy', { locale: ptBR });
                   const isActive = mesSelecionado === mes;
