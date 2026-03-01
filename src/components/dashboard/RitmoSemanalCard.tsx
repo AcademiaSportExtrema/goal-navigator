@@ -75,6 +75,9 @@ export function RitmoSemanalCard({
               <div className={`text-xs ${s.isCurrent ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                 dias {s.diasLabel}
               </div>
+              <div className={`text-xs ${s.isCurrent ? 'text-primary-foreground/60' : 'text-muted-foreground/80'}`}>
+                ({s.pesoPercent}% da meta)
+              </div>
 
               <div className="mt-2 space-y-0.5">
                 <div className={`text-xs ${s.isCurrent ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>

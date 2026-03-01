@@ -9,6 +9,7 @@ interface PesoSemanal {
 export interface SemanaDetalhe {
   semana: number;
   diasLabel: string;
+  pesoPercent: number;
   metaValor: number;
   vendido: number;
   percentual: number;
@@ -191,6 +192,7 @@ export function useMetaSemanal(
     return {
       semana: s.semana,
       diasLabel: `${s.diaInicio} - ${s.diaFim}`,
+      pesoPercent: peso,
       metaValor,
       vendido,
       percentual,
