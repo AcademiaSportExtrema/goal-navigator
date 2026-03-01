@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -379,43 +380,6 @@ export default function ConfiguracaoMes() {
                 />
               </div>
 
-              {/* Distribuição Semanal */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Distribuição Semanal da Meta</Label>
-                </div>
-                <div className={`grid gap-2 ${totalSemanas === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
-                  {semanasDoMes.map(s => (
-                    <div key={s.semana} className="space-y-1">
-                      <Label className="text-xs text-center block text-muted-foreground">
-                        S{s.semana} ({s.diaInicio}-{s.diaFim})
-                      </Label>
-                      <div className="flex items-center gap-1">
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="1"
-                          value={pesosSemana[s.semana] || '0'}
-                          onChange={e => setPesosSemana(p => ({ ...p, [s.semana]: e.target.value }))}
-                          className="text-center h-9 text-sm"
-                        />
-                        <span className="text-xs text-muted-foreground">%</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {(() => {
-                  const soma = semanasDoMes.reduce((s, w) => s + (parseFloat(pesosSemana[w.semana]) || 0), 0);
-                  const isExact = Math.abs(soma - 100) < 0.01;
-                  return (
-                    <p className={`text-xs font-medium ${isExact ? 'text-success' : 'text-destructive'}`}>
-                      Total: {soma.toFixed(0)}% {!isExact && '(deve somar 100%)'}
-                    </p>
-                  );
-                })()}
-              </div>
 
               {consultoras && consultoras.length > 0 ? (
                 <div className="space-y-1">
@@ -547,6 +511,79 @@ export default function ConfiguracaoMes() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Distribuição Semanal da Meta — card próprio com tabela */}
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <CalendarDays className="h-5 w-5 text-primary" />
+              Distribuição Semanal da Meta
+            </CardTitle>
+            <CardDescription>
+              Defina o peso de cada semana — o valor em R$ é calculado automaticamente
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const somaPesos = semanasDoMes.reduce((s, w) => s + (parseFloat(pesosSemana[w.semana]) || 0), 0);
+              const isExact = Math.abs(somaPesos - 100) < 0.01;
+              return (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-20">Semana</TableHead>
+                      <TableHead className="w-28">Período</TableHead>
+                      <TableHead className="w-36 text-center">Peso (%)</TableHead>
+                      <TableHead className="text-right">Valor (R$)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {semanasDoMes.map(s => {
+                      const peso = parseFloat(pesosSemana[s.semana]) || 0;
+                      const valor = metaNum * peso / 100;
+                      return (
+                        <TableRow key={s.semana}>
+                          <TableCell className="font-medium">S{s.semana}</TableCell>
+                          <TableCell className="text-muted-foreground">{s.diaInicio} – {s.diaFim}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-center gap-1">
+                              <Input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="1"
+                                value={pesosSemana[s.semana] || '0'}
+                                onChange={e => setPesosSemana(p => ({ ...p, [s.semana]: e.target.value }))}
+                                className="w-20 text-center h-9 text-sm"
+                              />
+                              <span className="text-xs text-muted-foreground">%</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-medium">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell colSpan={2} className="font-bold">Total</TableCell>
+                      <TableCell className="text-center">
+                        <span className={`font-bold ${isExact ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}`}>
+                          {somaPesos.toFixed(0)}% {isExact ? '✓' : '(deve somar 100%)'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums font-bold">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(metaNum)}
+                      </TableCell>
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              );
+            })()}
+          </CardContent>
+        </Card>
       </div>
     </AppLayout>
   );
