@@ -11,9 +11,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Target, TrendingUp, DollarSign, Award, Calendar, Eye } from 'lucide-react';
+import { Target, TrendingUp, DollarSign, Award, Eye } from 'lucide-react';
 import { CoachDicaDoDia } from '@/components/CoachDicaDoDia';
-import { format, subMonths } from 'date-fns';
+import { format, addMonths, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
 import { PaginationControls } from '@/components/PaginationControls';
@@ -37,17 +37,8 @@ export default function VisaoConsultora() {
   const [currentPage, setCurrentPage] = useState(1);
   const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'yyyy-MM'));
 
-  // Gerar lista de 12 meses retroativos
-  const mesesDisponiveis = useMemo(() => {
-    const hoje = new Date();
-    return Array.from({ length: 12 }, (_, i) => {
-      const d = subMonths(hoje, i);
-      return {
-        value: format(d, 'yyyy-MM'),
-        label: format(d, 'MMMM yyyy', { locale: ptBR }),
-      };
-    });
-  }, []);
+  const mesAtual = useMemo(() => format(startOfMonth(new Date()), 'yyyy-MM'), []);
+  const proximoMes = useMemo(() => format(addMonths(startOfMonth(new Date()), 1), 'yyyy-MM'), []);
 
   useEffect(() => { setCurrentPage(1); }, [selectedConsultoraId]);
 
@@ -198,20 +189,25 @@ export default function VisaoConsultora() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="w-48">
-                <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
-                  <SelectTrigger>
-                    <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mesesDisponiveis.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>
-                        {m.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex gap-2">
+                {[mesAtual, proximoMes].map((mes) => {
+                  const [y, m] = mes.split('-').map(Number);
+                  const label = format(new Date(y, m - 1, 1), 'MMM yyyy', { locale: ptBR });
+                  const isActive = mesSelecionado === mes;
+                  return (
+                    <button
+                      key={mes}
+                      onClick={() => setMesSelecionado(mes)}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground hover:bg-accent'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </CardContent>
