@@ -294,6 +294,68 @@ export type Database = {
           },
         ]
       }
+      devedores_parcelas: {
+        Row: {
+          arquivo_nome: string | null
+          cod_empresa: string | null
+          codigo_parcela: string | null
+          consultor: string | null
+          contrato: string | null
+          convenio: string | null
+          data_vencimento: string | null
+          em_remessa: string | null
+          empresa_id: string
+          id: string
+          nome: string | null
+          parcela: string | null
+          uploaded_at: string
+          uploaded_by: string | null
+          valor_parcela: number | null
+        }
+        Insert: {
+          arquivo_nome?: string | null
+          cod_empresa?: string | null
+          codigo_parcela?: string | null
+          consultor?: string | null
+          contrato?: string | null
+          convenio?: string | null
+          data_vencimento?: string | null
+          em_remessa?: string | null
+          empresa_id: string
+          id?: string
+          nome?: string | null
+          parcela?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+          valor_parcela?: number | null
+        }
+        Update: {
+          arquivo_nome?: string | null
+          cod_empresa?: string | null
+          codigo_parcela?: string | null
+          consultor?: string | null
+          contrato?: string | null
+          convenio?: string | null
+          data_vencimento?: string | null
+          em_remessa?: string | null
+          empresa_id?: string
+          id?: string
+          nome?: string | null
+          parcela?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+          valor_parcela?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "devedores_parcelas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       empresas: {
         Row: {
           ativo: boolean
