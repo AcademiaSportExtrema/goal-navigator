@@ -101,8 +101,14 @@ export default function Devedores() {
         .not('consultor', 'is', null)
         .order('consultor');
       if (error) throw error;
-      const unique = [...new Set((data || []).map(d => d.consultor).filter(Boolean))] as string[];
-      return unique;
+      const all = (data || []).map(d => d.consultor).filter(Boolean) as string[];
+      // Deduplicate case-insensitive, keeping first occurrence casing
+      const seen = new Map<string, string>();
+      for (const c of all) {
+        const key = c.toLowerCase();
+        if (!seen.has(key)) seen.set(key, c);
+      }
+      return [...seen.values()];
     },
     enabled: !!empresaId,
   });
@@ -230,12 +236,25 @@ export default function Devedores() {
 
   // ── Export CSV ───────────────────────────────────────────────────
   const handleExportCSV = async () => {
-    const { data } = await supabase
+    let query = supabase
       .from('devedores_parcelas')
-      .select('nome, data_vencimento, valor_parcela, consultor, contrato')
-      .order('data_vencimento', { ascending: true })
+      .select('nome, data_vencimento, valor_parcela, consultor, contrato, cobranca_enviada')
+      .order(sortField, { ascending: sortDir === 'asc' })
       .limit(5000);
 
+    if (search.trim()) {
+      query = query.or(`nome.ilike.%${search}%,consultor.ilike.%${search}%,contrato.ilike.%${search}%`);
+    }
+    if (filterConsultor !== '__all__') {
+      query = query.ilike('consultor', filterConsultor);
+    }
+    if (filterCobranca === 'enviada') {
+      query = query.eq('cobranca_enviada', true);
+    } else if (filterCobranca === 'nao_enviada') {
+      query = query.eq('cobranca_enviada', false);
+    }
+
+    const { data } = await query;
     if (data && data.length > 0) {
       exportToCSV(data, 'devedores');
     }
