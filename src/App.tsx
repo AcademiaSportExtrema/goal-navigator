@@ -26,6 +26,7 @@ import SolicitarAjuste from "./pages/SolicitarAjuste";
 import Ajustes from "./pages/Ajustes";
 import VisaoConsultora from "./pages/VisaoConsultora";
 import Relatorios from "./pages/Relatorios";
+import Devedores from "./pages/Devedores";
 import EmpresaBloqueada from "./pages/EmpresaBloqueada";
 import NotFound from "./pages/NotFound";
 
@@ -152,6 +153,11 @@ const App = () => (
             <Route path="/visao-consultora" element={
               <ProtectedRoute requiredRole="admin">
                 <VisaoConsultora />
+              </ProtectedRoute>
+            } />
+            <Route path="/devedores" element={
+              <ProtectedRoute>
+                <Devedores />
               </ProtectedRoute>
             } />
 

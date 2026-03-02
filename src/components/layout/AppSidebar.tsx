@@ -51,6 +51,7 @@ const adminMenuGroups = [
       { title: 'Relatórios', icon: TrendingUp, href: '/relatorios' },
       { title: 'Pendências', icon: AlertCircle, href: '/pendencias' },
       { title: 'Ajustes', icon: GitPullRequest, href: '/ajustes' },
+      { title: 'Devedores', icon: AlertCircle, href: '/devedores' },
       { title: 'Visão Consultora', icon: Eye, href: '/visao-consultora' },
     ],
   },
@@ -68,6 +69,7 @@ const consultoraMenuItems = [
   { title: 'Minha Performance', icon: TrendingUp, href: '/minha-performance' },
   { title: 'Gerencial', icon: FileText, href: '/gerencial' },
   { title: 'Solicitar Ajuste', icon: ArrowRightLeft, href: '/solicitar-ajuste' },
+  { title: 'Devedores', icon: AlertCircle, href: '/devedores' },
   { title: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
 ];
 
