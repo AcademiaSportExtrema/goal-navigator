@@ -1,45 +1,28 @@
 
-## Correção: Comparação case-insensitive nas políticas RLS de `devedores_parcelas`
 
-### Problema
-O campo `consultor` em `devedores_parcelas` tem nomes em formato capitalizado (ex: "Livia Maysa Honorato Martins"), mas o campo `nome` em `consultoras` está em maiúsculas ("LIVIA MAYSA HONORATO MARTINS"). As RLS policies usam `IN` que é case-sensitive, causando falha na correspondência.
+## Filtros e ordenação para admin + devedores na Visão Consultora
 
-### Solução
-Atualizar as duas RLS policies da consultora (`SELECT` e `UPDATE`) para usar `LOWER()` em ambos os lados da comparação.
+### 1. Devedores — Filtros e ordenação para admin
 
-**Migração SQL:**
-```sql
--- Drop existing policies
-DROP POLICY "Consultoras view own devedores_parcelas" ON devedores_parcelas;
-DROP POLICY "Consultoras update cobranca own devedores" ON devedores_parcelas;
+**No `src/pages/Devedores.tsx`:**
+- Adicionar filtros dropdown acima da tabela:
+  - **Consultor**: Select com lista única de consultores extraída dos dados (ou da tabela `consultoras`)
+  - **Status Cobrança**: Select com opções "Todos", "Enviada", "Não enviada"
+- Adicionar ordenação clicável nos cabeçalhos da tabela (Nome, Data Vencimento, Valor Parcela, Consultor) — alternar asc/desc ao clicar
+- Os filtros são aplicados na query Supabase (server-side) para manter a paginação correta
+- Manter o filtro de busca textual existente
 
--- Recreate with case-insensitive comparison
-CREATE POLICY "Consultoras view own devedores_parcelas"
-ON devedores_parcelas FOR SELECT TO authenticated
-USING (
-  empresa_id = get_user_empresa_id(auth.uid())
-  AND LOWER(consultor) IN (
-    SELECT LOWER(nome) FROM consultoras WHERE id = get_user_consultora_id(auth.uid())
-  )
-);
+### 2. Visão Consultora — Seção de devedores
 
-CREATE POLICY "Consultoras update cobranca own devedores"
-ON devedores_parcelas FOR UPDATE TO authenticated
-USING (
-  empresa_id = get_user_empresa_id(auth.uid())
-  AND LOWER(consultor) IN (
-    SELECT LOWER(nome) FROM consultoras WHERE id = get_user_consultora_id(auth.uid())
-  )
-)
-WITH CHECK (
-  empresa_id = get_user_empresa_id(auth.uid())
-  AND LOWER(consultor) IN (
-    SELECT LOWER(nome) FROM consultoras WHERE id = get_user_consultora_id(auth.uid())
-  )
-);
-```
+**No `src/pages/VisaoConsultora.tsx`:**
+- Após selecionar uma consultora, adicionar uma seção "Devedores" abaixo dos lançamentos
+- Buscar `devedores_parcelas` filtrando por `empresa_id` e `LOWER(consultor) = LOWER(consultora.nome)` usando `.ilike('consultor', consultoraSelecionada.nome)`
+- Exibir tabela simples com: Nome, Data Vencimento, Valor Parcela, Status Cobrança
+- Mostrar contagem total e indicador visual (badge) de quantos têm cobrança pendente
 
-### Impacto
-- Nenhuma alteração de código frontend
-- Apenas uma migração de banco de dados
-- Corrige o acesso para todas as consultoras, não apenas Livia
+### Detalhes técnicos
+- Nenhuma migração de banco necessária — os dados e RLS já existem
+- Admin já tem acesso ALL na tabela `devedores_parcelas`, então a query na Visão Consultora funciona normalmente
+- Filtros no Devedores: adicionar estados `filterConsultor`, `filterCobranca`, `sortField`, `sortDir` e aplicá-los na query Supabase
+- Na Visão Consultora, usar `.ilike('consultor', consultoraSelecionada.nome)` para matching case-insensitive
+
