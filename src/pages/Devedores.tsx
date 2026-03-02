@@ -16,6 +16,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { PaginationControls } from '@/components/PaginationControls';
 import { exportToCSV } from '@/lib/csv';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Upload as UploadIcon, FileSpreadsheet, Search, Download, Trash2,
   AlertTriangle, CheckCircle2, ChevronDown, XCircle, Info,
@@ -440,6 +441,7 @@ export default function Devedores() {
                       <TableHead>Data Vencimento</TableHead>
                       <TableHead className="text-right">Valor Parcela</TableHead>
                       <TableHead>Consultor</TableHead>
+                      <TableHead className="text-center">Cobrança</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -449,6 +451,22 @@ export default function Devedores() {
                         <TableCell>{fmtDate(row.data_vencimento)}</TableCell>
                         <TableCell className="text-right tabular-nums">{fmtCur(row.valor_parcela)}</TableCell>
                         <TableCell>{row.consultor || '-'}</TableCell>
+                        <TableCell className="text-center">
+                          <Checkbox
+                            checked={!!row.cobranca_enviada}
+                            onCheckedChange={async (checked) => {
+                              const { error } = await supabase
+                                .from('devedores_parcelas')
+                                .update({ cobranca_enviada: !!checked } as any)
+                                .eq('id', row.id);
+                              if (error) {
+                                toast({ title: 'Erro', description: 'Não foi possível atualizar.', variant: 'destructive' });
+                              } else {
+                                queryClient.invalidateQueries({ queryKey: ['devedores'] });
+                              }
+                            }}
+                          />
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

@@ -297,6 +297,7 @@ export type Database = {
       devedores_parcelas: {
         Row: {
           arquivo_nome: string | null
+          cobranca_enviada: boolean
           cod_empresa: string | null
           codigo_parcela: string | null
           consultor: string | null
@@ -314,6 +315,7 @@ export type Database = {
         }
         Insert: {
           arquivo_nome?: string | null
+          cobranca_enviada?: boolean
           cod_empresa?: string | null
           codigo_parcela?: string | null
           consultor?: string | null
@@ -331,6 +333,7 @@ export type Database = {
         }
         Update: {
           arquivo_nome?: string | null
+          cobranca_enviada?: boolean
           cod_empresa?: string | null
           codigo_parcela?: string | null
           consultor?: string | null
