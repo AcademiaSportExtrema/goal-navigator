@@ -11,7 +11,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Target, TrendingUp, DollarSign, Award, Eye } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Target, TrendingUp, DollarSign, Award, Eye, AlertTriangle } from 'lucide-react';
 import { CoachDicaDoDia } from '@/components/CoachDicaDoDia';
 import { format, addMonths, subMonths, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -395,6 +397,9 @@ export default function VisaoConsultora() {
               );
             })()}
 
+            {/* Devedores da consultora */}
+            <DevedoresConsultora empresaId={empresaId!} consultoraNome={consultoraSelecionada?.nome || ''} />
+
             {/* Lançamentos */}
             <Card>
               <CardHeader>
@@ -459,5 +464,83 @@ export default function VisaoConsultora() {
         )}
       </div>
     </AppLayout>
+  );
+}
+
+function DevedoresConsultora({ empresaId, consultoraNome }: { empresaId: string; consultoraNome: string }) {
+  const { data: devedores, isLoading } = useQuery({
+    queryKey: ['devedores-consultora-visao', empresaId, consultoraNome],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('devedores_parcelas')
+        .select('*')
+        .eq('empresa_id', empresaId)
+        .ilike('consultor', consultoraNome)
+        .order('data_vencimento', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!empresaId && !!consultoraNome,
+  });
+
+  const pendentes = devedores?.filter(d => !d.cobranca_enviada).length || 0;
+  const total = devedores?.length || 0;
+
+  const fmt = (v: number | null) => {
+    if (v == null) return '-';
+    return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
+  const fmtDate = (d: string | null) => {
+    if (!d) return '-';
+    try { return format(new Date(d + 'T00:00:00'), 'dd/MM/yyyy'); } catch { return d; }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            Devedores ({total})
+          </CardTitle>
+          {pendentes > 0 && (
+            <Badge variant="destructive">{pendentes} sem cobrança</Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-center py-4 text-muted-foreground">Carregando...</p>
+        ) : total > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Data Vencimento</TableHead>
+                <TableHead className="text-right">Valor Parcela</TableHead>
+                <TableHead className="text-center">Cobrança</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {devedores!.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="font-medium">{row.nome || '-'}</TableCell>
+                  <TableCell>{fmtDate(row.data_vencimento)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(row.valor_parcela)}</TableCell>
+                  <TableCell className="text-center">
+                    <Checkbox checked={!!row.cobranca_enviada} disabled />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-center py-8 text-muted-foreground">
+            Nenhum devedor vinculado a esta consultora
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
