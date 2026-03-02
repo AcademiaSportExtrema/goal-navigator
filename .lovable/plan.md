@@ -1,36 +1,29 @@
 
 
-## Correção: Pre-preenchimento do dialog de regras na página Pendências
+## Diagnóstico
 
-### Problema
-Quando o usuário clica em "Criar e Reprocessar", o dialog pre-preenche `campo_alvo = 'produto'` e `valor = group.produto`. Porém, esses itens deveriam ter regras criadas com `campo_alvo = 'plano'`, usando o valor do campo `plano` do lançamento.
+O login da Lívia **funciona** (status 200, autenticação OK). O problema está na linha 46 do `Login.tsx`:
 
-Além disso, quando o usuário muda o `campo_alvo` no Select, o `valor` não atualiza automaticamente para refletir o campo correspondente do grupo.
-
-### Correção em `src/pages/Pendencias.tsx`
-
-**1. Inverter a prioridade do pre-preenchimento (linha 225-236)**
-- Mudar para priorizar `plano` sobre `produto`:
 ```typescript
-if (group.plano) {
-  campo_alvo = 'plano';
-  valor = group.plano;
-} else if (group.produto) {
-  campo_alvo = 'produto';
-  valor = group.produto;
-} else if (group.empresa) {
-  campo_alvo = 'empresa';
-  valor = group.empresa;
-}
+navigate('/dashboard');  // ← hardcoded, ignora o role
 ```
 
-**2. Atualizar valor ao trocar campo_alvo (linha 407)**
-- No `onValueChange` do Select de campo_alvo, atualizar o `valor` automaticamente com o valor correspondente do `selectedGroup`:
+Após `signIn`, o `role` ainda é `null` (carrega assíncrono via `fetchUserData`). A consultora é enviada para `/dashboard`, e o `ProtectedRoute` tenta redirecionar para `/minha-performance`, mas como o `role` pode ainda estar `null` nesse momento, o comportamento fica inconsistente.
+
+## Correção: `src/pages/Login.tsx`
+
+**Remover o `navigate('/dashboard')` da linha 46** e deixar o `useEffect` (linhas 22-26) controlar o redirecionamento, que já faz a lógica correta:
+
 ```typescript
-onValueChange={(value) => {
-  const campo = value as CampoAlvo;
-  const novoValor = selectedGroup?.[campo as keyof PendenciaGroup] as string || '';
-  setForm(f => ({ ...f, campo_alvo: campo, valor: typeof novoValor === 'string' ? novoValor : '' }));
-}}
+// useEffect já existente que redireciona baseado no role:
+useEffect(() => {
+  if (!authLoading && user) {
+    navigate(role === 'consultora' ? '/minha-performance' : '/dashboard', { replace: true });
+  }
+}, [authLoading, user, role, navigate]);
 ```
+
+No `handleSubmit`, substituir a linha 46 por um comentário — o `useEffect` será acionado automaticamente quando `user` e `role` estiverem disponíveis após o `signIn`.
+
+Isso é uma mudança de 1 linha que resolve o problema para todos os perfis de consultora.
 
