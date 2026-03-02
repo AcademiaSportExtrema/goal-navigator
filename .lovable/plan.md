@@ -1,35 +1,36 @@
 
 
-## Análise: Consultora vê lançamentos do mês anterior em "Minha Performance"
+## Correção: consultora_chave incorreta em lançamentos com regra resp_recebimento
 
-### Como funciona atualmente
+### Problema encontrado
 
-A consultora **só pode ver o mês anterior até o dia 5 do mês atual** (linha 42: `showPreviousMonth = new Date().getDate() <= 5`). Se hoje for dia 2 de março, o botão de fevereiro aparece. A partir do dia 6, o botão desaparece.
+Existem **8 lançamentos** (incluindo o do Kenzo) onde a regra aplicada define `responsavel_campo = 'resp_recebimento'`, mas o campo `consultora_chave` foi gravado com o valor de `resp_venda` em vez de `resp_recebimento`. Isso provavelmente ocorreu porque os dados foram importados antes da regra ser configurada com `resp_recebimento`, e nunca foram reclassificados.
 
-Quando ela seleciona fevereiro, a query busca:
-```typescript
-.eq('entra_meta', true)
-.eq('mes_competencia', '2026-02')
-.eq('consultora_chave', consultora.nome)
-```
-
-### Potencial problema de case-sensitivity
-
-A RLS policy de `lancamentos` para consultoras usa comparação **case-sensitive**:
-```sql
-consultora_chave IN (
-  SELECT consultoras.nome FROM consultoras
-  WHERE consultoras.id = get_user_consultora_id(auth.uid())
-)
-```
-
-Se `consultora_chave` tiver casing diferente de `consultoras.nome` (ex: "Livia Maysa" vs "LIVIA MAYSA"), a consultora **não verá nenhum lançamento** — o mesmo bug que existia em `devedores_parcelas` e já foi corrigido lá.
+Exemplo do Kenzo:
+- `resp_venda` = NICOLE FERREIRA DOS ANJOS
+- `resp_recebimento` = LIVIA MAYSA HONORATO MARTINS
+- `consultora_chave` = NICOLE (errado, deveria ser LIVIA)
 
 ### Plano de correção
 
-1. **Migração SQL**: Recriar a RLS policy `Consultoras view own lancamentos` usando `LOWER()` em ambos os lados da comparação, igual ao que foi feito para `devedores_parcelas`.
+**1. Migração SQL** — Corrigir todos os registros existentes com uma única query:
 
-2. **Frontend** (linha 120 de `MinhaPerformance.tsx`): Trocar `.eq('consultora_chave', consultora!.nome)` por `.ilike('consultora_chave', consultora!.nome)` para garantir matching case-insensitive na query também.
+```sql
+UPDATE lancamentos l
+SET consultora_chave = l.resp_recebimento
+FROM regras_meta r
+WHERE l.regra_aplicada_id = r.id
+  AND r.responsavel_campo = 'resp_recebimento'
+  AND l.consultora_chave IS DISTINCT FROM l.resp_recebimento
+  AND l.resp_recebimento IS NOT NULL;
+```
 
-3. **Verificar outros locais**: Checar se `VisaoConsultora.tsx`, `Dashboard.tsx` e `useSalesMetrics.ts` também usam `.eq('consultora_chave', ...)` e corrigir para `.ilike()`.
+Isso corrige os 8 registros de uma vez, incluindo o do Kenzo, sem afetar nenhum outro lançamento.
+
+**2. Nenhuma alteração de código necessária** — O código de classificação (`upload-importar-xls`, `classificar-meta`, `reprocessar-upload`) já usa corretamente `lancamento[regra.responsavel_campo]`. O problema foi apenas nos dados já gravados.
+
+### Detalhes técnicos
+- Apenas 1 migração SQL, sem alteração de frontend ou edge functions
+- Afeta exatamente os 8 registros identificados
+- Após a correção, o plano do Kenzo (R$ 2.322,00) aparecerá na comissão da Livia
 
