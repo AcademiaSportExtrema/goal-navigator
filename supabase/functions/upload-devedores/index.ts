@@ -19,7 +19,7 @@ function normalizeHeader(h: string): string {
 }
 
 function normalizeText(s: string): string {
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 const COLUMN_ALIASES: Record<string, string[]> = {
