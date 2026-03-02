@@ -18,6 +18,10 @@ function normalizeHeader(h: string): string {
     .trim();
 }
 
+function normalizeText(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
 const COLUMN_ALIASES: Record<string, string[]> = {
   nome:            ['nome', 'cliente', 'nome cliente', 'nome do cliente', 'aluno', 'nome aluno'],
   cod_empresa:     ['cod empresa', 'codigo empresa', 'cod emp'],
@@ -26,11 +30,13 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   parcela:         ['parcela', 'num parcela', 'numero parcela'],
   data_vencimento: ['dt vencimento parcela', 'data vencimento parcela', 'dt vencimento', 'data vencimento', 'data de vencimento', 'vencimento'],
   valor_parcela:   ['vlr parcela', 'valor parcela', 'vlr da parcela', 'valor da parcela', 'valor'],
-  convenio:        ['convenio cobranca', 'convenio', 'convênio cobrança', 'convenio de cobranca'],
+  convenio:        ['convenio cobranca', 'convenio', 'convenio cobranca', 'convenio de cobranca'],
   empresa:         ['empresa', 'unidade'],
   consultor:       ['consultor', 'consultora', 'resp venda', 'responsavel venda', 'vendedor'],
   em_remessa:      ['em remessa', 'remessa'],
 };
+
+const REQUIRED_COLUMNS = ['nome', 'data_vencimento', 'valor_parcela', 'consultor'];
 
 function buildHeaderMap(headers: string[]): Record<string, string> {
   const map: Record<string, string> = {};
@@ -47,26 +53,94 @@ function buildHeaderMap(headers: string[]): Record<string, string> {
   return map;
 }
 
-function parseDate(val: any): string | null {
-  if (!val || val === '-' || val === '') return null;
+function parseDate(val: any): { date: string | null; valid: boolean } {
+  if (!val || val === '-' || val === '') return { date: null, valid: true };
   if (typeof val === 'number') {
-    const date = new Date((val - 25569) * 86400 * 1000);
-    return date.toISOString().split('T')[0];
+    const d = new Date((val - 25569) * 86400 * 1000);
+    if (isNaN(d.getTime())) return { date: null, valid: false };
+    return { date: d.toISOString().split('T')[0], valid: true };
   }
   if (typeof val === 'string') {
-    const parts = val.split('/');
+    const parts = val.trim().split('/');
     if (parts.length === 3) {
-      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      const [dd, mm, yyyy] = parts;
+      const day = parseInt(dd, 10);
+      const month = parseInt(mm, 10);
+      const year = parseInt(yyyy, 10);
+      if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900 && year <= 2100) {
+        return { date: `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`, valid: true };
+      }
+    }
+    // Try ISO format
+    const isoDate = new Date(val);
+    if (!isNaN(isoDate.getTime())) {
+      return { date: isoDate.toISOString().split('T')[0], valid: true };
     }
   }
-  return null;
+  return { date: null, valid: false };
 }
 
-function parseValor(val: any): number {
-  if (!val) return 0;
-  if (typeof val === 'number') return val;
-  const str = String(val).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
-  return parseFloat(str) || 0;
+function parseValor(val: any): { valor: number; valid: boolean } {
+  if (!val && val !== 0) return { valor: 0, valid: true };
+  if (typeof val === 'number') return { valor: val, valid: true };
+  const str = String(val).trim();
+  if (!str) return { valor: 0, valid: true };
+  const cleaned = str.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+  const num = parseFloat(cleaned);
+  if (isNaN(num)) return { valor: 0, valid: false };
+  return { valor: num, valid: true };
+}
+
+// ── CSV parser ──────────────────────────────────────────────────────
+
+function parseCSVText(text: string): Record<string, string>[][] {
+  const clean = text.replace(/^\uFEFF/, '');
+  const lines = clean.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return [[], []];
+
+  const separator = lines[0].includes(';') ? ';' : ',';
+
+  function parseLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (i + 1 < line.length && line[i + 1] === '"') { current += '"'; i++; }
+          else inQuotes = false;
+        } else current += ch;
+      } else {
+        if (ch === '"') inQuotes = true;
+        else if (ch === separator) { result.push(current); current = ''; }
+        else current += ch;
+      }
+    }
+    result.push(current);
+    return result;
+  }
+
+  // Try header at line 0
+  const h0 = parseLine(lines[0]).map(h => h.trim());
+  const rows0 = lines.slice(1).map(l => {
+    const vals = parseLine(l);
+    const obj: Record<string, string> = {};
+    h0.forEach((h, i) => { obj[h] = (vals[i] || '').trim(); });
+    return obj;
+  });
+
+  // Try header at line 1
+  if (lines.length < 3) return [rows0, []];
+  const h1 = parseLine(lines[1]).map(h => h.trim());
+  const rows1 = lines.slice(2).map(l => {
+    const vals = parseLine(l);
+    const obj: Record<string, string> = {};
+    h1.forEach((h, i) => { obj[h] = (vals[i] || '').trim(); });
+    return obj;
+  });
+
+  return [rows0, rows1];
 }
 
 // ── Handler principal ───────────────────────────────────────────────
@@ -106,7 +180,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Derivar empresa_id do servidor (nunca confiar no cliente)
+    // Derivar empresa_id do servidor
     const { data: empresa_id } = await supabase.rpc('get_user_empresa_id', { _user_id: user.id });
     if (!empresa_id) {
       return new Response(JSON.stringify({ error: 'Empresa não encontrada' }), {
@@ -129,41 +203,154 @@ Deno.serve(async (req) => {
 
     if (downloadError) throw downloadError;
 
-    const XLSX = await import('npm:xlsx@0.18.5');
+    // Detect file type and parse
+    const isCSV = (arquivo_nome || arquivo_path || '').toLowerCase().endsWith('.csv');
+    let jsonData: Record<string, any>[];
+    let headerMap: Record<string, string>;
 
-    const arrayBuffer = await fileData.arrayBuffer();
-    const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
+    if (isCSV) {
+      const text = await fileData.text();
+      const [rows0, rows1] = parseCSVText(text);
+      const headers0 = rows0.length > 0 ? Object.keys(rows0[0]) : [];
+      const headers1 = rows1.length > 0 ? Object.keys(rows1[0]) : [];
+      const map0 = buildHeaderMap(headers0);
+      const map1 = buildHeaderMap(headers1);
+      if (Object.keys(map1).length > Object.keys(map0).length) {
+        jsonData = rows1;
+        headerMap = map1;
+      } else {
+        jsonData = rows0;
+        headerMap = map0;
+      }
+    } else {
+      const XLSX = await import('npm:xlsx@0.18.5');
+      const arrayBuffer = await fileData.arrayBuffer();
+      const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
 
-    // Converter para JSON pulando a 1ª linha (título do relatório)
-    // range: 1 faz o cabeçalho começar na 2ª linha (0-indexed)
-    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-    // Detectar se a 1ª linha é um título (verificar se a 2ª linha tem mais colunas preenchidas)
-    const firstRowJson = XLSX.utils.sheet_to_json(worksheet, { defval: null, range: 0 }) as Record<string, any>[];
-    const secondRowJson = XLSX.utils.sheet_to_json(worksheet, { defval: null, range: 1 }) as Record<string, any>[];
+      const firstRowJson = XLSX.utils.sheet_to_json(worksheet, { defval: null, range: 0 }) as Record<string, any>[];
+      const secondRowJson = XLSX.utils.sheet_to_json(worksheet, { defval: null, range: 1 }) as Record<string, any>[];
 
-    // Heurística: se a 2ª interpretação tem mais colunas mapeáveis, pular a 1ª linha
-    const firstHeaders = firstRowJson.length > 0 ? Object.keys(firstRowJson[0]) : [];
-    const secondHeaders = secondRowJson.length > 0 ? Object.keys(secondRowJson[0]) : [];
+      const firstHeaders = firstRowJson.length > 0 ? Object.keys(firstRowJson[0]) : [];
+      const secondHeaders = secondRowJson.length > 0 ? Object.keys(secondRowJson[0]) : [];
 
-    const firstMap = buildHeaderMap(firstHeaders);
-    const secondMap = buildHeaderMap(secondHeaders);
+      const firstMap = buildHeaderMap(firstHeaders);
+      const secondMap = buildHeaderMap(secondHeaders);
 
-    const firstMatches = Object.keys(firstMap).length;
-    const secondMatches = Object.keys(secondMap).length;
+      if (Object.keys(secondMap).length > Object.keys(firstMap).length) {
+        jsonData = secondRowJson;
+        headerMap = secondMap;
+      } else {
+        jsonData = firstRowJson;
+        headerMap = firstMap;
+      }
+    }
 
-    const jsonData = secondMatches > firstMatches ? secondRowJson : firstRowJson;
-    const headerMap = secondMatches > firstMatches ? secondMap : firstMap;
-    const headers = secondMatches > firstMatches ? secondHeaders : firstHeaders;
-
-    console.log('Cabeçalhos encontrados:', headers);
     console.log('Mapeamento construído:', headerMap);
     console.log(`Linhas a processar: ${jsonData.length}`);
 
+    // ── Validação de colunas obrigatórias ──────────────────────────
+    const missingColumns = REQUIRED_COLUMNS.filter(c => !headerMap[c]);
+    if (missingColumns.length > 0) {
+      const labelMap: Record<string, string> = {
+        nome: 'Nome',
+        data_vencimento: 'Data de Vencimento',
+        valor_parcela: 'Valor da Parcela',
+        consultor: 'Consultor',
+      };
+      return new Response(JSON.stringify({
+        error: 'colunas_faltantes',
+        colunas_faltantes: missingColumns.map(c => labelMap[c] || c),
+        message: `Colunas obrigatórias não encontradas: ${missingColumns.map(c => labelMap[c] || c).join(', ')}`,
+      }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // ── Buscar consultoras cadastradas da empresa ──────────────────
+    const { data: consultoras } = await supabase
+      .from('consultoras')
+      .select('nome')
+      .eq('empresa_id', empresa_id);
+
+    const consultoraNomes = (consultoras || []).map(c => normalizeText(c.nome));
+
     const col = (field: string) => headerMap[field] || '';
 
-    // Substituir: deletar registros anteriores da mesma empresa
+    // ── Processar linhas ──────────────────────────────────────────
+    const avisos: { linha: number; tipo: string; detalhe: string }[] = [];
+    const erros: { linha: number; erro: string }[] = [];
+    const rows: any[] = [];
+    let totalLinhasLidas = 0;
+
+    for (let i = 0; i < jsonData.length; i++) {
+      const row = jsonData[i];
+      const linhaNum = i + 2; // +2 porque cabeçalho é linha 1 (ou 2 se título)
+
+      const nome = row[col('nome')] || null;
+      const consultorRaw = row[col('consultor')] || null;
+      const contratoRaw = row[col('contrato')] || null;
+
+      // Pular linhas completamente vazias
+      if (!nome && !consultorRaw && !contratoRaw) continue;
+      totalLinhasLidas++;
+
+      // Validar data
+      const dateResult = parseDate(row[col('data_vencimento')]);
+      if (!dateResult.valid) {
+        avisos.push({
+          linha: linhaNum,
+          tipo: 'data_invalida',
+          detalhe: `Data de vencimento inválida: "${row[col('data_vencimento')]}"`,
+        });
+      }
+
+      // Validar valor
+      const valorResult = parseValor(row[col('valor_parcela')]);
+      if (!valorResult.valid) {
+        avisos.push({
+          linha: linhaNum,
+          tipo: 'valor_invalido',
+          detalhe: `Valor da parcela inválido: "${row[col('valor_parcela')]}"`,
+        });
+      }
+
+      // Validar consultor cadastrado
+      if (consultorRaw) {
+        const normConsultor = normalizeText(String(consultorRaw));
+        const found = consultoraNomes.some(cn => cn === normConsultor);
+        if (!found) {
+          avisos.push({
+            linha: linhaNum,
+            tipo: 'consultor_nao_cadastrado',
+            detalhe: `Consultor "${String(consultorRaw).trim()}" não encontrado no cadastro`,
+          });
+        }
+      }
+
+      try {
+        rows.push({
+          empresa_id,
+          nome: nome ? String(nome).trim() : null,
+          data_vencimento: dateResult.date,
+          valor_parcela: valorResult.valor,
+          consultor: consultorRaw ? String(consultorRaw).trim() : null,
+          contrato: contratoRaw ? String(contratoRaw).trim() : null,
+          codigo_parcela: row[col('codigo_parcela')] ? String(row[col('codigo_parcela')]).trim() : null,
+          parcela: row[col('parcela')] ? String(row[col('parcela')]).trim() : null,
+          cod_empresa: row[col('cod_empresa')] ? String(row[col('cod_empresa')]).trim() : null,
+          convenio: row[col('convenio')] ? String(row[col('convenio')]).trim() : null,
+          em_remessa: row[col('em_remessa')] ? String(row[col('em_remessa')]).trim() : null,
+          arquivo_nome: arquivo_nome || null,
+          uploaded_by: user.id,
+        });
+      } catch (err: any) {
+        erros.push({ linha: linhaNum, erro: err.message });
+      }
+    }
+
+    // ── Substituir: deletar registros anteriores ────────────────────
     const { error: deleteError } = await supabase
       .from('devedores_parcelas')
       .delete()
@@ -174,43 +361,10 @@ Deno.serve(async (req) => {
       throw deleteError;
     }
 
-    // Inserir novos registros em batch
+    // ── Inserir em batches ──────────────────────────────────────────
     let importados = 0;
-    let erros: { linha: number; erro: string }[] = [];
     const batchSize = 500;
-    const rows: any[] = [];
 
-    for (let i = 0; i < jsonData.length; i++) {
-      const row = jsonData[i];
-
-      try {
-        const nome = row[col('nome')] || null;
-        const consultor = row[col('consultor')] || null;
-
-        // Pular linhas completamente vazias
-        if (!nome && !consultor && !row[col('contrato')]) continue;
-
-        rows.push({
-          empresa_id,
-          nome: nome ? String(nome).trim() : null,
-          data_vencimento: parseDate(row[col('data_vencimento')]),
-          valor_parcela: parseValor(row[col('valor_parcela')]),
-          consultor: consultor ? String(consultor).trim() : null,
-          contrato: row[col('contrato')] ? String(row[col('contrato')]).trim() : null,
-          codigo_parcela: row[col('codigo_parcela')] ? String(row[col('codigo_parcela')]).trim() : null,
-          parcela: row[col('parcela')] ? String(row[col('parcela')]).trim() : null,
-          cod_empresa: row[col('cod_empresa')] ? String(row[col('cod_empresa')]).trim() : null,
-          convenio: row[col('convenio')] ? String(row[col('convenio')]).trim() : null,
-          em_remessa: row[col('em_remessa')] ? String(row[col('em_remessa')]).trim() : null,
-          arquivo_nome: arquivo_nome || null,
-          uploaded_by: user.id,
-        });
-      } catch (err: any) {
-        erros.push({ linha: i + 2, erro: err.message });
-      }
-    }
-
-    // Inserir em batches
     for (let i = 0; i < rows.length; i += batchSize) {
       const batch = rows.slice(i, i + batchSize);
       const { error: insertError } = await supabase
@@ -225,6 +379,8 @@ Deno.serve(async (req) => {
       }
     }
 
+    const uploaded_at = new Date().toISOString();
+
     // Audit log
     try {
       await supabase.from('audit_logs').insert({
@@ -234,7 +390,7 @@ Deno.serve(async (req) => {
         action: 'upload_devedores',
         empresa_id,
         target_table: 'devedores_parcelas',
-        metadata: { arquivo_nome, importados, erros: erros.length },
+        metadata: { arquivo_nome, importados, erros: erros.length, avisos: avisos.length },
       });
     } catch (e) {
       console.error('Erro ao registrar audit log:', e);
@@ -243,7 +399,15 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        resumo: { importados, erros: erros.length, total_linhas: jsonData.length }
+        resumo: {
+          total_linhas: totalLinhasLidas,
+          importados,
+          avisos,
+          erros,
+          arquivo_nome: arquivo_nome || null,
+          uploaded_at,
+          uploaded_by_email: user.email || null,
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
