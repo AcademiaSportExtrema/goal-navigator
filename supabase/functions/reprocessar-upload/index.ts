@@ -248,6 +248,12 @@ Deno.serve(async (req) => {
               case 'regex':
                 try {
                   if (valorStr.length > 1000) break;
+                  // Reject dangerous regex patterns (nested quantifiers → ReDoS)
+                  if (regra.valor.length > 200 || /(\+|\*|\{)\s*\)(\+|\*|\{|\?)/.test(regra.valor)) {
+                    console.warn('Regex rejected (potential ReDoS):', regra.valor);
+                    match = false;
+                    break;
+                  }
                   match = new RegExp(regra.valor, 'i').test(valorStr);
                 } catch (e) { match = false; }
                 break;

@@ -33,7 +33,7 @@ export function IntegracoesTab() {
       const { data, error } = await supabase
         .from('system_settings' as any)
         .select('key, value')
-        .in('key', ['resend_api_key', 'resend_from_domain', 'resend_from_name']);
+        .in('key', ['resend_from_domain', 'resend_from_name']);
 
       if (error) throw error;
 
@@ -43,12 +43,11 @@ export function IntegracoesTab() {
         map[row.key] = row.value;
       }
 
-      if (map.resend_api_key) {
-        // Show masked key
-        const key = map.resend_api_key;
-        setResendApiKey('•'.repeat(Math.max(0, key.length - 4)) + key.slice(-4));
-        setResendConfigured(true);
-      }
+      // API key is managed via backend secrets — show as configured
+      // (We can't read it from the client, but it's set as RESEND_API_KEY secret)
+      setResendApiKey('••••••••••••');
+      setResendConfigured(true);
+
       if (map.resend_from_domain) setResendDomain(map.resend_from_domain);
       if (map.resend_from_name) setResendName(map.resend_from_name);
     } catch (err) {
@@ -72,21 +71,10 @@ export function IntegracoesTab() {
   };
 
   const handleSaveResend = async () => {
-    if (!resendApiKey.trim() || resendApiKey.includes('•')) {
-      if (resendConfigured && !resendApiKey.includes('•')) {
-        // user cleared the field
-      } else if (resendApiKey.includes('•') && !resendDomain.trim()) {
-        toast.error('Informe pelo menos o domínio remetente');
-        return;
-      } else if (!resendConfigured) {
-        toast.error('Informe a chave da API do Resend');
-        return;
-      }
-    }
-
+    // API key is managed via backend secrets — only domain/name are saved to DB
     const isNewKey = resendApiKey && !resendApiKey.includes('•');
 
-    // Validate the key before saving
+    // Validate the key before saving (but don't store it in DB)
     if (isNewKey) {
       setIsValidating(true);
       try {
@@ -102,11 +90,12 @@ export function IntegracoesTab() {
           return;
         }
 
-        // Show verified domains info
         if (data.domains && data.domains.length > 0) {
           const domainNames = data.domains.map((d: any) => d.name).join(', ');
           toast.info(`Domínios verificados: ${domainNames}`);
         }
+
+        toast.info('A chave da API deve ser configurada nos secrets do backend (RESEND_API_KEY).');
       } catch (err: any) {
         console.error('Erro ao validar chave Resend:', err);
         toast.error('Erro ao validar chave: ' + (err.message || 'Erro desconhecido'));
@@ -120,9 +109,6 @@ export function IntegracoesTab() {
     try {
       const upserts: { key: string; value: string }[] = [];
 
-      if (isNewKey) {
-        upserts.push({ key: 'resend_api_key', value: resendApiKey });
-      }
       if (resendDomain.trim()) {
         upserts.push({ key: 'resend_from_domain', value: resendDomain.trim() });
       }
@@ -130,7 +116,7 @@ export function IntegracoesTab() {
         upserts.push({ key: 'resend_from_name', value: resendName.trim() });
       }
 
-      if (upserts.length === 0) {
+      if (upserts.length === 0 && !isNewKey) {
         toast.info('Nenhuma alteração para salvar');
         setIsSavingResend(false);
         return;
@@ -150,7 +136,7 @@ export function IntegracoesTab() {
       setResendConfigured(true);
 
       if (isNewKey) {
-        setResendApiKey('•'.repeat(Math.max(0, resendApiKey.length - 4)) + resendApiKey.slice(-4));
+        setResendApiKey('••••••••••••');
       }
     } catch (err: any) {
       console.error('Erro ao salvar Resend:', err);
