@@ -1,31 +1,25 @@
 
 
-## Diagnóstico
+## Correção: Cor preta para diferenças iguais a zero
 
-O problema é um bug clássico de fuso horário na exibição de datas. O código usa `new Date('2026-03-01')` para formatar os nomes dos meses, mas essa sintaxe é interpretada como UTC meia-noite. No Brasil (UTC-3), isso vira "28 de fevereiro às 21h" — um mês antes.
+**Problema**: Nas colunas de diferença das tabelas de Fechamento de Caixa e Meta Anual, quando o valor é R$ 0,00, o texto fica com a cor padrão (cinza/muted). O usuário quer que fique **preto**.
 
-**Resultado**: Os botões mostram "jan, fev, mar" mas o sistema está consultando dados de "fev, mar, abr". Quando o usuário clica em "fev 2026" (que na verdade é março), os dados retornam vazios porque março não tem vendas ainda.
+**Correção**: Adicionar `text-foreground` como classe explícita quando a diferença for exatamente 0, em ambos os arquivos:
 
-## Correção: `src/pages/MinhaPerformance.tsx`
+### `src/components/relatorios/FechamentoCaixaTable.tsx`
+4 pontos (linhas 263, 271, 289, 294): trocar a lógica de cor para incluir `text-foreground` no caso `=== 0`.
 
-Substituir todas as chamadas `new Date(mesSelecionado + '-01')` por construção com componentes locais para evitar a interpretação UTC:
-
-```typescript
-// Helper para parsear 'YYYY-MM' sem bug de fuso
-function parseMonth(mes: string): Date {
-  const [y, m] = mes.split('-').map(Number);
-  return new Date(y, m - 1, 1); // mês local, sem UTC
-}
+Exemplo da lógica atual:
+```
+dif !== 0 && dayTotal > 0 ? (dif > 0 ? 'text-green-600' : 'text-red-600') : ''
+```
+Nova lógica:
+```
+dif > 0 ? 'text-green-600' : dif < 0 ? 'text-red-600' : 'text-foreground'
 ```
 
-Locais que precisam ser atualizados (5 ocorrências):
-1. **Linha 176** — label do mês no header
-2. **Linha 190** — botão do mês anterior
-3. **Linha 201** — botão do mês atual
-4. **Linha 211** — botão do próximo mês
-5. **Linha 395** — data dos lançamentos na tabela (`new Date(l.data_lancamento)`)
+### `src/components/relatorios/MetaAnualTable.tsx`
+2 pontos (linhas 238, 251): mesma substituição.
 
-Todas passam de `new Date(string)` para `parseMonth(string)` ou `new Date(y, m-1, d)`.
-
-Nenhuma alteração nos queries ou no banco — os dados já estão corretos.
+Total: 6 alterações pontuais de classe CSS, sem mudança de lógica de dados.
 
