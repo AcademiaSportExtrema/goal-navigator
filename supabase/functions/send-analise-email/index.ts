@@ -75,27 +75,23 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, serviceKey);
 
-    // Load Resend settings from system_settings (global config)
-    let resendApiKey = "";
+    // Load Resend API key from environment secrets (never from DB)
+    const resendApiKey = Deno.env.get("RESEND_API_KEY") || "";
+
+    // Load display settings (domain/name) from system_settings — these are not secrets
     let fromDomain = "metashub.com.br";
     let fromName = "MetasHub";
 
     const { data: settings } = await supabaseAdmin
       .from("system_settings")
       .select("key, value")
-      .in("key", ["resend_api_key", "resend_from_domain", "resend_from_name"]);
+      .in("key", ["resend_from_domain", "resend_from_name"]);
 
     if (settings) {
       for (const s of settings) {
-        if (s.key === "resend_api_key") resendApiKey = s.value;
         if (s.key === "resend_from_domain") fromDomain = s.value;
         if (s.key === "resend_from_name") fromName = s.value;
       }
-    }
-
-    // Fallback to secret if not configured in system_settings
-    if (!resendApiKey) {
-      resendApiKey = Deno.env.get("RESEND_API_KEY") || "";
     }
 
     if (!resendApiKey) {
