@@ -20,7 +20,7 @@ export default function Login() {
 
   // Redirect already-authenticated users
   useEffect(() => {
-    if (!authLoading && user) {
+    if (!authLoading && user && role) {
       navigate(role === 'consultora' ? '/minha-performance' : '/dashboard', { replace: true });
     }
   }, [authLoading, user, role, navigate]);
