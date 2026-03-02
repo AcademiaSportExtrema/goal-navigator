@@ -1,24 +1,31 @@
 
 
-## Problema identificado
+## Diagnóstico
 
-O login da Lívia autentica com sucesso, mas ela é redirecionada para `/dashboard` em vez de `/minha-performance`.
+O problema é um bug clássico de fuso horário na exibição de datas. O código usa `new Date('2026-03-01')` para formatar os nomes dos meses, mas essa sintaxe é interpretada como UTC meia-noite. No Brasil (UTC-3), isso vira "28 de fevereiro às 21h" — um mês antes.
 
-**Causa raiz**: No `useEffect` do `Login.tsx` (linha 22-26), a condição `!authLoading && user` dispara assim que o `user` é setado, mas **antes** do `role` ser carregado (que é `null` nesse momento). Como `null !== 'consultora'`, o ternário cai no branch `/dashboard`.
+**Resultado**: Os botões mostram "jan, fev, mar" mas o sistema está consultando dados de "fev, mar, abr". Quando o usuário clica em "fev 2026" (que na verdade é março), os dados retornam vazios porque março não tem vendas ainda.
 
-A propriedade `isLoading` do auth fica `true` durante o fetch do profile, mas o `useEffect` usa `authLoading` que é o mesmo `isLoading`. O problema é que entre o `user` ser setado pelo `onAuthStateChange` e o `setIsLoading(true)` do segundo `useEffect`, há um frame onde `isLoading` é `false` e `user` existe mas `role` é `null`.
+## Correção: `src/pages/MinhaPerformance.tsx`
 
-## Correção: `src/pages/Login.tsx`
-
-Alterar a condição do `useEffect` para só redirecionar quando `role` estiver definido (não `null`):
+Substituir todas as chamadas `new Date(mesSelecionado + '-01')` por construção com componentes locais para evitar a interpretação UTC:
 
 ```typescript
-useEffect(() => {
-  if (!authLoading && user && role) {
-    navigate(role === 'consultora' ? '/minha-performance' : '/dashboard', { replace: true });
-  }
-}, [authLoading, user, role, navigate]);
+// Helper para parsear 'YYYY-MM' sem bug de fuso
+function parseMonth(mes: string): Date {
+  const [y, m] = mes.split('-').map(Number);
+  return new Date(y, m - 1, 1); // mês local, sem UTC
+}
 ```
 
-Adicionar `role` como condição garante que o redirecionamento só acontece após o perfil ser completamente carregado. Isso é uma mudança de 1 linha (adicionar `&& role` na condição).
+Locais que precisam ser atualizados (5 ocorrências):
+1. **Linha 176** — label do mês no header
+2. **Linha 190** — botão do mês anterior
+3. **Linha 201** — botão do mês atual
+4. **Linha 211** — botão do próximo mês
+5. **Linha 395** — data dos lançamentos na tabela (`new Date(l.data_lancamento)`)
+
+Todas passam de `new Date(string)` para `parseMonth(string)` ou `new Date(y, m-1, d)`.
+
+Nenhuma alteração nos queries ou no banco — os dados já estão corretos.
 
