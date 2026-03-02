@@ -43,7 +43,7 @@ export default function Login() {
         description: 'Bem-vindo ao Sistema de Metas',
       });
       
-      navigate('/dashboard');
+      // Redirecionamento controlado pelo useEffect (linhas 22-26) baseado no role
     } catch (err) {
       setError('Erro ao realizar login. Tente novamente.');
     } finally {
