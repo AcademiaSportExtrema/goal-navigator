@@ -22,6 +22,18 @@ import { ptBR } from 'date-fns/locale';
 import type { Lancamento, MetaMensal, ComissaoNivel, MetaConsultora, Consultora } from '@/types/database';
 import { getNivelNome } from '@/lib/utils';
 
+/** Parseia 'YYYY-MM' como data local (evita bug de fuso UTC) */
+function parseMonth(mes: string): Date {
+  const [y, m] = mes.split('-').map(Number);
+  return new Date(y, m - 1, 1);
+}
+
+/** Parseia 'YYYY-MM-DD' como data local */
+function parseDate(d: string): Date {
+  const [y, m, day] = d.split('-').map(Number);
+  return new Date(y, m - 1, day);
+}
+
 export default function MinhaPerformance() {
   const { consultoraId } = useAuth();
   const mesAtual = format(new Date(), 'yyyy-MM');
@@ -173,7 +185,7 @@ export default function MinhaPerformance() {
               <h2 className="text-2xl font-bold">{consultora?.nome || 'Carregando...'}</h2>
               <p className="text-muted-foreground flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
-                {format(new Date(mesSelecionado + '-01'), 'MMMM yyyy', { locale: ptBR })}
+                {format(parseMonth(mesSelecionado), 'MMMM yyyy', { locale: ptBR })}
               </p>
             </div>
           </div>
@@ -187,7 +199,7 @@ export default function MinhaPerformance() {
                     : 'bg-muted text-muted-foreground hover:bg-accent'
                 }`}
               >
-                {format(new Date(mesAnterior + '-01'), 'MMM yyyy', { locale: ptBR })}
+                {format(parseMonth(mesAnterior), 'MMM yyyy', { locale: ptBR })}
               </button>
             )}
             <button
@@ -198,7 +210,7 @@ export default function MinhaPerformance() {
                   : 'bg-muted text-muted-foreground hover:bg-accent'
               }`}
             >
-              {format(new Date(mesAtual + '-01'), 'MMM yyyy', { locale: ptBR })}
+              {format(parseMonth(mesAtual), 'MMM yyyy', { locale: ptBR })}
             </button>
             <button
               onClick={() => setMesSelecionado(proximoMes)}
@@ -208,7 +220,7 @@ export default function MinhaPerformance() {
                   : 'bg-muted text-muted-foreground hover:bg-accent'
               }`}
             >
-              {format(new Date(proximoMes + '-01'), 'MMM yyyy', { locale: ptBR })}
+              {format(parseMonth(proximoMes), 'MMM yyyy', { locale: ptBR })}
             </button>
           </div>
         </div>
@@ -392,7 +404,7 @@ export default function MinhaPerformance() {
                           {meusLancamentos.map((l) => (
                             <TableRow key={l.id}>
                               <TableCell>
-                                {l.data_lancamento ? format(new Date(l.data_lancamento), 'dd/MM') : '-'}
+                                {l.data_lancamento ? format(parseDate(l.data_lancamento), 'dd/MM') : '-'}
                               </TableCell>
                               <TableCell>{l.produto || '-'}</TableCell>
                               <TableCell>{l.nome_cliente || '-'}</TableCell>
