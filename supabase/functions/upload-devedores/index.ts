@@ -85,7 +85,10 @@ function parseValor(val: any): { valor: number; valid: boolean } {
   if (typeof val === 'number') return { valor: val, valid: true };
   const str = String(val).trim();
   if (!str) return { valor: 0, valid: true };
-  const cleaned = str.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+  const stripped = str.replace(/[R$\s]/g, '');
+  const cleaned = stripped.includes(',')
+    ? stripped.replace(/\./g, '').replace(',', '.')
+    : stripped;
   const num = parseFloat(cleaned);
   if (isNaN(num)) return { valor: 0, valid: false };
   return { valor: num, valid: true };
