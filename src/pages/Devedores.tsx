@@ -18,8 +18,11 @@ import { PaginationControls } from '@/components/PaginationControls';
 import { exportToCSV } from '@/lib/csv';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
   Upload as UploadIcon, FileSpreadsheet, Search, Download, Trash2,
-  AlertTriangle, CheckCircle2, ChevronDown, XCircle, Info,
+  AlertTriangle, CheckCircle2, ChevronDown, XCircle, Info, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -63,21 +66,68 @@ export default function Devedores() {
   const [avisosOpen, setAvisosOpen] = useState(false);
   const [errosOpen, setErrosOpen] = useState(false);
 
-  // Filter & pagination
+  // Filter, sort & pagination
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [filterConsultor, setFilterConsultor] = useState<string>('__all__');
+  const [filterCobranca, setFilterCobranca] = useState<string>('__all__');
+  const [sortField, setSortField] = useState<string>('data_vencimento');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+    setPage(1);
+  };
+
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 opacity-40" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="h-3.5 w-3.5 ml-1" />
+      : <ArrowDown className="h-3.5 w-3.5 ml-1" />;
+  };
+
+  // Fetch distinct consultores for filter
+  const { data: consultoresList } = useQuery({
+    queryKey: ['devedores-consultores', empresaId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('devedores_parcelas')
+        .select('consultor')
+        .not('consultor', 'is', null)
+        .order('consultor');
+      if (error) throw error;
+      const unique = [...new Set((data || []).map(d => d.consultor).filter(Boolean))] as string[];
+      return unique;
+    },
+    enabled: !!empresaId,
+  });
 
   // Fetch devedores
   const { data: devedores, isLoading } = useQuery({
-    queryKey: ['devedores', empresaId, search, page],
+    queryKey: ['devedores', empresaId, search, page, filterConsultor, filterCobranca, sortField, sortDir],
     queryFn: async () => {
       let query = supabase
         .from('devedores_parcelas')
         .select('*', { count: 'exact' })
-        .order('data_vencimento', { ascending: true });
+        .order(sortField, { ascending: sortDir === 'asc' });
 
       if (search.trim()) {
         query = query.or(`nome.ilike.%${search}%,consultor.ilike.%${search}%,contrato.ilike.%${search}%`);
+      }
+
+      if (filterConsultor !== '__all__') {
+        query = query.ilike('consultor', filterConsultor);
+      }
+
+      if (filterCobranca === 'enviada') {
+        query = query.eq('cobranca_enviada', true);
+      } else if (filterCobranca === 'nao_enviada') {
+        query = query.eq('cobranca_enviada', false);
       }
 
       const from = (page - 1) * PAGE_SIZE;
@@ -406,23 +456,50 @@ export default function Devedores() {
         {/* Table */}
         <Card>
           <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <CardTitle>Parcelas Vencidas</CardTitle>
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar nome, consultor..."
-                    value={search}
-                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                    className="pl-8 w-[220px]"
-                  />
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <CardTitle>Parcelas Vencidas</CardTitle>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar nome, consultor..."
+                      value={search}
+                      onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                      className="pl-8 w-[220px]"
+                    />
+                  </div>
+                  <Button variant="outline" size="sm" onClick={handleExportCSV}>
+                    <Download className="h-4 w-4 mr-1" />
+                    CSV
+                  </Button>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleExportCSV}>
-                  <Download className="h-4 w-4 mr-1" />
-                  CSV
-                </Button>
               </div>
+              {isAdmin && (
+                <div className="flex flex-wrap gap-3">
+                  <Select value={filterConsultor} onValueChange={(v) => { setFilterConsultor(v); setPage(1); }}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Consultor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">Todos os consultores</SelectItem>
+                      {consultoresList?.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={filterCobranca} onValueChange={(v) => { setFilterCobranca(v); setPage(1); }}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Status cobrança" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">Todos os status</SelectItem>
+                      <SelectItem value="enviada">Cobrança enviada</SelectItem>
+                      <SelectItem value="nao_enviada">Não enviada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -437,10 +514,18 @@ export default function Devedores() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Data Vencimento</TableHead>
-                      <TableHead className="text-right">Valor Parcela</TableHead>
-                      <TableHead>Consultor</TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('nome')}>
+                        <span className="flex items-center">Nome <SortIcon field="nome" /></span>
+                      </TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('data_vencimento')}>
+                        <span className="flex items-center">Data Vencimento <SortIcon field="data_vencimento" /></span>
+                      </TableHead>
+                      <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('valor_parcela')}>
+                        <span className="flex items-center justify-end">Valor Parcela <SortIcon field="valor_parcela" /></span>
+                      </TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('consultor')}>
+                        <span className="flex items-center">Consultor <SortIcon field="consultor" /></span>
+                      </TableHead>
                       <TableHead className="text-center">Cobrança</TableHead>
                     </TableRow>
                   </TableHeader>
