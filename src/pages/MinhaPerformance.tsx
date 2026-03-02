@@ -117,7 +117,7 @@ export default function MinhaPerformance() {
         .select('*')
         .eq('entra_meta', true)
         .eq('mes_competencia', mesSelecionado)
-        .eq('consultora_chave', consultora!.nome);
+        .ilike('consultora_chave', consultora!.nome);
       
       if (error) throw error;
       return data as Lancamento[];

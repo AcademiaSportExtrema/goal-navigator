@@ -121,7 +121,7 @@ export default function VisaoConsultora() {
         .select('*')
         .eq('entra_meta', true)
         .eq('mes_competencia', mesSelecionado)
-        .eq('consultora_chave', consultoraSelecionada!.nome);
+        .ilike('consultora_chave', consultoraSelecionada!.nome);
       if (error) throw error;
       return data as Lancamento[];
     },
