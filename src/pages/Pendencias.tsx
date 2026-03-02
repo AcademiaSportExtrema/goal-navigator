@@ -222,14 +222,14 @@ export default function Pendencias() {
   const handleOpenDialog = (group: PendenciaGroup) => {
     setSelectedGroup(group);
     // Pre-fill form based on group
-    let campo_alvo: CampoAlvo = 'produto';
+    let campo_alvo: CampoAlvo = 'plano';
     let valor = '';
-    if (group.produto) {
-      campo_alvo = 'produto';
-      valor = group.produto;
-    } else if (group.plano) {
+    if (group.plano) {
       campo_alvo = 'plano';
       valor = group.plano;
+    } else if (group.produto) {
+      campo_alvo = 'produto';
+      valor = group.produto;
     } else if (group.empresa) {
       campo_alvo = 'empresa';
       valor = group.empresa;
@@ -404,7 +404,11 @@ export default function Pendencias() {
                 <Label>Campo</Label>
                 <Select
                   value={form.campo_alvo}
-                  onValueChange={(value) => setForm(f => ({ ...f, campo_alvo: value as CampoAlvo }))}
+                  onValueChange={(value) => {
+                    const campo = value as CampoAlvo;
+                    const novoValor = selectedGroup?.[campo as keyof PendenciaGroup];
+                    setForm(f => ({ ...f, campo_alvo: campo, valor: typeof novoValor === 'string' ? novoValor : '' }));
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
