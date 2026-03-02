@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -15,11 +17,33 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PaginationControls } from '@/components/PaginationControls';
 import { exportToCSV } from '@/lib/csv';
 import {
-  Upload as UploadIcon, FileSpreadsheet, Search, Download, Trash2, AlertTriangle,
+  Upload as UploadIcon, FileSpreadsheet, Search, Download, Trash2,
+  AlertTriangle, CheckCircle2, ChevronDown, XCircle, Info,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
 const PAGE_SIZE = 25;
+
+interface Aviso {
+  linha: number;
+  tipo: string;
+  detalhe: string;
+}
+
+interface Erro {
+  linha: number;
+  erro: string;
+}
+
+interface UploadResumo {
+  total_linhas: number;
+  importados: number;
+  avisos: Aviso[];
+  erros: Erro[];
+  arquivo_nome: string | null;
+  uploaded_at: string;
+  uploaded_by_email: string | null;
+}
 
 export default function Devedores() {
   const { user, isAdmin, empresaId } = useAuth();
@@ -31,6 +55,12 @@ export default function Devedores() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Resultado do processamento
+  const [uploadResumo, setUploadResumo] = useState<UploadResumo | null>(null);
+  const [uploadError, setUploadError] = useState<{ error: string; colunas_faltantes?: string[]; message?: string } | null>(null);
+  const [avisosOpen, setAvisosOpen] = useState(false);
+  const [errosOpen, setErrosOpen] = useState(false);
 
   // Filter & pagination
   const [search, setSearch] = useState('');
@@ -61,6 +91,9 @@ export default function Devedores() {
 
   const totalPages = Math.ceil((devedores?.total || 0) / PAGE_SIZE);
 
+  const ACCEPTED_EXTENSIONS = ['.xls', '.xlsx', '.csv'];
+  const isValidFile = (name: string) => ACCEPTED_EXTENSIONS.some(ext => name.toLowerCase().endsWith(ext));
+
   // ── Upload handlers ─────────────────────────────────────────────
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -76,30 +109,38 @@ export default function Devedores() {
     e.preventDefault();
     setIsDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file && (file.name.endsWith('.xls') || file.name.endsWith('.xlsx'))) {
+    if (file && isValidFile(file.name)) {
       setSelectedFile(file);
+      setUploadResumo(null);
+      setUploadError(null);
     } else {
-      toast({ title: 'Formato inválido', description: 'Selecione um arquivo .xls ou .xlsx', variant: 'destructive' });
+      toast({ title: 'Formato inválido', description: 'Selecione um arquivo .xls, .xlsx ou .csv', variant: 'destructive' });
     }
   }, [toast]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setSelectedFile(file);
+    if (file) {
+      setSelectedFile(file);
+      setUploadResumo(null);
+      setUploadError(null);
+    }
   };
 
   const handleUpload = async () => {
     if (!selectedFile || !user) return;
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadResumo(null);
+    setUploadError(null);
 
     try {
       const fileName = `${Date.now()}_${selectedFile.name}`;
       const filePath = `devedores/${empresaId}/${fileName}`;
 
       setUploadProgress(20);
-      const { error: uploadError } = await supabase.storage.from('uploads').upload(filePath, selectedFile);
-      if (uploadError) throw uploadError;
+      const { error: storageError } = await supabase.storage.from('uploads').upload(filePath, selectedFile);
+      if (storageError) throw storageError;
 
       setUploadProgress(50);
 
@@ -111,14 +152,22 @@ export default function Devedores() {
 
       if (fnError) throw fnError;
 
-      toast({
-        title: 'Upload concluído!',
-        description: `${result?.resumo?.importados || 0} registros importados.`,
-      });
+      // Check if the response indicates a column error
+      if (result?.error === 'colunas_faltantes') {
+        setUploadError(result);
+        toast({ title: 'Erro de estrutura', description: result.message, variant: 'destructive' });
+      } else if (result?.success) {
+        setUploadResumo(result.resumo);
+        const avisoCount = result.resumo?.avisos?.length || 0;
+        toast({
+          title: 'Upload concluído!',
+          description: `${result.resumo.importados} registros importados${avisoCount > 0 ? `, ${avisoCount} aviso(s)` : ''}.`,
+        });
+        setPage(1);
+        queryClient.invalidateQueries({ queryKey: ['devedores'] });
+      }
 
       setSelectedFile(null);
-      setPage(1);
-      queryClient.invalidateQueries({ queryKey: ['devedores'] });
     } catch (error: any) {
       console.error('Erro no upload:', error);
       toast({ title: 'Erro no upload', description: error.message || 'Não foi possível processar o arquivo.', variant: 'destructive' });
@@ -167,14 +216,14 @@ export default function Devedores() {
                 Importar Relatório de Devedores
               </CardTitle>
               <CardDescription>
-                Arraste e solte ou selecione o arquivo Excel com as parcelas vencidas.
+                Arraste e solte ou selecione o arquivo com as parcelas vencidas.
                 <br />
                 <span className="text-xs text-muted-foreground">
-                  O upload substitui todos os registros anteriores.
+                  Formatos aceitos: .xls, .xlsx, .csv — O upload substitui todos os registros anteriores.
                 </span>
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -182,19 +231,19 @@ export default function Devedores() {
                 className={`
                   relative border-2 border-dashed rounded-lg p-8 text-center transition-colors
                   ${isDragOver ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/50'}
-                  ${selectedFile ? 'bg-success/5 border-success' : ''}
+                  ${selectedFile ? 'bg-accent/30 border-primary' : ''}
                 `}
               >
                 <input
                   type="file"
-                  accept=".xls,.xlsx"
+                  accept=".xls,.xlsx,.csv"
                   onChange={handleFileSelect}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   disabled={isUploading}
                 />
                 {selectedFile ? (
                   <div className="flex flex-col items-center gap-4">
-                    <FileSpreadsheet className="h-12 w-12 text-success" />
+                    <FileSpreadsheet className="h-12 w-12 text-primary" />
                     <div>
                       <p className="font-medium">{selectedFile.name}</p>
                       <p className="text-sm text-muted-foreground">
@@ -213,14 +262,14 @@ export default function Devedores() {
                     <UploadIcon className={`h-12 w-12 ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`} />
                     <div>
                       <p className="font-medium">Arraste o arquivo aqui</p>
-                      <p className="text-sm text-muted-foreground">ou clique para selecionar (.xls / .xlsx)</p>
+                      <p className="text-sm text-muted-foreground">ou clique para selecionar (.xls / .xlsx / .csv)</p>
                     </div>
                   </div>
                 )}
               </div>
 
               {isUploading && (
-                <div className="mt-4 space-y-2">
+                <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Processando dados...</span>
                     <span>{uploadProgress}%</span>
@@ -230,12 +279,124 @@ export default function Devedores() {
               )}
 
               {selectedFile && !isUploading && (
-                <div className="mt-4 flex justify-end">
+                <div className="flex justify-end">
                   <Button onClick={handleUpload}>
                     <UploadIcon className="h-4 w-4 mr-2" />
                     Importar Arquivo
                   </Button>
                 </div>
+              )}
+
+              {/* Erro de colunas faltantes */}
+              {uploadError?.error === 'colunas_faltantes' && (
+                <Alert variant="destructive">
+                  <XCircle className="h-4 w-4" />
+                  <AlertTitle>Colunas obrigatórias não encontradas</AlertTitle>
+                  <AlertDescription>
+                    O arquivo não possui as seguintes colunas obrigatórias:
+                    <ul className="mt-2 list-disc list-inside">
+                      {uploadError.colunas_faltantes?.map((col, i) => (
+                        <li key={i} className="font-medium">{col}</li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-xs">Nenhum dado foi importado. Verifique o arquivo e tente novamente.</p>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Resumo do processamento */}
+              {uploadResumo && (
+                <Card className="border-primary/20 bg-primary/5">
+                  <CardContent className="pt-4 space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle2 className="h-5 w-5 text-primary" />
+                      <span className="font-semibold text-sm">Resumo do Processamento</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      <div className="bg-background rounded-md p-3 text-center">
+                        <p className="text-muted-foreground text-xs">Linhas lidas</p>
+                        <p className="text-lg font-bold">{uploadResumo.total_linhas}</p>
+                      </div>
+                      <div className="bg-background rounded-md p-3 text-center">
+                        <p className="text-muted-foreground text-xs">Importados</p>
+                        <p className="text-lg font-bold text-primary">{uploadResumo.importados}</p>
+                      </div>
+                      <div className="bg-background rounded-md p-3 text-center">
+                        <p className="text-muted-foreground text-xs">Avisos</p>
+                        <p className={`text-lg font-bold ${uploadResumo.avisos.length > 0 ? 'text-yellow-600' : ''}`}>
+                          {uploadResumo.avisos.length}
+                        </p>
+                      </div>
+                      <div className="bg-background rounded-md p-3 text-center">
+                        <p className="text-muted-foreground text-xs">Erros</p>
+                        <p className={`text-lg font-bold ${uploadResumo.erros.length > 0 ? 'text-destructive' : ''}`}>
+                          {uploadResumo.erros.length}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                      <span>📄 {uploadResumo.arquivo_nome}</span>
+                      <span>👤 {uploadResumo.uploaded_by_email}</span>
+                      <span>🕐 {format(new Date(uploadResumo.uploaded_at), 'dd/MM/yyyy HH:mm')}</span>
+                    </div>
+
+                    {/* Avisos colapsável */}
+                    {uploadResumo.avisos.length > 0 && (
+                      <Collapsible open={avisosOpen} onOpenChange={setAvisosOpen}>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="w-full justify-between text-yellow-700 hover:text-yellow-800">
+                            <span className="flex items-center gap-2">
+                              <AlertTriangle className="h-4 w-4" />
+                              {uploadResumo.avisos.length} aviso(s)
+                            </span>
+                            <ChevronDown className={`h-4 w-4 transition-transform ${avisosOpen ? 'rotate-180' : ''}`} />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="max-h-48 overflow-y-auto mt-2 space-y-1">
+                            {uploadResumo.avisos.map((a, i) => (
+                              <div key={i} className="flex items-start gap-2 text-xs bg-yellow-50 dark:bg-yellow-900/20 rounded p-2">
+                                <Info className="h-3.5 w-3.5 mt-0.5 text-yellow-600 shrink-0" />
+                                <span>
+                                  <strong>Linha {a.linha}:</strong> {a.detalhe}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+
+                    {/* Erros colapsável */}
+                    {uploadResumo.erros.length > 0 && (
+                      <Collapsible open={errosOpen} onOpenChange={setErrosOpen}>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="w-full justify-between text-destructive hover:text-destructive">
+                            <span className="flex items-center gap-2">
+                              <XCircle className="h-4 w-4" />
+                              {uploadResumo.erros.length} erro(s)
+                            </span>
+                            <ChevronDown className={`h-4 w-4 transition-transform ${errosOpen ? 'rotate-180' : ''}`} />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="max-h-48 overflow-y-auto mt-2 space-y-1">
+                            {uploadResumo.erros.map((e, i) => (
+                              <div key={i} className="flex items-start gap-2 text-xs bg-destructive/10 rounded p-2">
+                                <XCircle className="h-3.5 w-3.5 mt-0.5 text-destructive shrink-0" />
+                                <span>
+                                  <strong>Linha {e.linha}:</strong> {e.erro}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+                  </CardContent>
+                </Card>
               )}
             </CardContent>
           </Card>
