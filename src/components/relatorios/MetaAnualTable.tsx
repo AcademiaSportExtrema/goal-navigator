@@ -235,7 +235,7 @@ export function MetaAnualTable({ empresaId, ano }: Props) {
                     <TableCell className="text-xs font-medium">{nome}</TableCell>
                     <TableCell className="text-right text-xs tabular-nums">{formatCurrency(distribuido)}</TableCell>
                     <TableCell className="text-right text-xs tabular-nums">{formatCurrency(realizado)}</TableCell>
-                    <TableCell className={`text-right text-xs tabular-nums font-semibold ${dif < 0 ? 'text-red-600' : dif > 0 ? 'text-green-600' : ''}`}>
+                    <TableCell className={`text-right text-xs tabular-nums font-semibold ${dif > 0 ? 'text-green-600' : dif < 0 ? 'text-red-600' : 'text-foreground'}`}>
                       {formatCurrency(dif)}
                     </TableCell>
                   </TableRow>
@@ -248,7 +248,7 @@ export function MetaAnualTable({ empresaId, ano }: Props) {
                 <TableCell className="text-xs">TOTAL</TableCell>
                 <TableCell className="text-right text-xs tabular-nums">{formatCurrency(totalDistribuido)}</TableCell>
                 <TableCell className="text-right text-xs tabular-nums">{formatCurrency(totalRealizado)}</TableCell>
-                <TableCell className={`text-right text-xs tabular-nums ${totalDif < 0 ? 'text-red-600' : totalDif > 0 ? 'text-green-600' : ''}`}>
+                <TableCell className={`text-right text-xs tabular-nums ${totalDif > 0 ? 'text-green-600' : totalDif < 0 ? 'text-red-600' : 'text-foreground'}`}>
                   {formatCurrency(totalDif)}
                 </TableCell>
               </TableRow>

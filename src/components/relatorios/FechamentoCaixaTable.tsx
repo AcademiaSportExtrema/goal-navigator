@@ -260,7 +260,7 @@ export function FechamentoCaixaTable({ empresaId, mes }: Props) {
                       value={f360Val}
                       onSave={(val) => upsertF360.mutate({ data: ds, field: 'valor_f360', value: val })}
                     />
-                    <TableCell className={`text-right text-xs tabular-nums font-medium ${dif !== 0 && dayTotal > 0 ? (dif > 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                    <TableCell className={`text-right text-xs tabular-nums font-medium ${dif > 0 ? 'text-green-600' : dif < 0 ? 'text-red-600' : 'text-foreground'}`}>
                       {dayTotal > 0 || f360Val > 0 ? fmtCur(dif) : '-'}
                     </TableCell>
                     <TableCell className="text-right text-xs tabular-nums font-semibold bg-muted/30">{dayPix > 0 ? fmtCur(dayPix) : '-'}</TableCell>
@@ -268,7 +268,7 @@ export function FechamentoCaixaTable({ empresaId, mes }: Props) {
                       value={pixF360Val}
                       onSave={(val) => upsertF360.mutate({ data: ds, field: 'valor_pix_f360', value: val })}
                     />
-                    <TableCell className={`text-right text-xs tabular-nums font-medium ${difPix !== 0 && dayPix > 0 ? (difPix > 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                    <TableCell className={`text-right text-xs tabular-nums font-medium ${difPix > 0 ? 'text-green-600' : difPix < 0 ? 'text-red-600' : 'text-foreground'}`}>
                       {dayPix > 0 || pixF360Val > 0 ? fmtCur(difPix) : '-'}
                     </TableCell>
                   </TableRow>
@@ -286,12 +286,12 @@ export function FechamentoCaixaTable({ empresaId, mes }: Props) {
                 ))}
                 <TableCell className="text-right text-xs tabular-nums bg-muted/30">{fmtCur(totals.totalAll)}</TableCell>
                 <TableCell className="text-right text-xs tabular-nums bg-yellow-50 dark:bg-yellow-900/20">{fmtCur(totals.totalF360)}</TableCell>
-                <TableCell className={`text-right text-xs tabular-nums ${totals.totalAll - totals.totalF360 !== 0 ? (totals.totalAll - totals.totalF360 > 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                <TableCell className={`text-right text-xs tabular-nums ${totals.totalAll - totals.totalF360 > 0 ? 'text-green-600' : totals.totalAll - totals.totalF360 < 0 ? 'text-red-600' : 'text-foreground'}`}>
                   {fmtCur(totals.totalAll - totals.totalF360)}
                 </TableCell>
                 <TableCell className="text-right text-xs tabular-nums bg-muted/30">{fmtCur(totals.totalPix)}</TableCell>
                 <TableCell className="text-right text-xs tabular-nums bg-yellow-50 dark:bg-yellow-900/20">{fmtCur(totals.totalPixF360)}</TableCell>
-                <TableCell className={`text-right text-xs tabular-nums ${totals.totalPix - totals.totalPixF360 !== 0 ? (totals.totalPix - totals.totalPixF360 > 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                <TableCell className={`text-right text-xs tabular-nums ${totals.totalPix - totals.totalPixF360 > 0 ? 'text-green-600' : totals.totalPix - totals.totalPixF360 < 0 ? 'text-red-600' : 'text-foreground'}`}>
                   {fmtCur(totals.totalPix - totals.totalPixF360)}
                 </TableCell>
               </TableRow>
