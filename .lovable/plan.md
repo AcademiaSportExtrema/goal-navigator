@@ -1,20 +1,42 @@
 
 
-## Correção dos dados importados
+## Adicionar coluna "Cobrança Enviada" na tabela de devedores
 
 ### Problema
-Os valores na tabela `devedores_parcelas` estão 100x maiores que o correto (ex: `14900` em vez de `149.00`) porque o parser antigo removia o ponto decimal.
+As consultoras precisam marcar se já enviaram a mensagem de cobrança para cada devedor. Atualmente não existe esse campo.
 
 ### Solução
-Executar um UPDATE simples dividindo `valor_parcela` por 100 em todos os registros existentes.
+
+**1. Migração de banco de dados**
+- Adicionar coluna `cobranca_enviada` (boolean, default `false`) na tabela `devedores_parcelas`
+- Adicionar RLS policy para que consultoras possam fazer UPDATE apenas neste campo nos registros que pertencem a elas
 
 ```sql
-UPDATE devedores_parcelas SET valor_parcela = valor_parcela / 100;
+ALTER TABLE devedores_parcelas ADD COLUMN cobranca_enviada boolean NOT NULL DEFAULT false;
 ```
 
-### Sobre "manter apenas o último arquivo"
-Isso já é o comportamento atual — a Edge Function faz `DELETE FROM devedores_parcelas WHERE empresa_id = ?` antes de inserir os novos registros. Não precisa de alteração.
+Nova policy de UPDATE para consultoras:
+```sql
+CREATE POLICY "Consultoras update cobranca own devedores"
+ON devedores_parcelas FOR UPDATE TO authenticated
+USING (
+  empresa_id = get_user_empresa_id(auth.uid())
+  AND consultor IN (SELECT nome FROM consultoras WHERE id = get_user_consultora_id(auth.uid()))
+)
+WITH CHECK (
+  empresa_id = get_user_empresa_id(auth.uid())
+  AND consultor IN (SELECT nome FROM consultoras WHERE id = get_user_consultora_id(auth.uid()))
+);
+```
 
-### Alteração
-- Uma única operação de UPDATE nos dados existentes. Nenhum arquivo de código modificado.
+**2. Frontend (`src/pages/Devedores.tsx`)**
+- Adicionar coluna "Cobrança" na tabela com um Checkbox/Switch
+- Ao clicar, fazer UPDATE no banco: `supabase.from('devedores_parcelas').update({ cobranca_enviada: true/false }).eq('id', row.id)`
+- Exibir visualmente o status (checkbox marcado = enviada)
+
+### Detalhes técnicos
+- Coluna boolean com default `false` garante que todos os registros existentes e novos comecem como "não enviado"
+- A consultora pode marcar/desmarcar a qualquer momento
+- Admins já têm permissão ALL, então também podem alterar
+- O campo será resetado automaticamente quando um novo arquivo for importado (pois a Edge Function deleta tudo e reinsere)
 
