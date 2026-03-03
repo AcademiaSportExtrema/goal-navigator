@@ -295,8 +295,14 @@ Deno.serve(async (req) => {
       const consultorRaw = row[col('consultor')] || null;
       const contratoRaw = row[col('contrato')] || null;
 
+      // Limpar consultor duplicado por vírgula (ex: "Nicole, Nicole" → "Nicole")
+      let consultorLimpo = consultorRaw ? String(consultorRaw).trim() : null;
+      if (consultorLimpo && consultorLimpo.includes(',')) {
+        consultorLimpo = consultorLimpo.split(',')[0].trim();
+      }
+
       // Pular linhas completamente vazias
-      if (!nome && !consultorRaw && !contratoRaw) continue;
+      if (!nome && !consultorLimpo && !contratoRaw) continue;
       totalLinhasLidas++;
 
       // Validar data
@@ -320,14 +326,14 @@ Deno.serve(async (req) => {
       }
 
       // Validar consultor cadastrado
-      if (consultorRaw) {
-        const normConsultor = normalizeText(String(consultorRaw));
+      if (consultorLimpo) {
+        const normConsultor = normalizeText(consultorLimpo);
         const found = consultoraNomes.some(cn => cn === normConsultor);
         if (!found) {
           avisos.push({
             linha: linhaNum,
             tipo: 'consultor_nao_cadastrado',
-            detalhe: `Consultor "${String(consultorRaw).trim()}" não encontrado no cadastro`,
+            detalhe: `Consultor "${consultorLimpo}" não encontrado no cadastro`,
           });
         }
       }
@@ -338,7 +344,7 @@ Deno.serve(async (req) => {
           nome: nome ? String(nome).trim() : null,
           data_vencimento: dateResult.date,
           valor_parcela: valorResult.valor,
-          consultor: consultorRaw ? String(consultorRaw).trim() : null,
+          consultor: consultorLimpo,
           contrato: contratoRaw ? String(contratoRaw).trim() : null,
           codigo_parcela: row[col('codigo_parcela')] ? String(row[col('codigo_parcela')]).trim() : null,
           parcela: row[col('parcela')] ? String(row[col('parcela')]).trim() : null,
