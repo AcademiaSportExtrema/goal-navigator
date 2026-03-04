@@ -92,14 +92,14 @@ export function AnalistaIaConfigTab() {
             Emails para receber a análise
           </CardTitle>
           <CardDescription>
-            Configure os emails que receberão o relatório do Analista IA após cada upload processado.
+            Configure os emails que receberão automaticamente o relatório do Analista IA após cada upload processado.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-start gap-2 rounded-md border border-border bg-muted/50 p-3">
             <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <p className="text-sm text-muted-foreground">
-              Após cada upload, a análise IA será gerada automaticamente. O disparo por email será ativado quando o serviço de email for configurado.
+              Sempre que um upload for processado com sucesso, a análise será gerada e enviada automaticamente para os emails ativos cadastrados abaixo. O botão no dashboard continua disponível para reenvio manual.
             </p>
           </div>
 

@@ -7,6 +7,39 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+async function triggerAnaliseEmailDispatch(params: {
+  supabaseUrl: string;
+  serviceKey: string;
+  empresaId: string;
+}) {
+  const response = await fetch(`${params.supabaseUrl}/functions/v1/send-analise-email`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.serviceKey}`,
+    },
+    body: JSON.stringify({
+      empresa_id: params.empresaId,
+      _internal: true,
+    }),
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const message = payload?.error || `HTTP ${response.status}`;
+    if (response.status === 400 || response.status === 429) {
+      console.log("Automatic analysis email skipped:", message);
+      return;
+    }
+
+    console.error("Automatic analysis email failed:", message);
+    return;
+  }
+
+  console.log("Automatic analysis email dispatched:", payload?.message || "ok");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -253,7 +286,7 @@ Limite sua resposta a no máximo 500 palavras.`;
 
           // Save analysis to DB using service role (bypass RLS)
           if (fullContent) {
-            await supabaseAdmin.from("analise_ia").upsert(
+            const { error: saveError } = await supabaseAdmin.from("analise_ia").upsert(
               {
                 empresa_id: empresaId,
                 mes_referencia: mesAtual,
@@ -264,7 +297,15 @@ Limite sua resposta a no máximo 500 palavras.`;
               { onConflict: "empresa_id,mes_referencia" }
             );
 
-            // Email sending removed – gestor controls dispatch via UI button
+            if (saveError) {
+              console.error("Failed to save analysis:", saveError);
+            } else {
+              await triggerAnaliseEmailDispatch({
+                supabaseUrl,
+                serviceKey,
+                empresaId,
+              });
+            }
           }
 
           controller.close();

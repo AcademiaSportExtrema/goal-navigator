@@ -225,7 +225,7 @@ export function AnalistaIaCard() {
               className="gap-1.5"
             >
               <Mail className={`h-3.5 w-3.5 ${sendingEmail ? 'animate-pulse' : ''}`} />
-              {sendingEmail ? 'Enviando...' : 'Enviar por email'}
+              {sendingEmail ? 'Enviando...' : 'Reenviar por email'}
             </Button>
             <Button
               variant="ghost"
