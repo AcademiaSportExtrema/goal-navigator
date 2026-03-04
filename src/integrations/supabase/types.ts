@@ -294,9 +294,64 @@ export type Database = {
           },
         ]
       }
+      devedores_cobranca_historico: {
+        Row: {
+          chave_cobranca: string
+          contato_em: string
+          created_at: string
+          created_by: string
+          created_by_label: string
+          devedor_parcela_id: string | null
+          empresa_id: string
+          id: string
+          observacao: string | null
+          tipo: Database["public"]["Enums"]["cobranca_evento_tipo"]
+        }
+        Insert: {
+          chave_cobranca: string
+          contato_em: string
+          created_at?: string
+          created_by: string
+          created_by_label: string
+          devedor_parcela_id?: string | null
+          empresa_id: string
+          id?: string
+          observacao?: string | null
+          tipo: Database["public"]["Enums"]["cobranca_evento_tipo"]
+        }
+        Update: {
+          chave_cobranca?: string
+          contato_em?: string
+          created_at?: string
+          created_by?: string
+          created_by_label?: string
+          devedor_parcela_id?: string | null
+          empresa_id?: string
+          id?: string
+          observacao?: string | null
+          tipo?: Database["public"]["Enums"]["cobranca_evento_tipo"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "devedores_cobranca_historico_devedor_parcela_id_fkey"
+            columns: ["devedor_parcela_id"]
+            isOneToOne: false
+            referencedRelation: "devedores_parcelas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "devedores_cobranca_historico_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       devedores_parcelas: {
         Row: {
           arquivo_nome: string | null
+          chave_cobranca: string | null
           cobranca_enviada: boolean
           cod_empresa: string | null
           codigo_parcela: string | null
@@ -308,13 +363,18 @@ export type Database = {
           empresa_id: string
           id: string
           nome: string | null
+          pago_em: string | null
           parcela: string | null
+          status_cobranca: Database["public"]["Enums"]["cobranca_status"]
+          ultima_observacao: string | null
+          ultimo_contato_em: string | null
           uploaded_at: string
           uploaded_by: string | null
           valor_parcela: number | null
         }
         Insert: {
           arquivo_nome?: string | null
+          chave_cobranca?: string | null
           cobranca_enviada?: boolean
           cod_empresa?: string | null
           codigo_parcela?: string | null
@@ -326,13 +386,18 @@ export type Database = {
           empresa_id: string
           id?: string
           nome?: string | null
+          pago_em?: string | null
           parcela?: string | null
+          status_cobranca?: Database["public"]["Enums"]["cobranca_status"]
+          ultima_observacao?: string | null
+          ultimo_contato_em?: string | null
           uploaded_at?: string
           uploaded_by?: string | null
           valor_parcela?: number | null
         }
         Update: {
           arquivo_nome?: string | null
+          chave_cobranca?: string | null
           cobranca_enviada?: boolean
           cod_empresa?: string | null
           codigo_parcela?: string | null
@@ -344,7 +409,11 @@ export type Database = {
           empresa_id?: string
           id?: string
           nome?: string | null
+          pago_em?: string | null
           parcela?: string | null
+          status_cobranca?: Database["public"]["Enums"]["cobranca_status"]
+          ultima_observacao?: string | null
+          ultimo_contato_em?: string | null
           uploaded_at?: string
           uploaded_by?: string | null
           valor_parcela?: number | null
@@ -1147,6 +1216,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      build_devedor_chave: {
+        Args: {
+          _cod_empresa: string
+          _codigo_parcela: string
+          _contrato: string
+          _data_vencimento: string
+          _nome: string
+          _parcela: string
+          _valor_parcela: number
+        }
+        Returns: string
+      }
       get_realizado_por_mes: {
         Args: { p_ano: number; p_empresa_id: string }
         Returns: {
@@ -1194,6 +1275,8 @@ export type Database = {
         | "resp_venda"
         | "resp_recebimento"
       coach_diretriz_tipo: "permitido" | "proibido"
+      cobranca_evento_tipo: "tentativa_contato" | "pagamento_confirmado"
+      cobranca_status: "pendente" | "em_contato" | "pago"
       operador_regra:
         | "contem"
         | "igual"
@@ -1346,6 +1429,8 @@ export const Constants = {
         "resp_recebimento",
       ],
       coach_diretriz_tipo: ["permitido", "proibido"],
+      cobranca_evento_tipo: ["tentativa_contato", "pagamento_confirmado"],
+      cobranca_status: ["pendente", "em_contato", "pago"],
       operador_regra: ["contem", "igual", "comeca_com", "termina_com", "regex"],
       regra_mes: ["DATA_LANCAMENTO", "DATA_INICIO"],
       responsavel_campo: ["resp_venda", "resp_recebimento"],

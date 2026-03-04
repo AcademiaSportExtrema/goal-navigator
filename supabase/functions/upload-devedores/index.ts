@@ -94,6 +94,40 @@ function parseValor(val: any): { valor: number; valid: boolean } {
   return { valor: num, valid: true };
 }
 
+function normalizeKeyPart(value: any): string {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function normalizeDatePart(value: string | null): string {
+  if (!value) return '';
+  return value.split('T')[0];
+}
+
+function normalizeMoneyPart(value: number): string {
+  if (Number.isNaN(Number(value))) return '';
+  return Number(value).toFixed(2);
+}
+
+function buildDevedorKey(row: {
+  cod_empresa: string | null;
+  contrato: string | null;
+  codigo_parcela: string | null;
+  parcela: string | null;
+  nome: string | null;
+  data_vencimento: string | null;
+  valor_parcela: number;
+}): string {
+  return [
+    normalizeKeyPart(row.cod_empresa),
+    normalizeKeyPart(row.contrato),
+    normalizeKeyPart(row.codigo_parcela),
+    normalizeKeyPart(row.parcela),
+    normalizeKeyPart(row.nome),
+    normalizeDatePart(row.data_vencimento),
+    normalizeMoneyPart(row.valor_parcela),
+  ].join('|');
+}
+
 // ── CSV parser ──────────────────────────────────────────────────────
 
 function parseCSVText(text: string): Record<string, string>[][] {
@@ -279,6 +313,41 @@ Deno.serve(async (req) => {
 
     const consultoraNomes = (consultoras || []).map(c => normalizeText(c.nome));
 
+    const { data: resumosAtuais } = await supabase
+      .from('devedores_parcelas')
+      .select('chave_cobranca, cod_empresa, contrato, codigo_parcela, parcela, nome, data_vencimento, valor_parcela, status_cobranca, ultimo_contato_em, ultima_observacao, pago_em, cobranca_enviada')
+      .eq('empresa_id', empresa_id);
+
+    const resumoPorChave = new Map<string, {
+      cobranca_enviada: boolean;
+      status_cobranca: 'pendente' | 'em_contato' | 'pago';
+      ultimo_contato_em: string | null;
+      ultima_observacao: string | null;
+      pago_em: string | null;
+    }>();
+
+    for (const resumo of resumosAtuais || []) {
+      const chave = resumo.chave_cobranca || buildDevedorKey({
+        cod_empresa: resumo.cod_empresa,
+        contrato: resumo.contrato,
+        codigo_parcela: resumo.codigo_parcela,
+        parcela: resumo.parcela,
+        nome: resumo.nome,
+        data_vencimento: resumo.data_vencimento,
+        valor_parcela: Number(resumo.valor_parcela || 0),
+      });
+
+      if (!chave || resumoPorChave.has(chave)) continue;
+
+      resumoPorChave.set(chave, {
+        cobranca_enviada: !!resumo.cobranca_enviada,
+        status_cobranca: (resumo.status_cobranca || 'pendente') as 'pendente' | 'em_contato' | 'pago',
+        ultimo_contato_em: resumo.ultimo_contato_em || null,
+        ultima_observacao: resumo.ultima_observacao || null,
+        pago_em: resumo.pago_em || null,
+      });
+    }
+
     const col = (field: string) => headerMap[field] || '';
 
     // ── Processar linhas ──────────────────────────────────────────
@@ -339,7 +408,7 @@ Deno.serve(async (req) => {
       }
 
       try {
-        rows.push({
+        const devedorRow = {
           empresa_id,
           nome: nome ? String(nome).trim() : null,
           data_vencimento: dateResult.date,
@@ -353,6 +422,28 @@ Deno.serve(async (req) => {
           em_remessa: row[col('em_remessa')] ? String(row[col('em_remessa')]).trim() : null,
           arquivo_nome: arquivo_nome || null,
           uploaded_by: user.id,
+        };
+
+        const chave_cobranca = buildDevedorKey({
+          cod_empresa: devedorRow.cod_empresa,
+          contrato: devedorRow.contrato,
+          codigo_parcela: devedorRow.codigo_parcela,
+          parcela: devedorRow.parcela,
+          nome: devedorRow.nome,
+          data_vencimento: devedorRow.data_vencimento,
+          valor_parcela: devedorRow.valor_parcela,
+        });
+
+        const resumoAtual = resumoPorChave.get(chave_cobranca);
+
+        rows.push({
+          ...devedorRow,
+          chave_cobranca,
+          cobranca_enviada: resumoAtual?.cobranca_enviada ?? false,
+          status_cobranca: resumoAtual?.status_cobranca ?? 'pendente',
+          ultimo_contato_em: resumoAtual?.ultimo_contato_em ?? null,
+          ultima_observacao: resumoAtual?.ultima_observacao ?? null,
+          pago_em: resumoAtual?.pago_em ?? null,
         });
       } catch (err: any) {
         erros.push({ linha: linhaNum, erro: err.message });
