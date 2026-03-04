@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
+import { CobrancaStatusBadge } from '@/components/CobrancaStatusBadge';
 import { Target, TrendingUp, DollarSign, Award, Eye, AlertTriangle } from 'lucide-react';
 import { CoachDicaDoDia } from '@/components/CoachDicaDoDia';
 import { format, addMonths, subMonths, startOfMonth } from 'date-fns';
@@ -483,7 +483,7 @@ function DevedoresConsultora({ empresaId, consultoraNome }: { empresaId: string;
     enabled: !!empresaId && !!consultoraNome,
   });
 
-  const pendentes = devedores?.filter(d => !d.cobranca_enviada).length || 0;
+  const pendentes = devedores?.filter(d => d.status_cobranca === 'pendente').length || 0;
   const total = devedores?.length || 0;
 
   const fmt = (v: number | null) => {
@@ -496,6 +496,11 @@ function DevedoresConsultora({ empresaId, consultoraNome }: { empresaId: string;
     try { return format(new Date(d + 'T00:00:00'), 'dd/MM/yyyy'); } catch { return d; }
   };
 
+  const fmtDateTime = (d: string | null) => {
+    if (!d) return '-';
+    try { return format(new Date(d), 'dd/MM/yyyy HH:mm'); } catch { return d; }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -505,13 +510,13 @@ function DevedoresConsultora({ empresaId, consultoraNome }: { empresaId: string;
             Devedores ({total})
           </CardTitle>
           {pendentes > 0 && (
-            <Badge variant="destructive">{pendentes} sem cobrança</Badge>
+            <Badge variant="destructive">{pendentes} pendente(s)</Badge>
           )}
         </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-center py-4 text-muted-foreground">Carregando...</p>
+          <p className="py-4 text-center text-muted-foreground">Carregando...</p>
         ) : total > 0 ? (
           <Table>
             <TableHeader>
@@ -519,7 +524,8 @@ function DevedoresConsultora({ empresaId, consultoraNome }: { empresaId: string;
                 <TableHead>Nome</TableHead>
                 <TableHead>Data Vencimento</TableHead>
                 <TableHead className="text-right">Valor Parcela</TableHead>
-                <TableHead className="text-center">Cobrança</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Último contato</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -528,15 +534,16 @@ function DevedoresConsultora({ empresaId, consultoraNome }: { empresaId: string;
                   <TableCell className="font-medium">{row.nome || '-'}</TableCell>
                   <TableCell>{fmtDate(row.data_vencimento)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(row.valor_parcela)}</TableCell>
-                  <TableCell className="text-center">
-                    <Checkbox checked={!!row.cobranca_enviada} disabled />
+                  <TableCell>
+                    <CobrancaStatusBadge status={row.status_cobranca} />
                   </TableCell>
+                  <TableCell>{fmtDateTime(row.ultimo_contato_em)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         ) : (
-          <p className="text-center py-8 text-muted-foreground">
+          <p className="py-8 text-center text-muted-foreground">
             Nenhum devedor vinculado a esta consultora
           </p>
         )}

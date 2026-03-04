@@ -1,30 +1,65 @@
-import { useState, useCallback } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { format } from 'date-fns';
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  CheckCircle2,
+  ChevronDown,
+  Clock3,
+  Download,
+  FileSpreadsheet,
+  Info,
+  Loader2,
+  MessageSquareText,
+  Search,
+  Trash2,
+  Upload as UploadIcon,
+  XCircle,
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import type { Tables } from '@/integrations/supabase/types';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { CobrancaStatusBadge, getCobrancaStatusLabel } from '@/components/CobrancaStatusBadge';
+import { PaginationControls } from '@/components/PaginationControls';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
-import { PaginationControls } from '@/components/PaginationControls';
 import { exportToCSV } from '@/lib/csv';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  Upload as UploadIcon, FileSpreadsheet, Search, Download, Trash2,
-  AlertTriangle, CheckCircle2, ChevronDown, XCircle, Info, ArrowUpDown, ArrowUp, ArrowDown,
-} from 'lucide-react';
-import { format } from 'date-fns';
+
+type DevedorParcela = Tables<'devedores_parcelas'>;
+type CobrancaStatus = 'pendente' | 'em_contato' | 'pago';
+type CobrancaEventoTipo = 'tentativa_contato' | 'pagamento_confirmado';
+
+type HistoricoCobranca = {
+  id: string;
+  chave_cobranca: string;
+  contato_em: string;
+  created_at: string;
+  created_by: string;
+  created_by_label: string;
+  devedor_parcela_id: string | null;
+  empresa_id: string;
+  observacao: string | null;
+  tipo: CobrancaEventoTipo;
+};
 
 const PAGE_SIZE = 25;
 
@@ -49,34 +84,69 @@ interface UploadResumo {
   uploaded_by_email: string | null;
 }
 
+function formatCurrency(value: number | null) {
+  if (value == null) return '-';
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function formatDate(value: string | null) {
+  if (!value) return '-';
+  try {
+    return format(new Date(`${value}T00:00:00`), 'dd/MM/yyyy');
+  } catch {
+    return value;
+  }
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return '-';
+  try {
+    return format(new Date(value), 'dd/MM/yyyy HH:mm');
+  } catch {
+    return value;
+  }
+}
+
+function toDateTimeLocalValue(value: string | null) {
+  if (!value) return format(new Date(), "yyyy-MM-dd'T'HH:mm");
+  try {
+    return format(new Date(value), "yyyy-MM-dd'T'HH:mm");
+  } catch {
+    return format(new Date(), "yyyy-MM-dd'T'HH:mm");
+  }
+}
+
+function getEventoLabel(tipo: CobrancaEventoTipo) {
+  return tipo === 'pagamento_confirmado' ? 'Pagamento confirmado' : 'Tentativa de contato';
+}
+
 export default function Devedores() {
   const { user, isAdmin, empresaId } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Upload state
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
-
-  // Resultado do processamento
   const [uploadResumo, setUploadResumo] = useState<UploadResumo | null>(null);
   const [uploadError, setUploadError] = useState<{ error: string; colunas_faltantes?: string[]; message?: string } | null>(null);
   const [avisosOpen, setAvisosOpen] = useState(false);
   const [errosOpen, setErrosOpen] = useState(false);
 
-  // Filter, sort & pagination
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [filterConsultor, setFilterConsultor] = useState<string>('__all__');
   const [filterCobranca, setFilterCobranca] = useState<string>('__all__');
   const [sortField, setSortField] = useState<string>('data_vencimento');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [formState, setFormState] = useState<Record<string, { contatoEm: string; observacao: string }>>({});
+  const [savingAction, setSavingAction] = useState<{ rowId: string; tipo: CobrancaEventoTipo } | null>(null);
 
   const handleSort = (field: string) => {
     if (sortField === field) {
-      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+      setSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortField(field);
       setSortDir('asc');
@@ -85,37 +155,37 @@ export default function Devedores() {
   };
 
   const SortIcon = ({ field }: { field: string }) => {
-    if (sortField !== field) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 opacity-40" />;
+    if (sortField !== field) return <ArrowUpDown className="ml-1 h-3.5 w-3.5 opacity-40" />;
     return sortDir === 'asc'
-      ? <ArrowUp className="h-3.5 w-3.5 ml-1" />
-      : <ArrowDown className="h-3.5 w-3.5 ml-1" />;
+      ? <ArrowUp className="ml-1 h-3.5 w-3.5" />
+      : <ArrowDown className="ml-1 h-3.5 w-3.5" />;
   };
 
-  // Fetch distinct consultores for filter
   const { data: consultoresList } = useQuery({
     queryKey: ['devedores-consultores', empresaId],
+    enabled: !!empresaId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('devedores_parcelas')
         .select('consultor')
         .not('consultor', 'is', null)
         .order('consultor');
+
       if (error) throw error;
-      const all = (data || []).map(d => d.consultor).filter(Boolean) as string[];
-      // Deduplicate case-insensitive, keeping first occurrence casing
+
       const seen = new Map<string, string>();
-      for (const c of all) {
-        const key = c.toLowerCase();
-        if (!seen.has(key)) seen.set(key, c);
+      for (const consultor of (data || []).map(item => item.consultor).filter(Boolean) as string[]) {
+        const key = consultor.toLowerCase();
+        if (!seen.has(key)) seen.set(key, consultor);
       }
+
       return [...seen.values()];
     },
-    enabled: !!empresaId,
   });
 
-  // Fetch devedores
   const { data: devedores, isLoading } = useQuery({
     queryKey: ['devedores', empresaId, search, page, filterConsultor, filterCobranca, sortField, sortDir],
+    enabled: !!empresaId,
     queryFn: async () => {
       let query = supabase
         .from('devedores_parcelas')
@@ -130,10 +200,8 @@ export default function Devedores() {
         query = query.ilike('consultor', filterConsultor);
       }
 
-      if (filterCobranca === 'enviada') {
-        query = query.eq('cobranca_enviada', true);
-      } else if (filterCobranca === 'nao_enviada') {
-        query = query.eq('cobranca_enviada', false);
+      if (filterCobranca !== '__all__') {
+        query = query.eq('status_cobranca', filterCobranca as CobrancaStatus);
       }
 
       const from = (page - 1) * PAGE_SIZE;
@@ -141,17 +209,43 @@ export default function Devedores() {
 
       const { data, error, count } = await query;
       if (error) throw error;
-      return { rows: data || [], total: count || 0 };
+
+      return { rows: (data || []) as DevedorParcela[], total: count || 0 };
     },
-    enabled: !!empresaId,
   });
 
+  const pageRows = devedores?.rows ?? [];
   const totalPages = Math.ceil((devedores?.total || 0) / PAGE_SIZE);
+
+  const chavesPagina = useMemo(
+    () => [...new Set(pageRows.map(row => row.chave_cobranca).filter(Boolean))] as string[],
+    [pageRows],
+  );
+
+  const { data: historicoPorChave } = useQuery({
+    queryKey: ['devedores-historico', chavesPagina],
+    enabled: chavesPagina.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('devedores_cobranca_historico')
+        .select('*')
+        .in('chave_cobranca', chavesPagina)
+        .order('contato_em', { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []).reduce<Record<string, HistoricoCobranca[]>>((acc, item) => {
+        const chave = item.chave_cobranca;
+        if (!acc[chave]) acc[chave] = [];
+        acc[chave].push(item as HistoricoCobranca);
+        return acc;
+      }, {});
+    },
+  });
 
   const ACCEPTED_EXTENSIONS = ['.xls', '.xlsx', '.csv'];
   const isValidFile = (name: string) => ACCEPTED_EXTENSIONS.some(ext => name.toLowerCase().endsWith(ext));
 
-  // ── Upload handlers ─────────────────────────────────────────────
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
@@ -165,27 +259,34 @@ export default function Devedores() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
+
     const file = e.dataTransfer.files[0];
     if (file && isValidFile(file.name)) {
       setSelectedFile(file);
       setUploadResumo(null);
       setUploadError(null);
-    } else {
-      toast({ title: 'Formato inválido', description: 'Selecione um arquivo .xls, .xlsx ou .csv', variant: 'destructive' });
+      return;
     }
+
+    toast({
+      title: 'Formato inválido',
+      description: 'Selecione um arquivo .xls, .xlsx ou .csv.',
+      variant: 'destructive',
+    });
   }, [toast]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      setUploadResumo(null);
-      setUploadError(null);
-    }
+    if (!file) return;
+
+    setSelectedFile(file);
+    setUploadResumo(null);
+    setUploadError(null);
   };
 
   const handleUpload = async () => {
     if (!selectedFile || !user) return;
+
     setIsUploading(true);
     setUploadProgress(0);
     setUploadResumo(null);
@@ -200,16 +301,13 @@ export default function Devedores() {
       if (storageError) throw storageError;
 
       setUploadProgress(50);
-
       const { data: result, error: fnError } = await supabase.functions.invoke('upload-devedores', {
         body: { arquivo_path: filePath, arquivo_nome: selectedFile.name },
       });
 
       setUploadProgress(100);
-
       if (fnError) throw fnError;
 
-      // Check if the response indicates a column error
       if (result?.error === 'colunas_faltantes') {
         setUploadError(result);
         toast({ title: 'Erro de estrutura', description: result.message, variant: 'destructive' });
@@ -217,67 +315,164 @@ export default function Devedores() {
         setUploadResumo(result.resumo);
         const avisoCount = result.resumo?.avisos?.length || 0;
         toast({
-          title: 'Upload concluído!',
-          description: `${result.resumo.importados} registros importados${avisoCount > 0 ? `, ${avisoCount} aviso(s)` : ''}.`,
+          title: 'Upload concluído',
+          description: `${result.resumo.importados} registros importados${avisoCount > 0 ? ` e ${avisoCount} aviso(s)` : ''}.`,
         });
         setPage(1);
         queryClient.invalidateQueries({ queryKey: ['devedores'] });
+        queryClient.invalidateQueries({ queryKey: ['devedores-historico'] });
+        queryClient.invalidateQueries({ queryKey: ['devedores-consultora-visao'] });
       }
 
       setSelectedFile(null);
     } catch (error: any) {
       console.error('Erro no upload:', error);
-      toast({ title: 'Erro no upload', description: error.message || 'Não foi possível processar o arquivo.', variant: 'destructive' });
+      toast({
+        title: 'Erro no upload',
+        description: error.message || 'Não foi possível processar o arquivo.',
+        variant: 'destructive',
+      });
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
     }
   };
 
-  // ── Export CSV ───────────────────────────────────────────────────
   const handleExportCSV = async () => {
     let query = supabase
       .from('devedores_parcelas')
-      .select('nome, data_vencimento, valor_parcela, consultor, contrato, cobranca_enviada')
+      .select('nome, data_vencimento, valor_parcela, consultor, contrato, status_cobranca, ultimo_contato_em, ultima_observacao, pago_em')
       .order(sortField, { ascending: sortDir === 'asc' })
       .limit(5000);
 
     if (search.trim()) {
       query = query.or(`nome.ilike.%${search}%,consultor.ilike.%${search}%,contrato.ilike.%${search}%`);
     }
+
     if (filterConsultor !== '__all__') {
       query = query.ilike('consultor', filterConsultor);
     }
-    if (filterCobranca === 'enviada') {
-      query = query.eq('cobranca_enviada', true);
-    } else if (filterCobranca === 'nao_enviada') {
-      query = query.eq('cobranca_enviada', false);
+
+    if (filterCobranca !== '__all__') {
+      query = query.eq('status_cobranca', filterCobranca as CobrancaStatus);
     }
 
     const { data } = await query;
-    if (data && data.length > 0) {
-      exportToCSV(data, 'devedores');
+    if (!data?.length) return;
+
+    exportToCSV(
+      data.map(item => ({
+        ...item,
+        status_cobranca: getCobrancaStatusLabel(item.status_cobranca as CobrancaStatus),
+      })),
+      'devedores-cobranca',
+    );
+  };
+
+  const initializeRowForm = (row: DevedorParcela) => {
+    setFormState(prev => {
+      if (prev[row.id]) return prev;
+      return {
+        ...prev,
+        [row.id]: {
+          contatoEm: toDateTimeLocalValue(row.pago_em || row.ultimo_contato_em),
+          observacao: row.ultima_observacao || '',
+        },
+      };
+    });
+  };
+
+  const updateRowForm = (rowId: string, field: 'contatoEm' | 'observacao', value: string) => {
+    setFormState(prev => ({
+      ...prev,
+      [rowId]: {
+        contatoEm: prev[rowId]?.contatoEm || format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+        observacao: prev[rowId]?.observacao || '',
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleToggleDetails = (row: DevedorParcela) => {
+    if (expandedRowId === row.id) {
+      setExpandedRowId(null);
+      return;
     }
+
+    initializeRowForm(row);
+    setExpandedRowId(row.id);
   };
 
-  const fmtCur = (v: number | null) => {
-    if (v == null) return '-';
-    return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  };
+  const handleRegistrarCobranca = async (row: DevedorParcela, tipo: CobrancaEventoTipo) => {
+    const form = formState[row.id] || {
+      contatoEm: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+      observacao: '',
+    };
 
-  const fmtDate = (d: string | null) => {
-    if (!d) return '-';
+    if (!form.contatoEm) {
+      toast({ title: 'Preencha a data do contato', variant: 'destructive' });
+      return;
+    }
+
+    if (tipo === 'tentativa_contato' && !form.observacao.trim()) {
+      toast({ title: 'Adicione a observação do contato', variant: 'destructive' });
+      return;
+    }
+
+    setSavingAction({ rowId: row.id, tipo });
+
     try {
-      return format(new Date(d + 'T00:00:00'), 'dd/MM/yyyy');
-    } catch {
-      return d;
+      const { data, error } = await supabase.functions.invoke('registrar-cobranca-devedor', {
+        body: {
+          devedorId: row.id,
+          tipo,
+          contatoEm: new Date(form.contatoEm).toISOString(),
+          observacao: form.observacao,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: tipo === 'pagamento_confirmado' ? 'Cobrança marcada como paga' : 'Tentativa registrada',
+        description: tipo === 'pagamento_confirmado'
+          ? 'O status foi atualizado para pago.'
+          : 'O histórico da cobrança foi atualizado.',
+      });
+
+      setFormState(prev => ({
+        ...prev,
+        [row.id]: {
+          contatoEm: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+          observacao: '',
+        },
+      }));
+
+      if (tipo === 'pagamento_confirmado') {
+        setExpandedRowId(null);
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['devedores'] }),
+        queryClient.invalidateQueries({ queryKey: ['devedores-historico'] }),
+        queryClient.invalidateQueries({ queryKey: ['devedores-consultora-visao'] }),
+      ]);
+    } catch (error: any) {
+      console.error('Erro ao registrar cobrança:', error);
+      toast({
+        title: 'Erro ao registrar cobrança',
+        description: error.message || 'Não foi possível registrar a ação.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingAction(null);
     }
   };
 
   return (
     <AppLayout title="Devedores">
       <div className="space-y-6">
-        {/* Upload area - admin only */}
         {isAdmin && (
           <Card>
             <CardHeader>
@@ -289,7 +484,7 @@ export default function Devedores() {
                 Arraste e solte ou selecione o arquivo com as parcelas vencidas.
                 <br />
                 <span className="text-xs text-muted-foreground">
-                  Formatos aceitos: .xls, .xlsx, .csv — O upload substitui todos os registros anteriores.
+                  Formatos aceitos: .xls, .xlsx, .csv — o upload substitui todos os registros anteriores, mantendo o histórico por cobrança.
                 </span>
               </CardDescription>
             </CardHeader>
@@ -298,17 +493,15 @@ export default function Devedores() {
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                className={`
-                  relative border-2 border-dashed rounded-lg p-8 text-center transition-colors
-                  ${isDragOver ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/50'}
-                  ${selectedFile ? 'bg-accent/30 border-primary' : ''}
-                `}
+                className={`relative rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
+                  isDragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                } ${selectedFile ? 'border-primary bg-accent/30' : ''}`}
               >
                 <input
                   type="file"
                   accept=".xls,.xlsx,.csv"
                   onChange={handleFileSelect}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                   disabled={isUploading}
                 />
                 {selectedFile ? (
@@ -316,13 +509,11 @@ export default function Devedores() {
                     <FileSpreadsheet className="h-12 w-12 text-primary" />
                     <div>
                       <p className="font-medium">{selectedFile.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {(selectedFile.size / 1024).toFixed(1)} KB
-                      </p>
+                      <p className="text-sm text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                     </div>
                     {!isUploading && (
                       <Button onClick={() => setSelectedFile(null)} variant="outline" size="sm">
-                        <Trash2 className="h-4 w-4 mr-2" />
+                        <Trash2 className="mr-2 h-4 w-4" />
                         Remover
                       </Button>
                     )}
@@ -344,29 +535,30 @@ export default function Devedores() {
                     <span>Processando dados...</span>
                     <span>{uploadProgress}%</span>
                   </div>
-                  <Progress value={uploadProgress} />
+                  <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                    <div className="h-full bg-primary transition-all" style={{ width: `${uploadProgress}%` }} />
+                  </div>
                 </div>
               )}
 
               {selectedFile && !isUploading && (
                 <div className="flex justify-end">
                   <Button onClick={handleUpload}>
-                    <UploadIcon className="h-4 w-4 mr-2" />
-                    Importar Arquivo
+                    <UploadIcon className="mr-2 h-4 w-4" />
+                    Importar arquivo
                   </Button>
                 </div>
               )}
 
-              {/* Erro de colunas faltantes */}
               {uploadError?.error === 'colunas_faltantes' && (
                 <Alert variant="destructive">
                   <XCircle className="h-4 w-4" />
                   <AlertTitle>Colunas obrigatórias não encontradas</AlertTitle>
                   <AlertDescription>
                     O arquivo não possui as seguintes colunas obrigatórias:
-                    <ul className="mt-2 list-disc list-inside">
-                      {uploadError.colunas_faltantes?.map((col, i) => (
-                        <li key={i} className="font-medium">{col}</li>
+                    <ul className="mt-2 list-inside list-disc">
+                      {uploadError.colunas_faltantes?.map((col, index) => (
+                        <li key={index} className="font-medium">{col}</li>
                       ))}
                     </ul>
                     <p className="mt-2 text-xs">Nenhum dado foi importado. Verifique o arquivo e tente novamente.</p>
@@ -374,35 +566,30 @@ export default function Devedores() {
                 </Alert>
               )}
 
-              {/* Resumo do processamento */}
               {uploadResumo && (
                 <Card className="border-primary/20 bg-primary/5">
-                  <CardContent className="pt-4 space-y-4">
-                    <div className="flex items-center gap-2 mb-2">
+                  <CardContent className="space-y-4 pt-4">
+                    <div className="mb-2 flex items-center gap-2">
                       <CheckCircle2 className="h-5 w-5 text-primary" />
-                      <span className="font-semibold text-sm">Resumo do Processamento</span>
+                      <span className="text-sm font-semibold">Resumo do processamento</span>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                      <div className="bg-background rounded-md p-3 text-center">
-                        <p className="text-muted-foreground text-xs">Linhas lidas</p>
+                    <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                      <div className="rounded-md bg-background p-3 text-center">
+                        <p className="text-xs text-muted-foreground">Linhas lidas</p>
                         <p className="text-lg font-bold">{uploadResumo.total_linhas}</p>
                       </div>
-                      <div className="bg-background rounded-md p-3 text-center">
-                        <p className="text-muted-foreground text-xs">Importados</p>
+                      <div className="rounded-md bg-background p-3 text-center">
+                        <p className="text-xs text-muted-foreground">Importados</p>
                         <p className="text-lg font-bold text-primary">{uploadResumo.importados}</p>
                       </div>
-                      <div className="bg-background rounded-md p-3 text-center">
-                        <p className="text-muted-foreground text-xs">Avisos</p>
-                        <p className={`text-lg font-bold ${uploadResumo.avisos.length > 0 ? 'text-yellow-600' : ''}`}>
-                          {uploadResumo.avisos.length}
-                        </p>
+                      <div className="rounded-md bg-background p-3 text-center">
+                        <p className="text-xs text-muted-foreground">Avisos</p>
+                        <p className="text-lg font-bold">{uploadResumo.avisos.length}</p>
                       </div>
-                      <div className="bg-background rounded-md p-3 text-center">
-                        <p className="text-muted-foreground text-xs">Erros</p>
-                        <p className={`text-lg font-bold ${uploadResumo.erros.length > 0 ? 'text-destructive' : ''}`}>
-                          {uploadResumo.erros.length}
-                        </p>
+                      <div className="rounded-md bg-background p-3 text-center">
+                        <p className="text-xs text-muted-foreground">Erros</p>
+                        <p className="text-lg font-bold text-destructive">{uploadResumo.erros.length}</p>
                       </div>
                     </div>
 
@@ -412,11 +599,10 @@ export default function Devedores() {
                       <span>🕐 {format(new Date(uploadResumo.uploaded_at), 'dd/MM/yyyy HH:mm')}</span>
                     </div>
 
-                    {/* Avisos colapsável */}
                     {uploadResumo.avisos.length > 0 && (
                       <Collapsible open={avisosOpen} onOpenChange={setAvisosOpen}>
                         <CollapsibleTrigger asChild>
-                          <Button variant="ghost" size="sm" className="w-full justify-between text-yellow-700 hover:text-yellow-800">
+                          <Button variant="ghost" size="sm" className="w-full justify-between">
                             <span className="flex items-center gap-2">
                               <AlertTriangle className="h-4 w-4" />
                               {uploadResumo.avisos.length} aviso(s)
@@ -425,12 +611,12 @@ export default function Devedores() {
                           </Button>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                          <div className="max-h-48 overflow-y-auto mt-2 space-y-1">
-                            {uploadResumo.avisos.map((a, i) => (
-                              <div key={i} className="flex items-start gap-2 text-xs bg-yellow-50 dark:bg-yellow-900/20 rounded p-2">
-                                <Info className="h-3.5 w-3.5 mt-0.5 text-yellow-600 shrink-0" />
+                          <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+                            {uploadResumo.avisos.map((aviso, index) => (
+                              <div key={index} className="flex items-start gap-2 rounded border bg-background p-2 text-xs">
+                                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                                 <span>
-                                  <strong>Linha {a.linha}:</strong> {a.detalhe}
+                                  <strong>Linha {aviso.linha}:</strong> {aviso.detalhe}
                                 </span>
                               </div>
                             ))}
@@ -439,11 +625,10 @@ export default function Devedores() {
                       </Collapsible>
                     )}
 
-                    {/* Erros colapsável */}
                     {uploadResumo.erros.length > 0 && (
                       <Collapsible open={errosOpen} onOpenChange={setErrosOpen}>
                         <CollapsibleTrigger asChild>
-                          <Button variant="ghost" size="sm" className="w-full justify-between text-destructive hover:text-destructive">
+                          <Button variant="ghost" size="sm" className="w-full justify-between">
                             <span className="flex items-center gap-2">
                               <XCircle className="h-4 w-4" />
                               {uploadResumo.erros.length} erro(s)
@@ -452,12 +637,12 @@ export default function Devedores() {
                           </Button>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                          <div className="max-h-48 overflow-y-auto mt-2 space-y-1">
-                            {uploadResumo.erros.map((e, i) => (
-                              <div key={i} className="flex items-start gap-2 text-xs bg-destructive/10 rounded p-2">
-                                <XCircle className="h-3.5 w-3.5 mt-0.5 text-destructive shrink-0" />
+                          <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+                            {uploadResumo.erros.map((erro, index) => (
+                              <div key={index} className="flex items-start gap-2 rounded border bg-background p-2 text-xs">
+                                <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
                                 <span>
-                                  <strong>Linha {e.linha}:</strong> {e.erro}
+                                  <strong>Linha {erro.linha}:</strong> {erro.erro}
                                 </span>
                               </div>
                             ))}
@@ -472,107 +657,244 @@ export default function Devedores() {
           </Card>
         )}
 
-        {/* Table */}
         <Card>
           <CardHeader>
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <CardTitle>Parcelas Vencidas</CardTitle>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle>Parcelas vencidas</CardTitle>
                 <div className="flex items-center gap-2">
                   <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Buscar nome, consultor..."
+                      placeholder="Buscar nome, consultor, contrato..."
                       value={search}
-                      onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                      className="pl-8 w-[220px]"
+                      onChange={(e) => {
+                        setSearch(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-[240px] pl-8"
                     />
                   </div>
                   <Button variant="outline" size="sm" onClick={handleExportCSV}>
-                    <Download className="h-4 w-4 mr-1" />
+                    <Download className="mr-1 h-4 w-4" />
                     CSV
                   </Button>
                 </div>
               </div>
-              {isAdmin && (
-                <div className="flex flex-wrap gap-3">
-                  <Select value={filterConsultor} onValueChange={(v) => { setFilterConsultor(v); setPage(1); }}>
-                    <SelectTrigger className="w-[200px]">
+
+              <div className="flex flex-wrap gap-3">
+                {isAdmin && (
+                  <Select value={filterConsultor} onValueChange={(value) => { setFilterConsultor(value); setPage(1); }}>
+                    <SelectTrigger className="w-[220px]">
                       <SelectValue placeholder="Consultor" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__all__">Todos os consultores</SelectItem>
-                      {consultoresList?.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      {consultoresList?.map((consultor) => (
+                        <SelectItem key={consultor} value={consultor}>{consultor}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={filterCobranca} onValueChange={(v) => { setFilterCobranca(v); setPage(1); }}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Status cobrança" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">Todos os status</SelectItem>
-                      <SelectItem value="enviada">Cobrança enviada</SelectItem>
-                      <SelectItem value="nao_enviada">Não enviada</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+                )}
+
+                <Select value={filterCobranca} onValueChange={(value) => { setFilterCobranca(value); setPage(1); }}>
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="Status da cobrança" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">Todos os status</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="em_contato">Em contato</SelectItem>
+                    <SelectItem value="pago">Pago</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="space-y-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Skeleton key={i} className="h-10 w-full" />
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <Skeleton key={index} className="h-12 w-full" />
                 ))}
               </div>
-            ) : devedores && devedores.rows.length > 0 ? (
+            ) : pageRows.length > 0 ? (
               <>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('nome')}>
+                      <TableHead className="w-[280px] cursor-pointer select-none" onClick={() => handleSort('nome')}>
                         <span className="flex items-center">Nome <SortIcon field="nome" /></span>
                       </TableHead>
                       <TableHead className="cursor-pointer select-none" onClick={() => handleSort('data_vencimento')}>
-                        <span className="flex items-center">Data Vencimento <SortIcon field="data_vencimento" /></span>
+                        <span className="flex items-center">Vencimento <SortIcon field="data_vencimento" /></span>
                       </TableHead>
-                      <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('valor_parcela')}>
-                        <span className="flex items-center justify-end">Valor Parcela <SortIcon field="valor_parcela" /></span>
+                      <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort('valor_parcela')}>
+                        <span className="flex items-center justify-end">Valor <SortIcon field="valor_parcela" /></span>
                       </TableHead>
                       <TableHead className="cursor-pointer select-none" onClick={() => handleSort('consultor')}>
                         <span className="flex items-center">Consultor <SortIcon field="consultor" /></span>
                       </TableHead>
-                      <TableHead className="text-center">Cobrança</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Último contato</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {devedores.rows.map((row: any) => (
-                      <TableRow key={row.id}>
-                        <TableCell className="font-medium">{row.nome || '-'}</TableCell>
-                        <TableCell>{fmtDate(row.data_vencimento)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{fmtCur(row.valor_parcela)}</TableCell>
-                        <TableCell>{row.consultor || '-'}</TableCell>
-                        <TableCell className="text-center">
-                          <Checkbox
-                            checked={!!row.cobranca_enviada}
-                            onCheckedChange={async (checked) => {
-                              const { error } = await supabase
-                                .from('devedores_parcelas')
-                                .update({ cobranca_enviada: !!checked } as any)
-                                .eq('id', row.id);
-                              if (error) {
-                                toast({ title: 'Erro', description: 'Não foi possível atualizar.', variant: 'destructive' });
-                              } else {
-                                queryClient.invalidateQueries({ queryKey: ['devedores'] });
-                              }
-                            }}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {pageRows.map((row) => {
+                      const aberto = expandedRowId === row.id;
+                      const historico = historicoPorChave?.[row.chave_cobranca || ''] || [];
+                      const rowForm = formState[row.id] || {
+                        contatoEm: toDateTimeLocalValue(row.pago_em || row.ultimo_contato_em),
+                        observacao: row.ultima_observacao || '',
+                      };
+                      const isSaving = savingAction?.rowId === row.id;
+
+                      return (
+                        <>
+                          <TableRow key={row.id}>
+                            <TableCell>
+                              <div className="space-y-1">
+                                <p className="font-medium">{row.nome || '-'}</p>
+                                <p className="text-xs text-muted-foreground">Contrato: {row.contrato || '-'}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>{formatDate(row.data_vencimento)}</TableCell>
+                            <TableCell className="text-right tabular-nums">{formatCurrency(row.valor_parcela)}</TableCell>
+                            <TableCell>{row.consultor || '-'}</TableCell>
+                            <TableCell>
+                              <CobrancaStatusBadge status={row.status_cobranca} />
+                            </TableCell>
+                            <TableCell>{formatDateTime(row.ultimo_contato_em)}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleToggleDetails(row)}
+                                aria-expanded={aberto}
+                              >
+                                Detalhes
+                                <ChevronDown className={`h-4 w-4 transition-transform ${aberto ? 'rotate-180' : ''}`} />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+
+                          {aberto && (
+                            <TableRow key={`${row.id}-details`}>
+                              <TableCell colSpan={7} className="bg-muted/20">
+                                <div className="grid gap-4 lg:grid-cols-[minmax(0,340px)_1fr]">
+                                  <div className="space-y-4 rounded-lg border bg-background p-4">
+                                    <div className="space-y-1">
+                                      <h3 className="font-semibold">Registrar cobrança</h3>
+                                      <p className="text-sm text-muted-foreground">
+                                        Salve a data do contato, a observação do que o cliente falou e atualize o andamento da cobrança.
+                                      </p>
+                                    </div>
+
+                                    <div className="grid gap-3">
+                                      <div className="grid gap-2">
+                                        <label className="text-sm font-medium">Data e hora do contato</label>
+                                        <Input
+                                          type="datetime-local"
+                                          value={rowForm.contatoEm}
+                                          onChange={(e) => updateRowForm(row.id, 'contatoEm', e.target.value)}
+                                        />
+                                      </div>
+
+                                      <div className="grid gap-2">
+                                        <label className="text-sm font-medium">Observação</label>
+                                        <Textarea
+                                          placeholder="Ex.: cliente pediu retorno amanhã, informou que vai pagar na sexta..."
+                                          value={rowForm.observacao}
+                                          onChange={(e) => updateRowForm(row.id, 'observacao', e.target.value)}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button
+                                        onClick={() => handleRegistrarCobranca(row, 'tentativa_contato')}
+                                        disabled={isSaving || row.status_cobranca === 'pago'}
+                                      >
+                                        {isSaving && savingAction?.tipo === 'tentativa_contato' ? (
+                                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <MessageSquareText className="mr-2 h-4 w-4" />
+                                        )}
+                                        Registrar tentativa
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        onClick={() => handleRegistrarCobranca(row, 'pagamento_confirmado')}
+                                        disabled={isSaving || row.status_cobranca === 'pago'}
+                                      >
+                                        {isSaving && savingAction?.tipo === 'pagamento_confirmado' ? (
+                                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <CheckCircle2 className="mr-2 h-4 w-4" />
+                                        )}
+                                        Marcar como pago
+                                      </Button>
+                                    </div>
+
+                                    <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <span className="text-muted-foreground">Status atual</span>
+                                        <CobrancaStatusBadge status={row.status_cobranca} />
+                                      </div>
+                                      <div className="flex items-center justify-between gap-3">
+                                        <span className="text-muted-foreground">Último contato</span>
+                                        <span>{formatDateTime(row.ultimo_contato_em)}</span>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-3">
+                                        <span className="text-muted-foreground">Pago em</span>
+                                        <span>{formatDateTime(row.pago_em)}</span>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <span className="text-muted-foreground">Última observação</span>
+                                        <p>{row.ultima_observacao || 'Nenhuma observação registrada.'}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-3 rounded-lg border bg-background p-4">
+                                    <div className="flex items-center gap-2">
+                                      <Clock3 className="h-4 w-4 text-muted-foreground" />
+                                      <h3 className="font-semibold">Histórico de tentativas</h3>
+                                    </div>
+
+                                    {historico.length > 0 ? (
+                                      <div className="space-y-3">
+                                        {historico.map((evento) => (
+                                          <div key={evento.id} className="rounded-lg border p-3">
+                                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                              <div className="flex items-center gap-2">
+                                                <Badge variant={evento.tipo === 'pagamento_confirmado' ? 'default' : 'secondary'}>
+                                                  {getEventoLabel(evento.tipo)}
+                                                </Badge>
+                                                <span className="text-xs text-muted-foreground">
+                                                  {formatDateTime(evento.contato_em)}
+                                                </span>
+                                              </div>
+                                              <span className="text-xs text-muted-foreground">por {evento.created_by_label}</span>
+                                            </div>
+                                            <p className="text-sm">{evento.observacao || 'Sem observação informada.'}</p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                                        Nenhuma tentativa registrada para esta cobrança.
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
+                      );
+                    })}
                   </TableBody>
                 </Table>
 
@@ -588,15 +910,15 @@ export default function Devedores() {
                   </div>
                 )}
 
-                <p className="text-xs text-muted-foreground mt-2">
-                  {devedores.total} registro{devedores.total !== 1 ? 's' : ''} encontrado{devedores.total !== 1 ? 's' : ''}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {devedores?.total || 0} registro{(devedores?.total || 0) !== 1 ? 's' : ''} encontrado{(devedores?.total || 0) !== 1 ? 's' : ''}
                 </p>
               </>
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <AlertTriangle className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                <p>Nenhum registro de devedor encontrado</p>
-                {isAdmin && <p className="text-sm mt-1">Faça upload de um arquivo para começar.</p>}
+              <div className="py-12 text-center text-muted-foreground">
+                <AlertTriangle className="mx-auto mb-3 h-10 w-10 opacity-50" />
+                <p>Nenhum registro de devedor encontrado.</p>
+                {isAdmin && <p className="mt-1 text-sm">Faça upload de um arquivo para começar.</p>}
               </div>
             )}
           </CardContent>
