@@ -73,6 +73,7 @@ serve(async (req) => {
     const empresaId = userRole.empresa_id;
     const body = await req.json().catch(() => ({}));
     const uploadId = body.upload_id || null;
+    const triggerEmail = body.trigger_email === true;
 
     // Current month
     const now = new Date();
@@ -299,7 +300,7 @@ Limite sua resposta a no máximo 500 palavras.`;
 
             if (saveError) {
               console.error("Failed to save analysis:", saveError);
-            } else {
+            } else if (triggerEmail) {
               await triggerAnaliseEmailDispatch({
                 supabaseUrl,
                 serviceKey,

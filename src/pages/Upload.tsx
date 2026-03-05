@@ -147,7 +147,7 @@ export default function UploadPage() {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${session.access_token}`,
             },
-            body: JSON.stringify({ upload_id: uploadRecord.id }),
+            body: JSON.stringify({ upload_id: uploadRecord.id, trigger_email: true }),
           }).catch(() => {});
           toast({
             title: 'Análise IA sendo gerada...',
