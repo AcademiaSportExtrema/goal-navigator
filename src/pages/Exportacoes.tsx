@@ -14,7 +14,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Database, Download, HardDrive, ShieldAlert, Users, ScrollText } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Copy, Database, Download, HardDrive, ScrollText, ShieldAlert, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 const ALL_COMPANIES_VALUE = '__all__';
@@ -48,10 +49,16 @@ const EXPORTABLE_TABLES = [
 ] as const;
 
 type ExportAction = 'bundle' | 'database-all' | 'database-table' | 'users' | 'storages' | 'logs';
+type SchemaAction = 'schema-table' | 'schema-all';
 
 interface ExportFile {
   filename: string;
   rows: Record<string, unknown>[];
+}
+
+interface SchemaResponse {
+  filename: string;
+  sql: string;
 }
 
 const tableLabels: Record<(typeof EXPORTABLE_TABLES)[number], string> = {
@@ -89,6 +96,8 @@ export default function Exportacoes() {
   const { empresaId, empresaNome, isSuperAdmin } = useAuth();
   const [selectedTable, setSelectedTable] = useState<(typeof EXPORTABLE_TABLES)[number]>('lancamentos');
   const [empresaFilter, setEmpresaFilter] = useState(ALL_COMPANIES_VALUE);
+  const [schemaSql, setSchemaSql] = useState('');
+  const [schemaFilename, setSchemaFilename] = useState('');
 
   const { data: empresas } = useQuery({
     queryKey: ['exportacoes-empresas'],
@@ -138,6 +147,43 @@ export default function Exportacoes() {
     },
   });
 
+  const schemaMutation = useMutation({
+    mutationFn: async ({ action, table }: { action: SchemaAction; table?: string }) => {
+      const { data, error } = await supabase.functions.invoke('export-cloud-data', {
+        body: {
+          action,
+          table,
+        },
+      });
+
+      if (error) throw error;
+      if (!data?.sql) {
+        throw new Error('Não foi possível gerar o SQL.');
+      }
+
+      return data as SchemaResponse;
+    },
+    onSuccess: (data) => {
+      setSchemaSql(data.sql);
+      setSchemaFilename(data.filename);
+      toast.success('SQL gerado com sucesso.');
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Erro ao gerar SQL.');
+    },
+  });
+
+  const handleCopySql = async () => {
+    if (!schemaSql) return;
+
+    try {
+      await navigator.clipboard.writeText(schemaSql);
+      toast.success('SQL copiado para a área de transferência.');
+    } catch {
+      toast.error('Não foi possível copiar o SQL.');
+    }
+  };
+
   const currentScopeLabel = isSuperAdmin
     ? empresaFilter === ALL_COMPANIES_VALUE
       ? 'Todas as empresas'
@@ -151,7 +197,7 @@ export default function Exportacoes() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Exportações CSV</h1>
             <p className="text-sm text-muted-foreground">
-              Exporte dados do banco, usuários, metadados de storage e logs do app no escopo permitido.
+              Exporte dados do banco, usuários, metadados de storage, logs do app e o SQL base das tabelas.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -227,7 +273,7 @@ export default function Exportacoes() {
                 </Select>
               </div>
 
-              <div className="flex flex-col gap-3 md:flex-row">
+              <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
                 <Button
                   variant="outline"
                   className="gap-2"
@@ -318,6 +364,81 @@ export default function Exportacoes() {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ScrollText className="h-4 w-4" />
+              SQL das tabelas
+            </CardTitle>
+            <CardDescription>
+              Gera o SQL base para copiar e migrar as tabelas públicas. Inclui enums necessários, mas não inclui RLS, policies, funções, triggers e FKs.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end">
+              <div className="w-full max-w-sm space-y-2">
+                <span className="text-sm font-medium text-foreground">Tabela para gerar SQL</span>
+                <Select value={selectedTable} onValueChange={(value) => setSelectedTable(value as (typeof EXPORTABLE_TABLES)[number])}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma tabela" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXPORTABLE_TABLES.map((table) => (
+                      <SelectItem key={table} value={table}>
+                        {tableLabels[table]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                variant="outline"
+                className="gap-2"
+                disabled={schemaMutation.isPending}
+                onClick={() => schemaMutation.mutate({ action: 'schema-table', table: selectedTable })}
+              >
+                <ScrollText className="h-4 w-4" />
+                Gerar SQL da tabela
+              </Button>
+
+              <Button
+                className="gap-2"
+                disabled={schemaMutation.isPending}
+                onClick={() => schemaMutation.mutate({ action: 'schema-all' })}
+              >
+                <ScrollText className="h-4 w-4" />
+                Gerar SQL de todas
+              </Button>
+
+              <Button
+                variant="secondary"
+                className="gap-2"
+                disabled={!schemaSql}
+                onClick={handleCopySql}
+              >
+                <Copy className="h-4 w-4" />
+                Copiar SQL
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-foreground">
+                  {schemaFilename ? `Arquivo sugerido: ${schemaFilename}` : 'Gere o SQL para visualizar aqui'}
+                </span>
+                {schemaSql && <Badge variant="outline">{schemaSql.split('\n').length} linhas</Badge>}
+              </div>
+              <Textarea
+                value={schemaSql}
+                readOnly
+                placeholder="O SQL gerado aparecerá aqui para você copiar."
+                className="min-h-[380px] font-mono text-xs"
+              />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </AppLayout>
   );
