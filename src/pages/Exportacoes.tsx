@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
@@ -47,9 +47,11 @@ const EXPORTABLE_TABLES = [
   'uploads',
   'user_roles',
 ] as const;
+const SCHEMA_MODES = ['base', 'secure', 'complete'] as const;
 
 type ExportAction = 'bundle' | 'database-all' | 'database-table' | 'users' | 'storages' | 'logs';
 type SchemaAction = 'schema-table' | 'schema-all';
+type SchemaMode = (typeof SCHEMA_MODES)[number];
 
 interface ExportFile {
   filename: string;
@@ -90,14 +92,38 @@ const tableLabels: Record<(typeof EXPORTABLE_TABLES)[number], string> = {
   user_roles: 'user_roles',
 };
 
+const schemaModeMeta: Record<SchemaMode, { title: string; description: string; hint: string; badge: string }> = {
+  base: {
+    title: 'SQL base',
+    description: 'Somente extensões, enums e CREATE TABLE.',
+    hint: 'Modo avançado: não inclui RLS, policies, funções auxiliares, índices nem FKs.',
+    badge: 'Avançado',
+  },
+  secure: {
+    title: 'SQL seguro',
+    description: 'Inclui RLS, policies e funções auxiliares de segurança.',
+    hint: 'Recomendado para migração: evita criar tabelas públicas expostas via Data API.',
+    badge: 'Recomendado',
+  },
+  complete: {
+    title: 'SQL completo',
+    description: 'Inclui segurança + índices e chaves estrangeiras mapeadas.',
+    hint: 'Melhor fidelidade estrutural, mas pode depender da ordem correta entre tabelas relacionadas.',
+    badge: 'Completo',
+  },
+};
+
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function Exportacoes() {
   const { empresaId, empresaNome, isSuperAdmin } = useAuth();
   const [selectedTable, setSelectedTable] = useState<(typeof EXPORTABLE_TABLES)[number]>('lancamentos');
   const [empresaFilter, setEmpresaFilter] = useState(ALL_COMPANIES_VALUE);
+  const [schemaMode, setSchemaMode] = useState<SchemaMode>('secure');
   const [schemaSql, setSchemaSql] = useState('');
   const [schemaFilename, setSchemaFilename] = useState('');
+
+  const modeMeta = useMemo(() => schemaModeMeta[schemaMode], [schemaMode]);
 
   const { data: empresas } = useQuery({
     queryKey: ['exportacoes-empresas'],
@@ -148,11 +174,12 @@ export default function Exportacoes() {
   });
 
   const schemaMutation = useMutation({
-    mutationFn: async ({ action, table }: { action: SchemaAction; table?: string }) => {
+    mutationFn: async ({ action, table, mode }: { action: SchemaAction; table?: string; mode: SchemaMode }) => {
       const { data, error } = await supabase.functions.invoke('export-cloud-data', {
         body: {
           action,
           table,
+          mode,
         },
       });
 
@@ -197,7 +224,7 @@ export default function Exportacoes() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Exportações CSV</h1>
             <p className="text-sm text-muted-foreground">
-              Exporte dados do banco, usuários, metadados de storage, logs do app e o SQL base das tabelas.
+              Exporte dados do banco, usuários, metadados de storage, logs do app e SQL base, seguro ou completo das tabelas.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -367,17 +394,25 @@ export default function Exportacoes() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ScrollText className="h-4 w-4" />
-              SQL das tabelas
-            </CardTitle>
-            <CardDescription>
-              Gera o SQL base para copiar e migrar as tabelas públicas. Inclui enums necessários, mas não inclui RLS, policies, funções, triggers e FKs.
-            </CardDescription>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ScrollText className="h-4 w-4" />
+                  SQL das tabelas
+                </CardTitle>
+                <CardDescription>
+                  Gere SQL de migração no modo base, seguro ou completo e copie o conteúdo para outro projeto.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant={schemaMode === 'secure' ? 'default' : 'outline'}>{modeMeta.badge}</Badge>
+                <Badge variant="outline">{modeMeta.title}</Badge>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end">
-              <div className="w-full max-w-sm space-y-2">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="space-y-2">
                 <span className="text-sm font-medium text-foreground">Tabela para gerar SQL</span>
                 <Select value={selectedTable} onValueChange={(value) => setSelectedTable(value as (typeof EXPORTABLE_TABLES)[number])}>
                   <SelectTrigger>
@@ -393,11 +428,37 @@ export default function Exportacoes() {
                 </Select>
               </div>
 
+              <div className="space-y-2">
+                <span className="text-sm font-medium text-foreground">Modo do SQL</span>
+                <Select value={schemaMode} onValueChange={(value) => setSchemaMode(value as SchemaMode)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o modo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="base">Base</SelectItem>
+                    <SelectItem value="secure">Seguro</SelectItem>
+                    <SelectItem value="complete">Completo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">{modeMeta.description}</p>
+                  <p className="text-xs text-muted-foreground">{modeMeta.hint}</p>
+                </div>
+                {schemaMode === 'secure' && <Badge>Use este modo</Badge>}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
               <Button
                 variant="outline"
                 className="gap-2"
                 disabled={schemaMutation.isPending}
-                onClick={() => schemaMutation.mutate({ action: 'schema-table', table: selectedTable })}
+                onClick={() => schemaMutation.mutate({ action: 'schema-table', table: selectedTable, mode: schemaMode })}
               >
                 <ScrollText className="h-4 w-4" />
                 Gerar SQL da tabela
@@ -406,7 +467,7 @@ export default function Exportacoes() {
               <Button
                 className="gap-2"
                 disabled={schemaMutation.isPending}
-                onClick={() => schemaMutation.mutate({ action: 'schema-all' })}
+                onClick={() => schemaMutation.mutate({ action: 'schema-all', mode: schemaMode })}
               >
                 <ScrollText className="h-4 w-4" />
                 Gerar SQL de todas
@@ -434,7 +495,7 @@ export default function Exportacoes() {
                 value={schemaSql}
                 readOnly
                 placeholder="O SQL gerado aparecerá aqui para você copiar."
-                className="min-h-[380px] font-mono text-xs"
+                className="min-h-[420px] font-mono text-xs"
               />
             </div>
           </CardContent>

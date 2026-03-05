@@ -36,6 +36,7 @@ const EXPORTABLE_TABLES = [
   "uploads",
   "user_roles",
 ] as const;
+const SQL_MODES = ["base", "secure", "complete"] as const;
 
 const ENUM_SQL = {
   ajuste_status: `DO $$ BEGIN
@@ -416,6 +417,889 @@ const TABLE_SQL: Record<(typeof EXPORTABLE_TABLES)[number], string> = {
 );`,
 };
 
+const SECURITY_FUNCTIONS_SQL = [
+  `CREATE OR REPLACE FUNCTION public.get_user_empresa_id(_user_id uuid)
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT empresa_id
+  FROM public.user_roles
+  WHERE user_id = _user_id
+  LIMIT 1
+$$;`,
+  `CREATE OR REPLACE FUNCTION public.get_user_consultora_id(_user_id uuid)
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT consultora_id
+  FROM public.user_roles
+  WHERE user_id = _user_id
+  LIMIT 1
+$$;`,
+  `CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role public.app_role)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role = _role
+  )
+$$;`,
+  `CREATE OR REPLACE FUNCTION public.is_empresa_active(_empresa_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.empresas
+    WHERE id = _empresa_id
+      AND ativo = true
+      AND (
+        subscription_status = 'active'
+        OR (trial_ends_at IS NOT NULL AND trial_ends_at > now())
+      )
+  )
+$$;`,
+];
+
+const FULL_FUNCTIONS_SQL = [
+  `CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;`,
+  `CREATE OR REPLACE FUNCTION public.build_devedor_chave(
+  _cod_empresa text,
+  _contrato text,
+  _codigo_parcela text,
+  _parcela text,
+  _nome text,
+  _data_vencimento date,
+  _valor_parcela numeric
+)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = public
+AS $$
+  SELECT md5(
+    concat_ws(
+      '|',
+      lower(trim(coalesce(_cod_empresa, ''))),
+      lower(trim(coalesce(_contrato, ''))),
+      lower(trim(coalesce(_codigo_parcela, ''))),
+      lower(trim(coalesce(_parcela, ''))),
+      lower(trim(coalesce(_nome, ''))),
+      coalesce(to_char(_data_vencimento, 'YYYY-MM-DD'), ''),
+      coalesce(trim(to_char(_valor_parcela, 'FM999999999999990D00')), '')
+    )
+  )
+$$;`,
+  `CREATE OR REPLACE FUNCTION public.sync_devedores_cobranca_resumo()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.status_cobranca IS NULL THEN
+    NEW.status_cobranca := 'pendente';
+  END IF;
+
+  IF NEW.pago_em IS NOT NULL THEN
+    NEW.status_cobranca := 'pago';
+  ELSIF NEW.ultimo_contato_em IS NOT NULL AND NEW.status_cobranca = 'pendente' THEN
+    NEW.status_cobranca := 'em_contato';
+  END IF;
+
+  NEW.cobranca_enviada := (
+    NEW.status_cobranca IN ('em_contato', 'pago')
+    OR NEW.ultimo_contato_em IS NOT NULL
+    OR NEW.pago_em IS NOT NULL
+  );
+
+  RETURN NEW;
+END;
+$$;`,
+];
+
+const TABLE_POLICY_SQL: Partial<Record<(typeof EXPORTABLE_TABLES)[number], string[]>> = {
+  analise_email_config: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa analise_email_config" ON public.analise_email_config;
+CREATE POLICY "Admins manage own empresa analise_email_config"
+ON public.analise_email_config
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access analise_email_config" ON public.analise_email_config;
+CREATE POLICY "Super admins full access analise_email_config"
+ON public.analise_email_config
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  analise_ia: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa analise_ia" ON public.analise_ia;
+CREATE POLICY "Admins manage own empresa analise_ia"
+ON public.analise_ia
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access analise_ia" ON public.analise_ia;
+CREATE POLICY "Super admins full access analise_ia"
+ON public.analise_ia
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  audit_logs: [
+    `DROP POLICY IF EXISTS "Admins read own empresa audit_logs" ON public.audit_logs;
+CREATE POLICY "Admins read own empresa audit_logs"
+ON public.audit_logs
+FOR SELECT
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Authenticated insert audit_logs" ON public.audit_logs;
+CREATE POLICY "Authenticated insert audit_logs"
+ON public.audit_logs
+FOR INSERT
+WITH CHECK (auth.uid() IS NOT NULL);`,
+    `DROP POLICY IF EXISTS "Super admins read all audit_logs" ON public.audit_logs;
+CREATE POLICY "Super admins read all audit_logs"
+ON public.audit_logs
+FOR SELECT
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  coach_diretrizes: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa coach_diretrizes" ON public.coach_diretrizes;
+CREATE POLICY "Admins manage own empresa coach_diretrizes"
+ON public.coach_diretrizes
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access coach_diretrizes" ON public.coach_diretrizes;
+CREATE POLICY "Super admins full access coach_diretrizes"
+ON public.coach_diretrizes
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+    `DROP POLICY IF EXISTS "Users read own empresa coach_diretrizes" ON public.coach_diretrizes;
+CREATE POLICY "Users read own empresa coach_diretrizes"
+ON public.coach_diretrizes
+FOR SELECT
+USING (empresa_id = public.get_user_empresa_id(auth.uid()));`,
+  ],
+  comissao_niveis: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa comissao_niveis" ON public.comissao_niveis;
+CREATE POLICY "Admins manage own empresa comissao_niveis"
+ON public.comissao_niveis
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access comissao_niveis" ON public.comissao_niveis;
+CREATE POLICY "Super admins full access comissao_niveis"
+ON public.comissao_niveis
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+    `DROP POLICY IF EXISTS "Users view own empresa comissao_niveis" ON public.comissao_niveis;
+CREATE POLICY "Users view own empresa comissao_niveis"
+ON public.comissao_niveis
+FOR SELECT
+USING (empresa_id = public.get_user_empresa_id(auth.uid()));`,
+  ],
+  consultoras: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa consultoras" ON public.consultoras;
+CREATE POLICY "Admins manage own empresa consultoras"
+ON public.consultoras
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Admins view empresa consultoras" ON public.consultoras;
+CREATE POLICY "Admins view empresa consultoras"
+ON public.consultoras
+FOR SELECT
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Consultoras view own record" ON public.consultoras;
+CREATE POLICY "Consultoras view own record"
+ON public.consultoras
+FOR SELECT
+USING ((id = public.get_user_consultora_id(auth.uid())) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access consultoras" ON public.consultoras;
+CREATE POLICY "Super admins full access consultoras"
+ON public.consultoras
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  dashboard_visibilidade: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa dashboard_visibilidade" ON public.dashboard_visibilidade;
+CREATE POLICY "Admins manage own empresa dashboard_visibilidade"
+ON public.dashboard_visibilidade
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access dashboard_visibilidade" ON public.dashboard_visibilidade;
+CREATE POLICY "Super admins full access dashboard_visibilidade"
+ON public.dashboard_visibilidade
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+    `DROP POLICY IF EXISTS "Users read own empresa dashboard_visibilidade" ON public.dashboard_visibilidade;
+CREATE POLICY "Users read own empresa dashboard_visibilidade"
+ON public.dashboard_visibilidade
+FOR SELECT
+USING (empresa_id = public.get_user_empresa_id(auth.uid()));`,
+  ],
+  devedores_cobranca_historico: [
+    `DROP POLICY IF EXISTS "Admins insert own empresa historico cobranca" ON public.devedores_cobranca_historico;
+CREATE POLICY "Admins insert own empresa historico cobranca"
+ON public.devedores_cobranca_historico
+FOR INSERT
+WITH CHECK (
+  public.has_role(auth.uid(), 'admin'::public.app_role)
+  AND (empresa_id = public.get_user_empresa_id(auth.uid()))
+  AND (created_by = auth.uid())
+);`,
+    `DROP POLICY IF EXISTS "Admins read own empresa historico cobranca" ON public.devedores_cobranca_historico;
+CREATE POLICY "Admins read own empresa historico cobranca"
+ON public.devedores_cobranca_historico
+FOR SELECT
+USING (
+  public.has_role(auth.uid(), 'admin'::public.app_role)
+  AND (empresa_id = public.get_user_empresa_id(auth.uid()))
+);`,
+    `DROP POLICY IF EXISTS "Consultoras insert own historico cobranca" ON public.devedores_cobranca_historico;
+CREATE POLICY "Consultoras insert own historico cobranca"
+ON public.devedores_cobranca_historico
+FOR INSERT
+WITH CHECK (
+  (empresa_id = public.get_user_empresa_id(auth.uid()))
+  AND (created_by = auth.uid())
+  AND EXISTS (
+    SELECT 1
+    FROM public.devedores_parcelas dp
+    JOIN public.consultoras c
+      ON c.id = public.get_user_consultora_id(auth.uid())
+     AND c.empresa_id = public.get_user_empresa_id(auth.uid())
+    WHERE dp.empresa_id = public.devedores_cobranca_historico.empresa_id
+      AND dp.chave_cobranca = public.devedores_cobranca_historico.chave_cobranca
+      AND lower(dp.consultor) = lower(c.nome)
+  )
+);`,
+    `DROP POLICY IF EXISTS "Consultoras read own historico cobranca" ON public.devedores_cobranca_historico;
+CREATE POLICY "Consultoras read own historico cobranca"
+ON public.devedores_cobranca_historico
+FOR SELECT
+USING (
+  (empresa_id = public.get_user_empresa_id(auth.uid()))
+  AND EXISTS (
+    SELECT 1
+    FROM public.devedores_parcelas dp
+    JOIN public.consultoras c
+      ON c.id = public.get_user_consultora_id(auth.uid())
+     AND c.empresa_id = public.get_user_empresa_id(auth.uid())
+    WHERE dp.empresa_id = public.devedores_cobranca_historico.empresa_id
+      AND dp.chave_cobranca = public.devedores_cobranca_historico.chave_cobranca
+      AND lower(dp.consultor) = lower(c.nome)
+  )
+);`,
+    `DROP POLICY IF EXISTS "Super admins full access historico cobranca" ON public.devedores_cobranca_historico;
+CREATE POLICY "Super admins full access historico cobranca"
+ON public.devedores_cobranca_historico
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  devedores_parcelas: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa devedores_parcelas" ON public.devedores_parcelas;
+CREATE POLICY "Admins manage own empresa devedores_parcelas"
+ON public.devedores_parcelas
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Consultoras view own devedores_parcelas" ON public.devedores_parcelas;
+CREATE POLICY "Consultoras view own devedores_parcelas"
+ON public.devedores_parcelas
+FOR SELECT
+USING (
+  (empresa_id = public.get_user_empresa_id(auth.uid()))
+  AND lower(consultor) IN (
+    SELECT lower(c.nome)
+    FROM public.consultoras c
+    WHERE c.id = public.get_user_consultora_id(auth.uid())
+  )
+);`,
+    `DROP POLICY IF EXISTS "Super admins full access devedores_parcelas" ON public.devedores_parcelas;
+CREATE POLICY "Super admins full access devedores_parcelas"
+ON public.devedores_parcelas
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  empresas: [
+    `DROP POLICY IF EXISTS "Super admins can manage empresas" ON public.empresas;
+CREATE POLICY "Super admins can manage empresas"
+ON public.empresas
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+    `DROP POLICY IF EXISTS "Users can view own empresa" ON public.empresas;
+CREATE POLICY "Users can view own empresa"
+ON public.empresas
+FOR SELECT
+USING ((id = public.get_user_empresa_id(auth.uid())) OR public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  fechamento_caixa_f360: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa fechamento_caixa_f360" ON public.fechamento_caixa_f360;
+CREATE POLICY "Admins manage own empresa fechamento_caixa_f360"
+ON public.fechamento_caixa_f360
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access fechamento_caixa_f360" ON public.fechamento_caixa_f360;
+CREATE POLICY "Super admins full access fechamento_caixa_f360"
+ON public.fechamento_caixa_f360
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  lancamentos: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa lancamentos" ON public.lancamentos;
+CREATE POLICY "Admins manage own empresa lancamentos"
+ON public.lancamentos
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Consultoras view own lancamentos" ON public.lancamentos;
+CREATE POLICY "Consultoras view own lancamentos"
+ON public.lancamentos
+FOR SELECT
+USING (
+  (empresa_id = public.get_user_empresa_id(auth.uid()))
+  AND lower(consultora_chave) IN (
+    SELECT lower(c.nome)
+    FROM public.consultoras c
+    WHERE c.id = public.get_user_consultora_id(auth.uid())
+  )
+);`,
+    `DROP POLICY IF EXISTS "Super admins full access lancamentos" ON public.lancamentos;
+CREATE POLICY "Super admins full access lancamentos"
+ON public.lancamentos
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  meta_anual: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa meta_anual" ON public.meta_anual;
+CREATE POLICY "Admins manage own empresa meta_anual"
+ON public.meta_anual
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access meta_anual" ON public.meta_anual;
+CREATE POLICY "Super admins full access meta_anual"
+ON public.meta_anual
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  meta_anual_meses: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa meta_anual_meses" ON public.meta_anual_meses;
+CREATE POLICY "Admins manage own empresa meta_anual_meses"
+ON public.meta_anual_meses
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access meta_anual_meses" ON public.meta_anual_meses;
+CREATE POLICY "Super admins full access meta_anual_meses"
+ON public.meta_anual_meses
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  meta_semanal: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa meta_semanal" ON public.meta_semanal;
+CREATE POLICY "Admins manage own empresa meta_semanal"
+ON public.meta_semanal
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access meta_semanal" ON public.meta_semanal;
+CREATE POLICY "Super admins full access meta_semanal"
+ON public.meta_semanal
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+    `DROP POLICY IF EXISTS "Users view own empresa meta_semanal" ON public.meta_semanal;
+CREATE POLICY "Users view own empresa meta_semanal"
+ON public.meta_semanal
+FOR SELECT
+USING (empresa_id = public.get_user_empresa_id(auth.uid()));`,
+  ],
+  metas_consultoras: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa metas_consultoras" ON public.metas_consultoras;
+CREATE POLICY "Admins manage own empresa metas_consultoras"
+ON public.metas_consultoras
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access metas_consultoras" ON public.metas_consultoras;
+CREATE POLICY "Super admins full access metas_consultoras"
+ON public.metas_consultoras
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+    `DROP POLICY IF EXISTS "Users view own empresa metas_consultoras" ON public.metas_consultoras;
+CREATE POLICY "Users view own empresa metas_consultoras"
+ON public.metas_consultoras
+FOR SELECT
+USING ((empresa_id = public.get_user_empresa_id(auth.uid())) OR public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  metas_mensais: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa metas_mensais" ON public.metas_mensais;
+CREATE POLICY "Admins manage own empresa metas_mensais"
+ON public.metas_mensais
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access metas_mensais" ON public.metas_mensais;
+CREATE POLICY "Super admins full access metas_mensais"
+ON public.metas_mensais
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+    `DROP POLICY IF EXISTS "Users view own empresa metas_mensais" ON public.metas_mensais;
+CREATE POLICY "Users view own empresa metas_mensais"
+ON public.metas_mensais
+FOR SELECT
+USING (empresa_id = public.get_user_empresa_id(auth.uid()));`,
+  ],
+  pagamentos_agregadores: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa pagamentos_agregadores" ON public.pagamentos_agregadores;
+CREATE POLICY "Admins manage own empresa pagamentos_agregadores"
+ON public.pagamentos_agregadores
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access pagamentos_agregadores" ON public.pagamentos_agregadores;
+CREATE POLICY "Super admins full access pagamentos_agregadores"
+ON public.pagamentos_agregadores
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  permissoes_perfil: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa permissoes" ON public.permissoes_perfil;
+CREATE POLICY "Admins manage own empresa permissoes"
+ON public.permissoes_perfil
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access permissoes" ON public.permissoes_perfil;
+CREATE POLICY "Super admins full access permissoes"
+ON public.permissoes_perfil
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+    `DROP POLICY IF EXISTS "Users read own empresa permissoes" ON public.permissoes_perfil;
+CREATE POLICY "Users read own empresa permissoes"
+ON public.permissoes_perfil
+FOR SELECT
+USING ((empresa_id = public.get_user_empresa_id(auth.uid())) OR public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  regras_meta: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa regras" ON public.regras_meta;
+CREATE POLICY "Admins manage own empresa regras"
+ON public.regras_meta
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access regras" ON public.regras_meta;
+CREATE POLICY "Super admins full access regras"
+ON public.regras_meta
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  solicitacoes_ajuste: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa solicitacoes" ON public.solicitacoes_ajuste;
+CREATE POLICY "Admins manage own empresa solicitacoes"
+ON public.solicitacoes_ajuste
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Consultoras create own solicitacoes" ON public.solicitacoes_ajuste;
+CREATE POLICY "Consultoras create own solicitacoes"
+ON public.solicitacoes_ajuste
+FOR INSERT
+WITH CHECK ((consultora_id = public.get_user_consultora_id(auth.uid())) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Consultoras view own solicitacoes" ON public.solicitacoes_ajuste;
+CREATE POLICY "Consultoras view own solicitacoes"
+ON public.solicitacoes_ajuste
+FOR SELECT
+USING ((consultora_id = public.get_user_consultora_id(auth.uid())) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access solicitacoes" ON public.solicitacoes_ajuste;
+CREATE POLICY "Super admins full access solicitacoes"
+ON public.solicitacoes_ajuste
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  support_messages: [
+    `DROP POLICY IF EXISTS "Admins create messages on own tickets" ON public.support_messages;
+CREATE POLICY "Admins create messages on own tickets"
+ON public.support_messages
+FOR INSERT
+WITH CHECK (
+  public.has_role(auth.uid(), 'admin'::public.app_role)
+  AND (user_id = auth.uid())
+  AND (is_internal = false)
+  AND EXISTS (
+    SELECT 1
+    FROM public.support_tickets t
+    WHERE t.id = public.support_messages.ticket_id
+      AND t.empresa_id = public.get_user_empresa_id(auth.uid())
+  )
+);`,
+    `DROP POLICY IF EXISTS "Admins read own empresa messages" ON public.support_messages;
+CREATE POLICY "Admins read own empresa messages"
+ON public.support_messages
+FOR SELECT
+USING (
+  public.has_role(auth.uid(), 'admin'::public.app_role)
+  AND (is_internal = false)
+  AND EXISTS (
+    SELECT 1
+    FROM public.support_tickets t
+    WHERE t.id = public.support_messages.ticket_id
+      AND t.empresa_id = public.get_user_empresa_id(auth.uid())
+  )
+);`,
+    `DROP POLICY IF EXISTS "Super admins full access support_messages" ON public.support_messages;
+CREATE POLICY "Super admins full access support_messages"
+ON public.support_messages
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  support_tickets: [
+    `DROP POLICY IF EXISTS "Admins create own empresa tickets" ON public.support_tickets;
+CREATE POLICY "Admins create own empresa tickets"
+ON public.support_tickets
+FOR INSERT
+WITH CHECK (
+  public.has_role(auth.uid(), 'admin'::public.app_role)
+  AND (empresa_id = public.get_user_empresa_id(auth.uid()))
+  AND (created_by = auth.uid())
+);`,
+    `DROP POLICY IF EXISTS "Admins read own empresa tickets" ON public.support_tickets;
+CREATE POLICY "Admins read own empresa tickets"
+ON public.support_tickets
+FOR SELECT
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Admins update own empresa tickets" ON public.support_tickets;
+CREATE POLICY "Admins update own empresa tickets"
+ON public.support_tickets
+FOR UPDATE
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access support_tickets" ON public.support_tickets;
+CREATE POLICY "Super admins full access support_tickets"
+ON public.support_tickets
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  system_settings: [
+    `DROP POLICY IF EXISTS "Super admins full access" ON public.system_settings;
+CREATE POLICY "Super admins full access"
+ON public.system_settings
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  uploads: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa uploads" ON public.uploads;
+CREATE POLICY "Admins manage own empresa uploads"
+ON public.uploads
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access uploads" ON public.uploads;
+CREATE POLICY "Super admins full access uploads"
+ON public.uploads
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+    `DROP POLICY IF EXISTS "Users can create uploads in own empresa" ON public.uploads;
+CREATE POLICY "Users can create uploads in own empresa"
+ON public.uploads
+FOR INSERT
+WITH CHECK ((auth.uid() = user_id) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Users view own empresa uploads" ON public.uploads;
+CREATE POLICY "Users view own empresa uploads"
+ON public.uploads
+FOR SELECT
+USING ((empresa_id = public.get_user_empresa_id(auth.uid())) OR public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+  user_roles: [
+    `DROP POLICY IF EXISTS "Admins manage own empresa roles" ON public.user_roles;
+CREATE POLICY "Admins manage own empresa roles"
+ON public.user_roles
+FOR ALL
+USING (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())))
+WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) AND (empresa_id = public.get_user_empresa_id(auth.uid())));`,
+    `DROP POLICY IF EXISTS "Super admins full access user_roles" ON public.user_roles;
+CREATE POLICY "Super admins full access user_roles"
+ON public.user_roles
+FOR ALL
+USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
+WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+    `DROP POLICY IF EXISTS "Users view own role" ON public.user_roles;
+CREATE POLICY "Users view own role"
+ON public.user_roles
+FOR SELECT
+USING ((user_id = auth.uid()) OR public.has_role(auth.uid(), 'super_admin'::public.app_role));`,
+  ],
+};
+
+const TABLE_FK_SQL: Partial<Record<(typeof EXPORTABLE_TABLES)[number], string[]>> = {
+  analise_email_config: [
+    `ALTER TABLE public.analise_email_config DROP CONSTRAINT IF EXISTS analise_email_config_empresa_id_fkey;
+ALTER TABLE public.analise_email_config ADD CONSTRAINT analise_email_config_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  analise_ia: [
+    `ALTER TABLE public.analise_ia DROP CONSTRAINT IF EXISTS analise_ia_empresa_id_fkey;
+ALTER TABLE public.analise_ia ADD CONSTRAINT analise_ia_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+    `ALTER TABLE public.analise_ia DROP CONSTRAINT IF EXISTS analise_ia_upload_id_fkey;
+ALTER TABLE public.analise_ia ADD CONSTRAINT analise_ia_upload_id_fkey FOREIGN KEY (upload_id) REFERENCES public.uploads(id);`,
+  ],
+  audit_logs: [
+    `ALTER TABLE public.audit_logs DROP CONSTRAINT IF EXISTS audit_logs_empresa_id_fkey;
+ALTER TABLE public.audit_logs ADD CONSTRAINT audit_logs_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  coach_diretrizes: [
+    `ALTER TABLE public.coach_diretrizes DROP CONSTRAINT IF EXISTS coach_diretrizes_empresa_id_fkey;
+ALTER TABLE public.coach_diretrizes ADD CONSTRAINT coach_diretrizes_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  comissao_niveis: [
+    `ALTER TABLE public.comissao_niveis DROP CONSTRAINT IF EXISTS comissao_niveis_empresa_id_fkey;
+ALTER TABLE public.comissao_niveis ADD CONSTRAINT comissao_niveis_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+    `ALTER TABLE public.comissao_niveis DROP CONSTRAINT IF EXISTS comissao_niveis_meta_mensal_id_fkey;
+ALTER TABLE public.comissao_niveis ADD CONSTRAINT comissao_niveis_meta_mensal_id_fkey FOREIGN KEY (meta_mensal_id) REFERENCES public.metas_mensais(id);`,
+  ],
+  consultoras: [
+    `ALTER TABLE public.consultoras DROP CONSTRAINT IF EXISTS consultoras_empresa_id_fkey;
+ALTER TABLE public.consultoras ADD CONSTRAINT consultoras_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  dashboard_visibilidade: [
+    `ALTER TABLE public.dashboard_visibilidade DROP CONSTRAINT IF EXISTS dashboard_visibilidade_empresa_id_fkey;
+ALTER TABLE public.dashboard_visibilidade ADD CONSTRAINT dashboard_visibilidade_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  devedores_cobranca_historico: [
+    `ALTER TABLE public.devedores_cobranca_historico DROP CONSTRAINT IF EXISTS devedores_cobranca_historico_devedor_parcela_id_fkey;
+ALTER TABLE public.devedores_cobranca_historico ADD CONSTRAINT devedores_cobranca_historico_devedor_parcela_id_fkey FOREIGN KEY (devedor_parcela_id) REFERENCES public.devedores_parcelas(id);`,
+    `ALTER TABLE public.devedores_cobranca_historico DROP CONSTRAINT IF EXISTS devedores_cobranca_historico_empresa_id_fkey;
+ALTER TABLE public.devedores_cobranca_historico ADD CONSTRAINT devedores_cobranca_historico_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  devedores_parcelas: [
+    `ALTER TABLE public.devedores_parcelas DROP CONSTRAINT IF EXISTS devedores_parcelas_empresa_id_fkey;
+ALTER TABLE public.devedores_parcelas ADD CONSTRAINT devedores_parcelas_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  fechamento_caixa_f360: [
+    `ALTER TABLE public.fechamento_caixa_f360 DROP CONSTRAINT IF EXISTS fechamento_caixa_f360_empresa_id_fkey;
+ALTER TABLE public.fechamento_caixa_f360 ADD CONSTRAINT fechamento_caixa_f360_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  lancamentos: [
+    `ALTER TABLE public.lancamentos DROP CONSTRAINT IF EXISTS fk_lancamentos_regra;
+ALTER TABLE public.lancamentos ADD CONSTRAINT fk_lancamentos_regra FOREIGN KEY (regra_aplicada_id) REFERENCES public.regras_meta(id);`,
+    `ALTER TABLE public.lancamentos DROP CONSTRAINT IF EXISTS lancamentos_empresa_id_fkey;
+ALTER TABLE public.lancamentos ADD CONSTRAINT lancamentos_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+    `ALTER TABLE public.lancamentos DROP CONSTRAINT IF EXISTS lancamentos_upload_id_fkey;
+ALTER TABLE public.lancamentos ADD CONSTRAINT lancamentos_upload_id_fkey FOREIGN KEY (upload_id) REFERENCES public.uploads(id);`,
+  ],
+  meta_anual: [
+    `ALTER TABLE public.meta_anual DROP CONSTRAINT IF EXISTS meta_anual_empresa_id_fkey;
+ALTER TABLE public.meta_anual ADD CONSTRAINT meta_anual_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  meta_anual_meses: [
+    `ALTER TABLE public.meta_anual_meses DROP CONSTRAINT IF EXISTS meta_anual_meses_empresa_id_fkey;
+ALTER TABLE public.meta_anual_meses ADD CONSTRAINT meta_anual_meses_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+    `ALTER TABLE public.meta_anual_meses DROP CONSTRAINT IF EXISTS meta_anual_meses_meta_anual_id_fkey;
+ALTER TABLE public.meta_anual_meses ADD CONSTRAINT meta_anual_meses_meta_anual_id_fkey FOREIGN KEY (meta_anual_id) REFERENCES public.meta_anual(id);`,
+  ],
+  meta_semanal: [
+    `ALTER TABLE public.meta_semanal DROP CONSTRAINT IF EXISTS meta_semanal_meta_mensal_id_fkey;
+ALTER TABLE public.meta_semanal ADD CONSTRAINT meta_semanal_meta_mensal_id_fkey FOREIGN KEY (meta_mensal_id) REFERENCES public.metas_mensais(id);`,
+  ],
+  metas_consultoras: [
+    `ALTER TABLE public.metas_consultoras DROP CONSTRAINT IF EXISTS metas_consultoras_consultora_id_fkey;
+ALTER TABLE public.metas_consultoras ADD CONSTRAINT metas_consultoras_consultora_id_fkey FOREIGN KEY (consultora_id) REFERENCES public.consultoras(id);`,
+    `ALTER TABLE public.metas_consultoras DROP CONSTRAINT IF EXISTS metas_consultoras_empresa_id_fkey;
+ALTER TABLE public.metas_consultoras ADD CONSTRAINT metas_consultoras_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+    `ALTER TABLE public.metas_consultoras DROP CONSTRAINT IF EXISTS metas_consultoras_meta_mensal_id_fkey;
+ALTER TABLE public.metas_consultoras ADD CONSTRAINT metas_consultoras_meta_mensal_id_fkey FOREIGN KEY (meta_mensal_id) REFERENCES public.metas_mensais(id);`,
+  ],
+  metas_mensais: [
+    `ALTER TABLE public.metas_mensais DROP CONSTRAINT IF EXISTS metas_mensais_empresa_id_fkey;
+ALTER TABLE public.metas_mensais ADD CONSTRAINT metas_mensais_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  permissoes_perfil: [
+    `ALTER TABLE public.permissoes_perfil DROP CONSTRAINT IF EXISTS permissoes_perfil_empresa_id_fkey;
+ALTER TABLE public.permissoes_perfil ADD CONSTRAINT permissoes_perfil_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  regras_meta: [
+    `ALTER TABLE public.regras_meta DROP CONSTRAINT IF EXISTS regras_meta_empresa_id_fkey;
+ALTER TABLE public.regras_meta ADD CONSTRAINT regras_meta_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  solicitacoes_ajuste: [
+    `ALTER TABLE public.solicitacoes_ajuste DROP CONSTRAINT IF EXISTS solicitacoes_ajuste_consultora_id_fkey;
+ALTER TABLE public.solicitacoes_ajuste ADD CONSTRAINT solicitacoes_ajuste_consultora_id_fkey FOREIGN KEY (consultora_id) REFERENCES public.consultoras(id);`,
+    `ALTER TABLE public.solicitacoes_ajuste DROP CONSTRAINT IF EXISTS solicitacoes_ajuste_empresa_id_fkey;
+ALTER TABLE public.solicitacoes_ajuste ADD CONSTRAINT solicitacoes_ajuste_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+    `ALTER TABLE public.solicitacoes_ajuste DROP CONSTRAINT IF EXISTS solicitacoes_ajuste_lancamento_id_fkey;
+ALTER TABLE public.solicitacoes_ajuste ADD CONSTRAINT solicitacoes_ajuste_lancamento_id_fkey FOREIGN KEY (lancamento_id) REFERENCES public.lancamentos(id);`,
+  ],
+  support_messages: [
+    `ALTER TABLE public.support_messages DROP CONSTRAINT IF EXISTS support_messages_ticket_id_fkey;
+ALTER TABLE public.support_messages ADD CONSTRAINT support_messages_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES public.support_tickets(id);`,
+  ],
+  support_tickets: [
+    `ALTER TABLE public.support_tickets DROP CONSTRAINT IF EXISTS support_tickets_empresa_id_fkey;
+ALTER TABLE public.support_tickets ADD CONSTRAINT support_tickets_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  uploads: [
+    `ALTER TABLE public.uploads DROP CONSTRAINT IF EXISTS uploads_empresa_id_fkey;
+ALTER TABLE public.uploads ADD CONSTRAINT uploads_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+  user_roles: [
+    `ALTER TABLE public.user_roles DROP CONSTRAINT IF EXISTS fk_user_roles_consultora;
+ALTER TABLE public.user_roles ADD CONSTRAINT fk_user_roles_consultora FOREIGN KEY (consultora_id) REFERENCES public.consultoras(id);`,
+    `ALTER TABLE public.user_roles DROP CONSTRAINT IF EXISTS user_roles_empresa_id_fkey;
+ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas(id);`,
+  ],
+};
+
+const TABLE_INDEX_SQL: Partial<Record<(typeof EXPORTABLE_TABLES)[number], string[]>> = {
+  analise_email_config: [
+    `CREATE INDEX IF NOT EXISTS idx_analise_email_config_empresa_id ON public.analise_email_config (empresa_id);`,
+  ],
+  analise_ia: [
+    `CREATE INDEX IF NOT EXISTS idx_analise_ia_empresa_id ON public.analise_ia (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_analise_ia_upload_id ON public.analise_ia (upload_id);`,
+  ],
+  audit_logs: [
+    `CREATE INDEX IF NOT EXISTS idx_audit_logs_empresa_id ON public.audit_logs (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id ON public.audit_logs (actor_id);`,
+  ],
+  coach_diretrizes: [
+    `CREATE INDEX IF NOT EXISTS idx_coach_diretrizes_empresa_id ON public.coach_diretrizes (empresa_id);`,
+  ],
+  comissao_niveis: [
+    `CREATE INDEX IF NOT EXISTS idx_comissao_niveis_empresa_id ON public.comissao_niveis (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_comissao_niveis_meta_mensal_id ON public.comissao_niveis (meta_mensal_id);`,
+  ],
+  consultoras: [
+    `CREATE INDEX IF NOT EXISTS idx_consultoras_empresa_id ON public.consultoras (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_consultoras_email ON public.consultoras (email);`,
+  ],
+  dashboard_visibilidade: [
+    `CREATE INDEX IF NOT EXISTS idx_dashboard_visibilidade_empresa_id ON public.dashboard_visibilidade (empresa_id);`,
+  ],
+  devedores_cobranca_historico: [
+    `CREATE INDEX IF NOT EXISTS idx_devedores_cobranca_historico_empresa_id ON public.devedores_cobranca_historico (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_devedores_cobranca_historico_chave ON public.devedores_cobranca_historico (chave_cobranca);`,
+  ],
+  devedores_parcelas: [
+    `CREATE INDEX IF NOT EXISTS idx_devedores_parcelas_empresa_id ON public.devedores_parcelas (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_devedores_parcelas_chave ON public.devedores_parcelas (chave_cobranca);`,
+  ],
+  fechamento_caixa_f360: [
+    `CREATE INDEX IF NOT EXISTS idx_fechamento_caixa_f360_empresa_id ON public.fechamento_caixa_f360 (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_fechamento_caixa_f360_data ON public.fechamento_caixa_f360 (data);`,
+  ],
+  lancamentos: [
+    `CREATE INDEX IF NOT EXISTS idx_lancamentos_empresa_id ON public.lancamentos (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_lancamentos_upload_id ON public.lancamentos (upload_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_lancamentos_data_lancamento ON public.lancamentos (data_lancamento);`,
+    `CREATE INDEX IF NOT EXISTS idx_lancamentos_consultora_chave ON public.lancamentos (consultora_chave);`,
+  ],
+  meta_anual: [
+    `CREATE INDEX IF NOT EXISTS idx_meta_anual_empresa_id ON public.meta_anual (empresa_id);`,
+  ],
+  meta_anual_meses: [
+    `CREATE INDEX IF NOT EXISTS idx_meta_anual_meses_empresa_id ON public.meta_anual_meses (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_meta_anual_meses_meta_anual_id ON public.meta_anual_meses (meta_anual_id);`,
+  ],
+  meta_semanal: [
+    `CREATE INDEX IF NOT EXISTS idx_meta_semanal_empresa_id ON public.meta_semanal (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_meta_semanal_meta_mensal_id ON public.meta_semanal (meta_mensal_id);`,
+  ],
+  metas_consultoras: [
+    `CREATE INDEX IF NOT EXISTS idx_metas_consultoras_empresa_id ON public.metas_consultoras (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_metas_consultoras_meta_mensal_id ON public.metas_consultoras (meta_mensal_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_metas_consultoras_consultora_id ON public.metas_consultoras (consultora_id);`,
+  ],
+  metas_mensais: [
+    `CREATE INDEX IF NOT EXISTS idx_metas_mensais_empresa_id ON public.metas_mensais (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_metas_mensais_mes_referencia ON public.metas_mensais (mes_referencia);`,
+  ],
+  pagamentos_agregadores: [
+    `CREATE INDEX IF NOT EXISTS idx_pagamentos_agregadores_empresa_id ON public.pagamentos_agregadores (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_pagamentos_agregadores_mes_referencia ON public.pagamentos_agregadores (mes_referencia);`,
+  ],
+  permissoes_perfil: [
+    `CREATE INDEX IF NOT EXISTS idx_permissoes_perfil_empresa_id ON public.permissoes_perfil (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_permissoes_perfil_role ON public.permissoes_perfil (role);`,
+  ],
+  regras_meta: [
+    `CREATE INDEX IF NOT EXISTS idx_regras_meta_empresa_id ON public.regras_meta (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_regras_meta_prioridade ON public.regras_meta (prioridade);`,
+  ],
+  solicitacoes_ajuste: [
+    `CREATE INDEX IF NOT EXISTS idx_solicitacoes_ajuste_empresa_id ON public.solicitacoes_ajuste (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_solicitacoes_ajuste_consultora_id ON public.solicitacoes_ajuste (consultora_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_solicitacoes_ajuste_lancamento_id ON public.solicitacoes_ajuste (lancamento_id);`,
+  ],
+  support_messages: [
+    `CREATE INDEX IF NOT EXISTS idx_support_messages_ticket_id ON public.support_messages (ticket_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_support_messages_user_id ON public.support_messages (user_id);`,
+  ],
+  support_tickets: [
+    `CREATE INDEX IF NOT EXISTS idx_support_tickets_empresa_id ON public.support_tickets (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_support_tickets_created_by ON public.support_tickets (created_by);`,
+  ],
+  uploads: [
+    `CREATE INDEX IF NOT EXISTS idx_uploads_empresa_id ON public.uploads (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_uploads_user_id ON public.uploads (user_id);`,
+  ],
+  user_roles: [
+    `CREATE INDEX IF NOT EXISTS idx_user_roles_empresa_id ON public.user_roles (empresa_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON public.user_roles (user_id);`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_user_roles_user_role_unique ON public.user_roles (user_id, role);`,
+  ],
+};
+
+type SchemaAction = "schema-table" | "schema-all";
 type ExportAction =
   | "bundle"
   | "database-all"
@@ -423,9 +1307,9 @@ type ExportAction =
   | "users"
   | "storages"
   | "logs"
-  | "schema-table"
-  | "schema-all";
+  | SchemaAction;
 type ExportTable = (typeof EXPORTABLE_TABLES)[number];
+type SqlMode = (typeof SQL_MODES)[number];
 type JsonRow = Record<string, unknown>;
 
 const tableHasEmpresaId = (table: ExportTable) =>
@@ -461,22 +1345,110 @@ const extractLogoPath = (logoUrl: string | null) => {
   }
 };
 
-const buildSchemaSql = (table?: ExportTable) => {
-  const tables = table ? [table] : [...EXPORTABLE_TABLES];
+const getSchemaTables = (table?: ExportTable) => (table ? [table] : [...EXPORTABLE_TABLES]);
+
+const buildEnumSql = (tables: ExportTable[]) => {
   const enumNames = [...new Set(tables.flatMap((tableName) => TABLE_ENUM_DEPENDENCIES[tableName] || []))];
-  const enumSql = enumNames.map((enumName) => ENUM_SQL[enumName]).join("\n\n");
-  const tableSql = tables.map((tableName) => TABLE_SQL[tableName]).join("\n\n");
+  return enumNames.map((enumName) => ENUM_SQL[enumName]).join("\n\n");
+};
+
+const buildTableSql = (tables: ExportTable[]) => tables.map((tableName) => TABLE_SQL[tableName]).join("\n\n");
+
+const buildRlsSql = (tables: ExportTable[]) =>
+  tables.map((tableName) => `ALTER TABLE public.${tableName} ENABLE ROW LEVEL SECURITY;`).join("\n");
+
+const buildPoliciesSql = (tables: ExportTable[]) =>
+  tables.flatMap((tableName) => TABLE_POLICY_SQL[tableName] || []).join("\n\n");
+
+const buildForeignKeysSql = (tables: ExportTable[]) =>
+  tables.flatMap((tableName) => TABLE_FK_SQL[tableName] || []).join("\n\n");
+
+const buildIndexesSql = (tables: ExportTable[]) =>
+  tables.flatMap((tableName) => TABLE_INDEX_SQL[tableName] || []).join("\n\n");
+
+const buildBaseSchemaSql = (table?: ExportTable) => {
+  const tables = getSchemaTables(table);
+  const enumSql = buildEnumSql(tables);
+  const tableSql = buildTableSql(tables);
 
   return [
     "-- SQL base das tabelas públicas do sistema",
-    "-- Inclui enums e CREATE TABLE.",
-    "-- Não inclui RLS, policies, funções, triggers ou chaves estrangeiras.",
+    "-- Inclui extensões, enums e CREATE TABLE.",
+    "-- Não inclui RLS, policies, funções auxiliares, índices ou chaves estrangeiras.",
     'CREATE EXTENSION IF NOT EXISTS "pgcrypto";',
     enumSql,
     tableSql,
   ]
     .filter(Boolean)
     .join("\n\n");
+};
+
+const buildSecureSchemaSql = (table?: ExportTable) => {
+  const tables = getSchemaTables(table);
+  const enumSql = buildEnumSql(tables);
+  const tableSql = buildTableSql(tables);
+  const rlsSql = buildRlsSql(tables);
+  const policiesSql = buildPoliciesSql(tables);
+
+  return [
+    "-- SQL seguro das tabelas públicas do sistema",
+    "-- Inclui extensões, enums, CREATE TABLE, funções auxiliares de auth/RLS, ENABLE ROW LEVEL SECURITY e policies.",
+    "-- Recomendado para migrar a estrutura sem deixar as tabelas expostas via Data API.",
+    'CREATE EXTENSION IF NOT EXISTS "pgcrypto";',
+    "-- 1. Enums",
+    enumSql,
+    "-- 2. Tabelas",
+    tableSql,
+    "-- 3. Funções auxiliares de segurança",
+    SECURITY_FUNCTIONS_SQL.join("\n\n"),
+    "-- 4. Row Level Security",
+    rlsSql,
+    "-- 5. Policies",
+    policiesSql,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+};
+
+const buildCompleteSchemaSql = (table?: ExportTable) => {
+  const tables = getSchemaTables(table);
+  const enumSql = buildEnumSql(tables);
+  const tableSql = buildTableSql(tables);
+  const rlsSql = buildRlsSql(tables);
+  const policiesSql = buildPoliciesSql(tables);
+  const foreignKeysSql = buildForeignKeysSql(tables);
+  const indexesSql = buildIndexesSql(tables);
+
+  return [
+    "-- SQL completo das tabelas públicas do sistema",
+    "-- Inclui extensões, enums, CREATE TABLE, funções auxiliares, RLS, policies, índices recomendados e FKs mapeadas.",
+    "-- Observação: ao exportar uma única tabela, as FKs podem depender da existência prévia das tabelas relacionadas.",
+    'CREATE EXTENSION IF NOT EXISTS "pgcrypto";',
+    "-- 1. Enums",
+    enumSql,
+    "-- 2. Tabelas",
+    tableSql,
+    "-- 3. Funções auxiliares de segurança",
+    SECURITY_FUNCTIONS_SQL.join("\n\n"),
+    "-- 4. Funções utilitárias adicionais",
+    FULL_FUNCTIONS_SQL.join("\n\n"),
+    "-- 5. Row Level Security",
+    rlsSql,
+    "-- 6. Policies",
+    policiesSql,
+    "-- 7. Índices recomendados",
+    indexesSql,
+    "-- 8. Chaves estrangeiras mapeadas",
+    foreignKeysSql,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+};
+
+const buildSchemaSql = (mode: SqlMode, table?: ExportTable) => {
+  if (mode === "base") return buildBaseSchemaSql(table);
+  if (mode === "complete") return buildCompleteSchemaSql(table);
+  return buildSecureSchemaSql(table);
 };
 
 Deno.serve(async (req) => {
@@ -519,6 +1491,8 @@ Deno.serve(async (req) => {
     const action = body.action as ExportAction | undefined;
     const requestedTable = body.table as ExportTable | undefined;
     const requestedEmpresaId = typeof body.empresa_id === "string" && body.empresa_id.trim() ? body.empresa_id : null;
+    const requestedMode = typeof body.mode === "string" ? body.mode : "secure";
+    const schemaMode = SQL_MODES.includes(requestedMode as SqlMode) ? (requestedMode as SqlMode) : "secure";
 
     if (!action) {
       return new Response(JSON.stringify({ error: "Ação de exportação obrigatória" }), {
@@ -556,8 +1530,8 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({
-          filename: `${requestedTable}.sql`,
-          sql: buildSchemaSql(requestedTable),
+          filename: `${requestedTable}_${schemaMode}.sql`,
+          sql: buildSchemaSql(schemaMode, requestedTable),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -566,8 +1540,8 @@ Deno.serve(async (req) => {
     if (action === "schema-all") {
       return new Response(
         JSON.stringify({
-          filename: "schema_public.sql",
-          sql: buildSchemaSql(),
+          filename: `schema_public_${schemaMode}.sql`,
+          sql: buildSchemaSql(schemaMode),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
