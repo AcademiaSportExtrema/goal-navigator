@@ -11,8 +11,13 @@ export function exportToCSV(data: Record<string, unknown>[], filename: string) {
     headers.join(separator),
     ...data.map(row =>
       headers.map(h => {
-        const val = row[h] ?? '';
-        const str = String(val).replace(/"/g, '""');
+        const val = row[h];
+        const normalized = val == null
+          ? ''
+          : typeof val === 'object'
+            ? JSON.stringify(val)
+            : String(val);
+        const str = normalized.replace(/"/g, '""');
         return str.includes(separator) || str.includes('"') || str.includes('\n')
           ? `"${str}"`
           : str;

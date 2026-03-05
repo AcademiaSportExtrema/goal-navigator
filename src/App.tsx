@@ -21,6 +21,7 @@ import Pendencias from "./pages/Pendencias";
 import ConfiguracaoMes from "./pages/ConfiguracaoMes";
 import Consultoras from "./pages/Consultoras";
 import Configuracao from "./pages/Configuracao";
+import Exportacoes from "./pages/Exportacoes";
 import MinhaPerformance from "./pages/MinhaPerformance";
 import SolicitarAjuste from "./pages/SolicitarAjuste";
 import Ajustes from "./pages/Ajustes";
@@ -135,6 +136,11 @@ const App = () => (
             <Route path="/configuracao" element={
               <ProtectedRoute requiredRole="admin">
                 <Configuracao />
+              </ProtectedRoute>
+            } />
+            <Route path="/exportacoes" element={
+              <ProtectedRoute requiredRole="admin">
+                <Exportacoes />
               </ProtectedRoute>
             } />
             <Route path="/consultoras" element={<Navigate to="/configuracao" replace />} />
