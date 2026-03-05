@@ -1,54 +1,58 @@
 
 Diagnóstico
 
-O envio não está acontecendo porque hoje o fluxo automático foi quebrado no backend:
+O sistema está enviando dois emails porque hoje existem dois gatilhos automáticos diferentes para gerar a análise, e agora toda geração da análise também dispara email.
 
-- Em `src/pages/Upload.tsx`, após concluir o upload, o sistema chama apenas a função `ai-analista`.
-- Em `supabase/functions/ai-analista/index.ts`, a análise é salva em `analise_ia`, mas o próprio código tem um comentário explícito dizendo que o envio por email foi removido:
-  - `Email sending removed – gestor controls dispatch via UI button`
-- O envio ficou apenas manual pelo botão `Enviar por email` em `src/components/AnalistaIaCard.tsx`, que chama `send-analise-email`.
-- Não existe agendamento diário no projeto:
-  - não há `cron.schedule`
-  - não há chamada interna automática para `send-analise-email`
-  - não há registros `email_sent_*` em `system_settings`
-  - não há logs recentes da função `send-analise-email`
+Onde isso acontece
+1. `src/pages/Upload.tsx`
+- Após concluir o upload, a tela chama `ai-analista` automaticamente.
 
-O que isso significa
+2. `src/components/AnalistaIaCard.tsx`
+- Ao abrir o Dashboard, o card do Analista IA verifica se já existe análise “de hoje”.
+- Se não existir, ele chama `fetchAnalise()`, que também executa `ai-analista` automaticamente.
 
-- O upload ainda gera a análise.
-- Os emails dos gestores estão cadastrados corretamente.
-- Mas nenhuma parte do fluxo automático dispara `send-analise-email` depois que a análise é gerada.
-- Então o comportamento atual é “gerar análise automaticamente, enviar email só manualmente”.
+O ponto que criou a duplicidade
+- Em `supabase/functions/ai-analista/index.ts`, a função foi alterada para chamar `send-analise-email` logo após salvar a análise.
+- Então qualquer lugar que execute `ai-analista` agora também envia email.
 
-Plano de correção
+Por que isso vira 2 emails
+- Se alguém abre o Dashboard de manhã, o card pode gerar a análise e mandar email.
+- Depois, quando o upload é feito, o Upload chama `ai-analista` de novo e manda outro email.
+- A trava atual em `send-analise-email` bloqueia repetição só por 5 minutos.
+- Então dois disparos com intervalo maior que 5 minutos passam normalmente.
 
-1. Restaurar o disparo automático no backend
-- Reativar o envio ao final de `supabase/functions/ai-analista/index.ts`, logo depois de salvar a análise.
-- Fazer a chamada server-to-server para `send-analise-email` usando o modo interno já previsto pela função (`empresa_id` + `_internal`), sem depender do navegador.
+O que encontrei que confirma isso
+- Há apenas 1 upload recente hoje, então não parece ser clique duplo no upload.
+- Não há email duplicado no cadastro de destinatários.
+- O padrão da imagem (08:01 e 08:18) bate exatamente com:
+  - um disparo ao abrir Dashboard
+  - outro disparo após o upload
 
-2. Manter a segurança e evitar duplicidade
-- Preservar a validação existente de autenticação e empresa.
-- Reaproveitar a deduplicação já existente em `send-analise-email` para impedir envios repetidos em sequência curta.
+Conclusão
+- O problema não está no cadastro de emails dos gestores.
+- O problema está no acoplamento entre “gerar análise” e “enviar email”.
+- Hoje o sistema envia email tanto:
+  - quando a análise é gerada pelo Dashboard
+  - quanto quando a análise é gerada após o upload
 
-3. Alinhar a interface com o comportamento real
-- Manter o botão manual no card do Analista IA como reenvio manual.
-- Ajustar o texto de configuração para deixar claro que o email será disparado automaticamente após o upload processado, quando houver destinatários ativos.
+Correção recomendada
+- Deixar o envio automático acontecer apenas no fluxo de upload.
+- E impedir que a geração automática do card no Dashboard dispare email.
 
-4. Validar o fluxo ponta a ponta
-- Upload concluído
-- geração da análise
-- gravação em `analise_ia`
-- disparo automático para os emails ativos de `analise_email_config`
+Forma mais segura de corrigir
+- Passar um parâmetro explícito no `ai-analista`, por exemplo:
+  - `trigger_email: true` no upload
+  - `trigger_email: false` no Dashboard
+- Assim:
+  - abrir Dashboard gera/atualiza análise sem email
+  - upload concluído gera análise com email automático
+  - botão manual continua sendo reenvio manual
 
-Observações importantes
+Alternativa
+- Tirar o envio automático de dentro de `ai-analista` e fazer o upload chamar o envio separadamente.
+- Também funciona, mas a abordagem com flag costuma ser mais simples e previsível.
 
-- Isso não é um “agendamento diário” de verdade; é um envio automático após cada upload, que foi o comportamento que você confirmou querer restaurar.
-- O warning atual de `CobrancaStatusBadge` no console é separado desse problema e não explica a falha do email.
-
-Arquivos no escopo
-- `supabase/functions/ai-analista/index.ts`
-- possivelmente `src/components/configuracao/AnalistaIaConfigTab.tsx` apenas para ajustar o texto exibido
-- opcionalmente `src/components/AnalistaIaCard.tsx` se quisermos diferenciar melhor “envio automático” de “reenvio manual”
-
-Resultado esperado
-- Sempre que um novo upload for processado e a análise for gerada, o email dos gestores será enviado automaticamente sem depender do botão manual.
+Resultado esperado depois do ajuste
+- Abrir o Dashboard não manda mais email.
+- Apenas o upload concluído dispara o envio automático.
+- O botão “Reenviar por email” continua funcionando manualmente.
