@@ -45,7 +45,7 @@ export function AnalistaIaCard() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ trigger_email: false }),
           signal: controller.signal,
         },
       );
