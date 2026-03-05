@@ -18,6 +18,7 @@ import {
   Plug,
   Eye,
   TicketIcon,
+  Download,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -61,6 +62,7 @@ const adminMenuGroups = [
       { title: 'Regras da Meta', icon: Settings, href: '/regras' },
       { title: 'Config. do Mês', icon: Calendar, href: '/configuracao-mes' },
       { title: 'Configuração', icon: Users, href: '/configuracao' },
+      { title: 'Exportações CSV', icon: Download, href: '/exportacoes' },
     ],
   },
 ];
