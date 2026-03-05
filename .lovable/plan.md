@@ -1,58 +1,173 @@
 
 Diagnóstico
 
-O sistema está enviando dois emails porque hoje existem dois gatilhos automáticos diferentes para gerar a análise, e agora toda geração da análise também dispara email.
+O aviso é crítico, mas a causa aqui está clara: o SQL que a central gera hoje foi desenhado para ser apenas um “DDL base”. No próprio código atual isso está explícito:
 
-Onde isso acontece
-1. `src/pages/Upload.tsx`
-- Após concluir o upload, a tela chama `ai-analista` automaticamente.
+- `supabase/functions/export-cloud-data/index.ts` monta o SQL com:
+  - enums
+  - `CREATE TABLE`
+- e declara claramente:
+  - `-- Não inclui RLS, policies, funções, triggers ou chaves estrangeiras.`
 
-2. `src/components/AnalistaIaCard.tsx`
-- Ao abrir o Dashboard, o card do Analista IA verifica se já existe análise “de hoje”.
-- Se não existir, ele chama `fetchAnalise()`, que também executa `ai-analista` automaticamente.
+A UI também avisa isso em `src/pages/Exportacoes.tsx`.
 
-O ponto que criou a duplicidade
-- Em `supabase/functions/ai-analista/index.ts`, a função foi alterada para chamar `send-analise-email` logo após salvar a análise.
-- Então qualquer lugar que execute `ai-analista` agora também envia email.
+Então, quando você cola esse SQL em outro projeto, as tabelas são criadas sem Row Level Security e o backend alerta corretamente que qualquer pessoa com acesso à Data API poderia consultá-las.
 
-Por que isso vira 2 emails
-- Se alguém abre o Dashboard de manhã, o card pode gerar a análise e mandar email.
-- Depois, quando o upload é feito, o Upload chama `ai-analista` de novo e manda outro email.
-- A trava atual em `send-analise-email` bloqueia repetição só por 5 minutos.
-- Então dois disparos com intervalo maior que 5 minutos passam normalmente.
+Melhor maneira de corrigir
 
-O que encontrei que confirma isso
-- Há apenas 1 upload recente hoje, então não parece ser clique duplo no upload.
-- Não há email duplicado no cadastro de destinatários.
-- O padrão da imagem (08:01 e 08:18) bate exatamente com:
-  - um disparo ao abrir Dashboard
-  - outro disparo após o upload
+A melhor correção não é “ligar RLS manualmente tabela por tabela depois”.
+A melhor correção é fazer o exportador gerar um pacote SQL de migração “completo e seguro”, contendo:
 
-Conclusão
-- O problema não está no cadastro de emails dos gestores.
-- O problema está no acoplamento entre “gerar análise” e “enviar email”.
-- Hoje o sistema envia email tanto:
-  - quando a análise é gerada pelo Dashboard
-  - quanto quando a análise é gerada após o upload
+1. `CREATE TYPE`
+2. `CREATE TABLE`
+3. `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`
+4. funções auxiliares usadas nas policies:
+   - `has_role`
+   - `get_user_empresa_id`
+   - `get_user_consultora_id`
+   - `is_empresa_active` quando necessário
+   - `update_updated_at_column` se for parte do comportamento esperado
+5. `CREATE POLICY` de cada tabela
+6. opcionalmente:
+   - índices importantes
+   - triggers de `updated_at`
+   - FKs
+   - comentários/blocos por seção
 
-Correção recomendada
-- Deixar o envio automático acontecer apenas no fluxo de upload.
-- E impedir que a geração automática do card no Dashboard dispare email.
+Por que essa é a melhor abordagem
 
-Forma mais segura de corrigir
-- Passar um parâmetro explícito no `ai-analista`, por exemplo:
-  - `trigger_email: true` no upload
-  - `trigger_email: false` no Dashboard
-- Assim:
-  - abrir Dashboard gera/atualiza análise sem email
-  - upload concluído gera análise com email automático
-  - botão manual continua sendo reenvio manual
+Porque o seu sistema é multi-tenant e quase toda a segurança depende de:
+- `empresa_id`
+- `auth.uid()`
+- `user_roles`
+- funções `SECURITY DEFINER`
+- policies por papel (`admin`, `consultora`, `super_admin`)
 
-Alternativa
-- Tirar o envio automático de dentro de `ai-analista` e fazer o upload chamar o envio separadamente.
-- Também funciona, mas a abordagem com flag costuma ser mais simples e previsível.
+Se você exporta só as tabelas, você migra a estrutura, mas não migra o modelo de segurança.
+Na prática, isso gera um banco “funcionando”, porém inseguro.
 
-Resultado esperado depois do ajuste
-- Abrir o Dashboard não manda mais email.
-- Apenas o upload concluído dispara o envio automático.
-- O botão “Reenviar por email” continua funcionando manualmente.
+O que eu recomendaria implementar
+
+1. Evoluir o gerador de SQL da tela `/exportacoes`
+Adicionar novos modos de exportação:
+- SQL base
+- SQL seguro
+- SQL completo
+
+Sugestão de escopo:
+- SQL base: como está hoje
+- SQL seguro: enums + tabelas + funções de auth/RLS + enable RLS + policies
+- SQL completo: tudo do seguro + triggers + índices + FKs
+
+2. Tornar o SQL seguro o padrão recomendado
+Na interface, o botão principal deveria ser algo como:
+- “Gerar SQL seguro para migração”
+
+E o texto do card deve deixar claro:
+- “Este pacote inclui RLS e policies para evitar exposição pública via Data API.”
+
+3. Reaproveitar o que já existe nas migrations reais
+Em vez de inventar policies novas no exportador, o ideal é mapear as policies já existentes no projeto e exportá-las com fidelidade.
+Hoje o projeto já tem:
+- RLS habilitado
+- policies por tabela
+- funções auxiliares existentes
+- regras multi-tenant já consolidadas
+
+Isso reduz risco de divergência entre:
+- ambiente atual
+- ambiente migrado
+
+4. Exportar dependências na ordem correta
+A ordem importa. O pacote deve sair assim:
+
+```text
+1. extensões
+2. enums
+3. tabelas
+4. funções auxiliares
+5. triggers utilitárias
+6. enable RLS
+7. policies
+8. índices/FKs
+```
+
+Sem isso, parte do SQL pode falhar ao colar.
+
+Cuidados importantes
+
+1. Não gerar policy sem gerar a função que ela usa
+Exemplo:
+- várias policies usam `has_role(...)`
+- várias usam `get_user_empresa_id(...)`
+- algumas usam `get_user_consultora_id(...)`
+
+Se a policy vier sem essas funções, a migração quebra.
+
+2. Não simplificar demais as policies
+Como o sistema tem perfis diferentes, não basta algo genérico como:
+- “authenticated pode tudo”
+
+Isso destruiria a segurança do projeto.
+
+3. Não confiar em RLS desativado “temporariamente”
+Mesmo em ambiente de migração/teste, deixar RLS desligado em tabelas com dados reais ou sensíveis é um risco alto.
+
+4. O pacote atual também está incompleto para comportamento
+Além da segurança, o SQL atual também não leva:
+- triggers
+- FKs
+- índices
+- parte da lógica operacional
+
+Então a correção ideal deve tratar segurança primeiro, mas também considerar fidelidade estrutural.
+
+Plano de implementação recomendado
+
+1. Auditar no exportador todos os objetos necessários para migração segura:
+- enums
+- tabelas públicas exportáveis
+- funções auxiliares de segurança
+- policies por tabela
+- triggers/índices essenciais
+
+2. Criar uma camada nova no `export-cloud-data` para montar:
+- `buildSecureSchemaSql(table?)`
+- `buildFullSchemaSql(table?)`
+
+3. Incluir no SQL gerado:
+- `ALTER TABLE public.<tabela> ENABLE ROW LEVEL SECURITY;`
+- blocos `CREATE POLICY ...`
+
+4. Atualizar a página `Exportacoes.tsx` para permitir escolher:
+- Base
+- Seguro
+- Completo
+
+5. Marcar o modo “Base” como avançado/limitado e o modo “Seguro” como recomendado.
+
+6. Validar manualmente as tabelas mais sensíveis primeiro:
+- `user_roles`
+- `empresas`
+- `consultoras`
+- `uploads`
+- `lancamentos`
+- `audit_logs`
+- `permissoes_perfil`
+- `solicitacoes_ajuste`
+
+Resultado esperado
+
+Depois desse ajuste, o SQL exportado deixará de criar tabelas “abertas”.
+Ao colar em outro projeto, as tabelas já nascerão com:
+- RLS habilitado
+- policies aplicadas
+- helpers necessários para multi-tenant
+- muito menos risco de exposição pública
+
+Conclusão objetiva
+
+Sim, esse aviso é grave.
+Mas no seu caso ele aconteceu porque o gerador atual exporta só o esqueleto das tabelas, sem a camada de segurança.
+
+A melhor correção é transformar esse exportador em um gerador de migração segura, incluindo RLS + policies + funções auxiliares, em vez de continuar exportando apenas `CREATE TABLE`.
